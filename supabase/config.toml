@@ -1,0 +1,6 @@
+
+[functions.send-invoice]
+verify_jwt = false
+EOFcat > .env.local <<'EOF'
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
