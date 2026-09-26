@@ -60,299 +60,464 @@ function loadInvoiceLogo(): Promise<HTMLImageElement> {
 }
 
 async function createInvoicePdf(sale: Sale) {
+  const money = (value: number) => `AED ${value.toFixed(2)}`
+
   const pdf = new jsPDF("p", "mm", "a4")
 
-  const pageWidth = 210
-  const pageHeight = 297
-  const left = 16
-  const right = 194
-  const contentWidth = right - left
+  const left = 14
+  const right = 196
+  const width = right - left
 
   const dark = [23, 34, 29] as const
   const green = [47, 158, 99] as const
-  const lightGreen = [239, 249, 243] as const
-  const softGray = [247, 249, 248] as const
-  const border = [222, 228, 224] as const
-  const text = [39, 49, 44] as const
-  const muted = [103, 114, 108] as const
+  const paleGreen = [242, 249, 245] as const
+  const border = [218, 227, 222] as const
+  const text = [23, 34, 29] as const
+  const muted = [100, 116, 107] as const
   const white = [255, 255, 255] as const
+  const soft = [248, 251, 249] as const
 
-  const money = (value: number) => `AED ${value.toFixed(2)}`
-  const logo = await loadInvoiceLogo()
+  let logo: HTMLImageElement | null = null
 
-  // Background
-  pdf.setFillColor(249, 251, 250)
-  pdf.rect(0, 0, pageWidth, pageHeight, "F")
+  try {
+    logo = await loadInvoiceLogo()
+  } catch {
+    logo = null
+  }
 
-  // Header
-  pdf.setFillColor(...dark)
-  pdf.roundedRect(left, 14, contentWidth, 43, 4, 4, "F")
+  /* =====================================================
+     HEADER — WHITE / PREMIUM
+     ===================================================== */
 
-  pdf.setFillColor(...green)
-  pdf.roundedRect(left, 14, 5, 43, 4, 4, "F")
-
-  // Real Zaki Pharmacy logo
   pdf.setFillColor(...white)
-  pdf.roundedRect(left + 10, 19, 72, 31, 4, 4, "F")
+  pdf.roundedRect(left, 12, width, 49, 4, 4, "F")
 
-  const logoWidth = 65
-  const logoHeight = Math.min(
-    25,
-    logoWidth * (logo.height / logo.width),
-  )
+  pdf.setDrawColor(...border)
+  pdf.setLineWidth(0.5)
+  pdf.roundedRect(left, 12, width, 49, 4, 4, "S")
 
-  pdf.addImage(
-    logo,
-    "PNG",
-    left + 13.5,
-    22,
-    logoWidth,
-    logoHeight,
-  )
+  // Green accent line
+  pdf.setFillColor(...green)
+  pdf.roundedRect(left, 12, 4, 49, 4, 4, "F")
 
-  pdf.setTextColor(...white)
+  // Transparent Zaki logo — no box/background.
+  if (logo) {
+    const logoWidth = 66
+    const maxLogoHeight = 34
+    const ratio = logo.height / logo.width
+
+    let logoHeight = logoWidth * ratio
+
+    if (logoHeight > maxLogoHeight) {
+      logoHeight = maxLogoHeight
+    }
+
+    pdf.addImage(
+      logo,
+      "PNG",
+      left + 11,
+      18,
+      logoWidth,
+      logoHeight,
+    )
+  }
+
+  // Invoice metadata on the right.
+  pdf.setTextColor(...green)
   pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(18)
-  pdf.text(PHARMACY_NAME, left + 12, 30)
+  pdf.setFontSize(8)
+  pdf.text("TAX INVOICE", right - 7, 20, {
+    align: "right",
+  })
 
+  pdf.setTextColor(...text)
+  pdf.setFontSize(13)
+  pdf.text(sale.invoiceNumber, right - 7, 29, {
+    align: "right",
+  })
+
+  pdf.setTextColor(...muted)
   pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(190, 209, 198)
-  pdf.text("Professional Healthcare & Pharmacy", left + 12, 37)
+  pdf.setFontSize(7.5)
+  pdf.text(shortDate(sale.createdAt), right - 7, 36, {
+    align: "right",
+  })
+
+  pdf.setFillColor(...paleGreen)
+  pdf.roundedRect(right - 35, 41, 28, 9, 4.5, 4.5, "F")
 
   pdf.setTextColor(...green)
   pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(9)
-  pdf.text("TAX INVOICE", left + 12, 48)
+  pdf.setFontSize(7)
 
-  pdf.setTextColor(...white)
-  pdf.setFontSize(13)
-  pdf.text(sale.invoiceNumber, right - 6, 29, {
-    align: "right",
-  })
-
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(205, 215, 210)
-  pdf.text(formatDate(sale.createdAt), right - 6, 37, {
-    align: "right",
-  })
-
-  // Status pill
-  const statusWidth = 30
-  const statusX = right - statusWidth - 6
-  pdf.setFillColor(...green)
-  pdf.roundedRect(statusX, 43, statusWidth, 8, 4, 4, "F")
-  pdf.setTextColor(...white)
-  pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(7.5)
-  pdf.text(sale.status.toUpperCase(), statusX + statusWidth / 2, 48.2, {
+  pdf.text(sale.status, right - 21, 46.6, {
     align: "center",
   })
 
-  // Billing section
-  pdf.setFillColor(...white)
-  pdf.roundedRect(left, 65, contentWidth, 42, 3, 3, "F")
+  /* =====================================================
+     CUSTOMER / PAYMENT INFORMATION
+     ===================================================== */
+
+  let y = 68
+
+  const cardHeight = 29
+  const gap = 5
+  const cardWidth = (width - gap) / 2
+
+  // Bill To
+  pdf.setFillColor(...soft)
+  pdf.setDrawColor(...border)
+  pdf.roundedRect(left, y, cardWidth, cardHeight, 3, 3, "FD")
+
+  pdf.setTextColor(...green)
+  pdf.setFont("helvetica", "bold")
+  pdf.setFontSize(7)
+
+  pdf.text("BILL TO", left + 7, y + 8)
+
+  pdf.setTextColor(...text)
+  pdf.setFontSize(10)
+
+  pdf.text(
+    sale.customerName || "Walk-in Customer",
+    left + 7,
+    y + 16,
+  )
+
+  pdf.setTextColor(...muted)
+  pdf.setFont("helvetica", "normal")
+  pdf.setFontSize(7)
+
+  pdf.text(
+    sale.customerId ? "Registered Customer" : "Walk-in Customer",
+    left + 7,
+    y + 23,
+  )
+
+  // Payment / date
+  const rightCardX = left + cardWidth + gap
+
+  pdf.setFillColor(...soft)
+  pdf.roundedRect(
+    rightCardX,
+    y,
+    cardWidth,
+    cardHeight,
+    3,
+    3,
+    "F",
+  )
 
   pdf.setDrawColor(...border)
-  pdf.setLineWidth(0.3)
-  pdf.roundedRect(left, 65, contentWidth, 42, 3, 3, "S")
+  pdf.roundedRect(
+    rightCardX,
+    y,
+    cardWidth,
+    cardHeight,
+    3,
+    3,
+    "S",
+  )
 
+  pdf.setTextColor(...green)
   pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(7.5)
-  pdf.setTextColor(...muted)
-  pdf.text("BILL TO", left + 8, 75)
+  pdf.setFontSize(7)
+  pdf.text("PAYMENT", rightCardX + 7, y + 8)
 
-  pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(11)
   pdf.setTextColor(...text)
-  pdf.text(sale.customerName, left + 8, 83)
-
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(...muted)
-
-  if (sale.customerId) {
-    pdf.text("Registered Customer", left + 8, 91)
-  } else {
-    pdf.text("Walk-in Customer", left + 8, 91)
-  }
-
-  pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(7.5)
-  pdf.setTextColor(...muted)
-  pdf.text("PAYMENT", 112, 75)
-
-  pdf.setFont("helvetica", "bold")
   pdf.setFontSize(10)
-  pdf.setTextColor(...text)
-  pdf.text(sale.paymentMethod, 112, 83)
+  pdf.text(
+    sale.paymentMethod,
+    rightCardX + 7,
+    y + 16,
+  )
 
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
   pdf.setTextColor(...muted)
-  pdf.text("Invoice Date", 112, 92)
-  pdf.text(shortDate(sale.createdAt), 145, 92)
+  pdf.setFont("helvetica", "normal")
+  pdf.setFontSize(7)
+  pdf.text(
+    `Invoice Date: ${shortDate(sale.createdAt)}`,
+    rightCardX + 7,
+    y + 23,
+  )
 
-  // Table header
-  let y = 119
+  y += cardHeight + 9
+
+  /* =====================================================
+     ITEMS TABLE
+     ===================================================== */
+
+  const tableTop = y
+  const headerHeight = 10
 
   pdf.setFillColor(...dark)
-  pdf.roundedRect(left, y, contentWidth, 11, 2, 2, "F")
+  pdf.roundedRect(left, tableTop, width, headerHeight, 3, 3, "F")
 
   pdf.setTextColor(...white)
   pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(7.5)
+  pdf.setFontSize(7)
 
-  pdf.text("ITEM", left + 7, y + 7)
-  pdf.text("QTY", 126, y + 7, { align: "right" })
-  pdf.text("UNIT", 157, y + 7, { align: "right" })
-  pdf.text("AMOUNT", right - 6, y + 7, {
+  pdf.text("ITEM", left + 7, tableTop + 6.5)
+
+  pdf.text("QTY", 128, tableTop + 6.5, {
     align: "right",
   })
 
-  y += 11
+  pdf.text("UNIT", 159, tableTop + 6.5, {
+    align: "right",
+  })
 
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
+  pdf.text("AMOUNT", right - 7, tableTop + 6.5, {
+    align: "right",
+  })
 
-  sale.items.forEach((item, index) => {
-    const rowHeight = 17
+  y += headerHeight
+
+  const maxRows = 11
+  const rowHeight = 12
+
+  sale.items.slice(0, maxRows).forEach((item, index) => {
+    const rowY = y
 
     if (index % 2 === 0) {
-      pdf.setFillColor(...softGray)
-      pdf.rect(left, y, contentWidth, rowHeight, "F")
+      pdf.setFillColor(...white)
+    } else {
+      pdf.setFillColor(...soft)
     }
+    pdf.rect(left, rowY, width, rowHeight, "F")
 
-    pdf.setTextColor(...text)
-    pdf.setFont("helvetica", "bold")
-    pdf.setFontSize(8.5)
+    pdf.setDrawColor(...border)
+    pdf.line(left, rowY + rowHeight, right, rowY + rowHeight)
 
-    const name =
-      item.name.length > 43
-        ? `${item.name.slice(0, 40)}...`
+    const itemName =
+      item.name.length > 42
+        ? `${item.name.slice(0, 39)}...`
         : item.name
-
-    pdf.text(name, left + 7, y + 7)
 
     const batchText = getBatchText(item)
 
-    if (batchText) {
-      pdf.setFont("helvetica", "normal")
-      pdf.setFontSize(6.5)
-      pdf.setTextColor(...muted)
+    pdf.setTextColor(...text)
+    pdf.setFont("helvetica", "bold")
+    pdf.setFontSize(7.8)
 
+    pdf.text(
+      itemName,
+      left + 7,
+      rowY + 5.2,
+    )
+
+    pdf.setTextColor(...muted)
+    pdf.setFont("helvetica", "normal")
+    pdf.setFontSize(6)
+
+    pdf.text(
+      `Barcode: ${item.barcode}`,
+      left + 7,
+      rowY + 9,
+    )
+
+    if (batchText) {
       const batchDisplay =
-        batchText.length > 58
-          ? `${batchText.slice(0, 55)}...`
+        batchText.length > 35
+          ? `${batchText.slice(0, 32)}...`
           : batchText
 
-      pdf.text(batchDisplay, left + 7, y + 13)
+      pdf.setTextColor(...green)
+      pdf.setFontSize(5.8)
+
+      pdf.text(
+        batchDisplay,
+        left + 7,
+        rowY + 11.2,
+      )
     }
 
+    pdf.setTextColor(...muted)
     pdf.setFont("helvetica", "normal")
-    pdf.setFontSize(8.5)
+    pdf.setFontSize(7.5)
+
+    pdf.text(
+      String(item.quantity),
+      128,
+      rowY + 7,
+      { align: "right" },
+    )
+
+    pdf.text(
+      money(item.unitPrice),
+      159,
+      rowY + 7,
+      { align: "right" },
+    )
+
     pdf.setTextColor(...text)
-
-    pdf.text(String(item.quantity), 126, y + 7, {
-      align: "right",
-    })
-
-    pdf.text(money(item.unitPrice), 157, y + 7, {
-      align: "right",
-    })
-
     pdf.setFont("helvetica", "bold")
-    pdf.text(money(item.total), right - 6, y + 7, {
-      align: "right",
-    })
+
+    pdf.text(
+      money(item.total),
+      right - 7,
+      rowY + 7,
+      { align: "right" },
+    )
 
     y += rowHeight
   })
 
-  // Table bottom border
-  pdf.setDrawColor(...border)
-  pdf.line(left, y, right, y)
+  if (sale.items.length > maxRows) {
+    pdf.setTextColor(...muted)
+    pdf.setFont("helvetica", "normal")
+    pdf.setFontSize(6.5)
 
-  // Summary area
-  y += 10
+    pdf.text(
+      `${sale.items.length - maxRows} additional item(s) not shown.`,
+      left + 7,
+      y + 5,
+    )
 
+    y += 8
+  }
+
+  /* =====================================================
+     TOTALS + FOOTER
+     ===================================================== */
+
+  y += 7
+
+  const totalsWidth = 78
+  const totalsX = right - totalsWidth
+  const totalsHeight = 49
+
+  // Compact premium totals card.
   pdf.setFillColor(...white)
-  pdf.roundedRect(105, y, right - 105, 58, 3, 3, "F")
+  pdf.roundedRect(
+    totalsX,
+    y,
+    totalsWidth,
+    totalsHeight,
+    3,
+    3,
+    "F",
+  )
 
   pdf.setDrawColor(...border)
-  pdf.roundedRect(105, y, right - 105, 58, 3, 3, "S")
-
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(...muted)
-
-  pdf.text("Subtotal", 114, y + 12)
-  pdf.text(money(sale.subtotal), right - 8, y + 12, {
-    align: "right",
-  })
-
-  pdf.text("Discount", 114, y + 22)
-  pdf.setTextColor(...green)
-  pdf.text(`- ${money(sale.discount)}`, right - 8, y + 22, {
-    align: "right",
-  })
-
-  pdf.setTextColor(...muted)
-  pdf.text("VAT", 114, y + 32)
-  pdf.text(money(sale.vat), right - 8, y + 32, {
-    align: "right",
-  })
-
-  pdf.setFillColor(...lightGreen)
-  pdf.roundedRect(110, y + 38, right - 115, 15, 2, 2, "F")
-
-  pdf.setTextColor(...dark)
-  pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(8.5)
-  pdf.text("TOTAL", 116, y + 47)
-
-  pdf.setTextColor(...green)
-  pdf.setFontSize(12)
-  pdf.text(money(sale.total), right - 8, y + 47, {
-    align: "right",
-  })
-
-  // Footer
-  const footerY = 273
-
-  pdf.setDrawColor(...border)
-  pdf.line(left, footerY, right, footerY)
+  pdf.roundedRect(
+    totalsX,
+    y,
+    totalsWidth,
+    totalsHeight,
+    3,
+    3,
+    "S",
+  )
 
   pdf.setTextColor(...muted)
   pdf.setFont("helvetica", "normal")
   pdf.setFontSize(7.5)
+
   pdf.text(
-    "Thank you for choosing Zaki Pharmacy.",
-    left,
-    footerY + 8,
+    "Subtotal",
+    totalsX + 9,
+    y + 10,
+  )
+
+  pdf.text(
+    money(sale.subtotal),
+    right - 9,
+    y + 10,
+    { align: "right" },
+  )
+
+  pdf.text(
+    "Discount",
+    totalsX + 9,
+    y + 19,
   )
 
   pdf.setTextColor(...green)
-  pdf.setFont("helvetica", "bold")
   pdf.text(
-    "Powered by UniversalERP",
-    right,
-    footerY + 8,
+    `- ${money(sale.discount)}`,
+    right - 9,
+    y + 19,
     { align: "right" },
   )
 
   pdf.setTextColor(...muted)
-  pdf.setFont("helvetica", "normal")
-  pdf.setFontSize(6.5)
   pdf.text(
-    "This is a computer-generated invoice.",
+    "VAT",
+    totalsX + 9,
+    y + 28,
+  )
+
+  pdf.text(
+    money(sale.vat),
+    right - 9,
+    y + 28,
+    { align: "right" },
+  )
+
+  // Grand total band
+  pdf.setFillColor(...paleGreen)
+  pdf.roundedRect(
+    totalsX + 5,
+    y + 33,
+    totalsWidth - 10,
+    11,
+    2,
+    2,
+    "F",
+  )
+
+  pdf.setTextColor(...dark)
+  pdf.setFont("helvetica", "bold")
+  pdf.setFontSize(7.5)
+
+  pdf.text(
+    "TOTAL",
+    totalsX + 10,
+    y + 40,
+  )
+
+  pdf.setTextColor(...green)
+  pdf.setFontSize(10.5)
+
+  pdf.text(
+    money(sale.total),
+    right - 10,
+    y + 40,
+    { align: "right" },
+  )
+
+  const footerY = 278
+
+  pdf.setDrawColor(...border)
+  pdf.setLineWidth(0.5)
+  pdf.line(left, footerY, right, footerY)
+
+  pdf.setTextColor(...muted)
+  pdf.setFont("helvetica", "normal")
+  pdf.setFontSize(6.8)
+
+  pdf.text(
+    "Computer-generated tax invoice",
     left,
-    footerY + 14,
+    footerY + 7,
+  )
+
+  pdf.setTextColor(...green)
+  pdf.setFont("helvetica", "bold")
+
+  pdf.text(
+    "UniversalERP",
+    right,
+    footerY + 7,
+    { align: "right" },
   )
 
   pdf.save(`${sale.invoiceNumber}.pdf`)
 }
+
+
+
 
 export default function Invoices() {
   const navigate = useNavigate()
@@ -678,7 +843,7 @@ export default function Invoices() {
               <div className="relative flex items-start justify-between gap-6">
                 <div>
                   <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-[190px] items-center justify-center rounded-xl bg-white px-3 py-2 shadow-sm">
+                    <div className="flex h-14 w-[190px] items-center justify-center">
                       <img
                         src="/brand/zaki-logo.png"
                         alt="Zaki Pharmacy"
@@ -686,15 +851,6 @@ export default function Invoices() {
                       />
                     </div>
 
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight">
-                        {PHARMACY_NAME}
-                      </h1>
-
-                      <p className="mt-1 text-xs text-emerald-100/75">
-                        Professional Healthcare & Pharmacy
-                      </p>
-                    </div>
                   </div>
 
                   <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">

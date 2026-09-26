@@ -127,4 +127,583 @@
   html {
     @apply font-sans;
     }
+}@page {
+  size: A4;
+  margin: 0;
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #17221D !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible !important;
+  }
+
+  .invoice-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-width: 210mm !important;
+
+    min-height: 0 !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+
+    margin: 0 !important;
+    padding: 10mm !important;
+
+    background: #ffffff !important;
+    color: #17221D !important;
+
+    box-shadow: none !important;
+    overflow: visible !important;
+
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Remove decorative dark-mode elements from the printed document. */
+  .invoice-print-area .absolute {
+    display: none !important;
+  }
+
+  /* Force all dark-mode backgrounds inside the invoice to white. */
+  .invoice-print-area [class*="dark:bg-"] {
+    background: #ffffff !important;
+  }
+
+  .invoice-print-area [class*="bg-[#17221D]"] {
+    background: #ffffff !important;
+    color: #17221D !important;
+    border-bottom: 1px solid #d7e2dc !important;
+  }
+
+  /* Green UI fills become clean white with green accents in print. */
+  .invoice-print-area [class*="bg-[#2F9E63]"] {
+    background: #ffffff !important;
+    color: #2F9E63 !important;
+    border: 1px solid #2F9E63 !important;
+  }
+
+  /* Light invoice surfaces stay white. */
+  .invoice-print-area [class*="bg-[#F7FAF8]"],
+  .invoice-print-area [class*="bg-[#FBFCFB]"],
+  .invoice-print-area [class~="bg-white"] {
+    background: #ffffff !important;
+  }
+
+  /* Dark-mode text must become readable on white. */
+  .invoice-print-area [class*="dark:text-"] {
+    color: #17221D !important;
+  }
+
+  .invoice-print-area [class*="text-[#17221D]"] {
+    color: #17221D !important;
+  }
+
+  .invoice-print-area [class*="text-slate-"] {
+    color: #475569 !important;
+  }
+
+  .invoice-print-area .text-white {
+    color: #17221D !important;
+  }
+
+  .invoice-print-area img {
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   UNIVERSALERP - FULL GLOBAL DARK MODE
+   ========================================================= */
+
+html.dark {
+  background: #0b120e !important;
+  color-scheme: dark;
+}
+
+html.dark body {
+  background: #0b120e !important;
+  color: #e8f0eb !important;
+}
+
+html.dark #root {
+  min-height: 100vh;
+  background: #0b120e !important;
+}
+
+/* Main application surfaces */
+html.dark main {
+  background: #0b120e !important;
+}
+
+html.dark main > section {
+  background: #0d1510 !important;
+}
+
+/* White surfaces */
+html.dark .bg-white,
+html.dark [class~="bg-white"] {
+  background-color: #111a15 !important;
+}
+
+/* Common light backgrounds */
+html.dark .bg-slate-50,
+html.dark [class~="bg-slate-50"] {
+  background-color: #0d1510 !important;
+}
+
+html.dark .bg-slate-100,
+html.dark [class~="bg-slate-100"] {
+  background-color: #151f1a !important;
+}
+
+html.dark .bg-slate-200,
+html.dark [class~="bg-slate-200"] {
+  background-color: #1d2a22 !important;
+}
+
+/* Borders */
+html.dark .border-slate-100,
+html.dark [class~="border-slate-100"] {
+  border-color: #1b2820 !important;
+}
+
+html.dark .border-slate-200,
+html.dark [class~="border-slate-200"] {
+  border-color: #26372d !important;
+}
+
+html.dark .border-slate-300,
+html.dark [class~="border-slate-300"] {
+  border-color: #33473b !important;
+}
+
+/* Text */
+html.dark .text-slate-900,
+html.dark [class~="text-slate-900"] {
+  color: #edf5f0 !important;
+}
+
+html.dark .text-slate-800,
+html.dark [class~="text-slate-800"] {
+  color: #dce8e1 !important;
+}
+
+html.dark .text-slate-700,
+html.dark [class~="text-slate-700"] {
+  color: #cbd8d0 !important;
+}
+
+html.dark .text-slate-600,
+html.dark [class~="text-slate-600"] {
+  color: #b4c4ba !important;
+}
+
+html.dark .text-slate-500,
+html.dark [class~="text-slate-500"] {
+  color: #93a599 !important;
+}
+
+html.dark .text-slate-400,
+html.dark [class~="text-slate-400"] {
+  color: #7f9385 !important;
+}
+
+/* Forms */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #111a15 !important;
+  border-color: #2a3a31 !important;
+  color: #edf5f0 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #718277 !important;
+}
+
+/* Hover surfaces */
+html.dark [class*="hover:bg-slate-50"]:hover {
+  background-color: #162119 !important;
+}
+
+html.dark [class*="hover:bg-slate-100"]:hover {
+  background-color: #1b2921 !important;
+}
+
+html.dark [class*="hover:bg-slate-200"]:hover {
+  background-color: #223229 !important;
+}
+
+/* Common soft status panels */
+html.dark .bg-emerald-50,
+html.dark [class~="bg-emerald-50"] {
+  background-color: #103322 !important;
+}
+
+html.dark .bg-blue-50,
+html.dark [class~="bg-blue-50"] {
+  background-color: #112b40 !important;
+}
+
+html.dark .bg-violet-50,
+html.dark [class~="bg-violet-50"] {
+  background-color: #25193c !important;
+}
+
+html.dark .bg-amber-50,
+html.dark [class~="bg-amber-50"] {
+  background-color: #3a2a0d !important;
+}
+
+html.dark .bg-red-50,
+html.dark [class~="bg-red-50"] {
+  background-color: #3b1717 !important;
+}
+
+/* Soft status text */
+html.dark .text-emerald-700,
+html.dark [class~="text-emerald-700"] {
+  color: #65d394 !important;
+}
+
+html.dark .text-blue-700,
+html.dark [class~="text-blue-700"] {
+  color: #75b9ee !important;
+}
+
+html.dark .text-violet-700,
+html.dark [class~="text-violet-700"] {
+  color: #c5a5ff !important;
+}
+
+html.dark .text-amber-700,
+html.dark [class~="text-amber-700"] {
+  color: #f4bd57 !important;
+}
+
+html.dark .text-red-700,
+html.dark [class~="text-red-700"] {
+  color: #f58b8b !important;
+}
+
+/* Tables */
+html.dark table {
+  color: #dce8e1;
+}
+
+html.dark thead {
+  background-color: #151f1a !important;
+}
+
+html.dark tbody tr:hover {
+  background-color: #162119 !important;
+}
+
+/* Shadows */
+html.dark .shadow-sm,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.28) !important;
+}
+
+
+/* =========================================================
+   FINAL INVOICE PRINT OVERRIDE
+   Must remain AFTER the global dark-mode rules.
+   ========================================================= */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  html.dark,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #17221D !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible !important;
+  }
+
+  html.dark body .invoice-print-area,
+  html.dark body .invoice-print-area * {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #17221D !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    background-image: none !important;
+  }
+
+  html.dark body .invoice-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-width: 210mm !important;
+
+    box-sizing: border-box !important;
+
+    margin: 0 !important;
+    padding: 10mm !important;
+
+    min-height: 0 !important;
+    height: auto !important;
+
+    overflow: visible !important;
+  }
+
+  /* No decorative dark-mode circles or overlays in print */
+  html.dark body .invoice-print-area .absolute {
+    display: none !important;
+  }
+
+  /* Logo remains transparent */
+  html.dark body .invoice-print-area img {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Green branding accents */
+  html.dark body .invoice-print-area [class*="text-[#2F9E63]"],
+  html.dark body .invoice-print-area [class*="text-emerald-"] {
+    color: #2F9E63 !important;
+  }
+
+  html.dark body .invoice-print-area [class*="border-emerald-"] {
+    border-color: #2F9E63 !important;
+  }
+
+  /* Green status elements become clean white/green print badges */
+  html.dark body .invoice-print-area [class*="bg-[#2F9E63]"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #2F9E63 !important;
+    border: 1px solid #2F9E63 !important;
+  }
+
+  /* Print-only controls */
+  .no-print {
+    display: none !important;
+  }
+}
+
+
+/* =========================================================
+   FINAL WHITE A4 INVOICE PRINT
+   Must be AFTER all global dark-mode rules.
+   PDF generation is intentionally untouched.
+   ========================================================= */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  html.dark,
+  body {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #17221D !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible !important;
+  }
+
+  .invoice-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+
+    width: 210mm !important;
+    max-width: 210mm !important;
+    min-width: 210mm !important;
+
+    box-sizing: border-box !important;
+
+    margin: 0 !important;
+    padding: 8mm !important;
+
+    min-height: 0 !important;
+    height: auto !important;
+
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #17221D !important;
+
+    box-shadow: none !important;
+    text-shadow: none !important;
+
+    overflow: visible !important;
+
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force every invoice surface to white. */
+  html.dark .invoice-print-area,
+  html.dark .invoice-print-area *,
+  .invoice-print-area,
+  .invoice-print-area * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html.dark .invoice-print-area [class*="bg-[#17221D]"],
+  .invoice-print-area [class*="bg-[#17221D]"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #17221D !important;
+    border-bottom: 1px solid #dce7e1 !important;
+  }
+
+  html.dark .invoice-print-area [class*="bg-[#2F9E63]"],
+  .invoice-print-area [class*="bg-[#2F9E63]"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #2F9E63 !important;
+    border: 1px solid #2F9E63 !important;
+  }
+
+  html.dark .invoice-print-area [class*="bg-[#F7FAF8]"],
+  html.dark .invoice-print-area [class*="bg-[#FBFCFB]"],
+  html.dark .invoice-print-area .bg-white,
+  .invoice-print-area [class*="bg-[#F7FAF8]"],
+  .invoice-print-area [class*="bg-[#FBFCFB]"],
+  .invoice-print-area .bg-white {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Remove dark-mode decorative circles/background overlays. */
+  .invoice-print-area .absolute {
+    display: none !important;
+  }
+
+  /* Text becomes readable on the white paper. */
+  html.dark .invoice-print-area [class*="text-[#17221D]"],
+  .invoice-print-area [class*="text-[#17221D]"] {
+    color: #17221D !important;
+  }
+
+  html.dark .invoice-print-area .text-white,
+  .invoice-print-area .text-white {
+    color: #17221D !important;
+  }
+
+  html.dark .invoice-print-area [class*="text-slate-"],
+  .invoice-print-area [class*="text-slate-"] {
+    color: #475569 !important;
+  }
+
+  /* Green remains an accent, never the paper background. */
+  html.dark .invoice-print-area [class*="text-emerald-"],
+  .invoice-print-area [class*="text-emerald-"] {
+    color: #2F9E63 !important;
+  }
+
+  html.dark .invoice-print-area [class*="border-emerald-"],
+  .invoice-print-area [class*="border-emerald-"] {
+    border-color: #2F9E63 !important;
+  }
+
+  /* Logo stays transparent. */
+  .invoice-print-area img {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Prevent individual invoice blocks from splitting unnecessarily. */
+  .invoice-print-area > div,
+  .invoice-print-area .rounded-2xl,
+  .invoice-print-area .rounded-[18px] {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
