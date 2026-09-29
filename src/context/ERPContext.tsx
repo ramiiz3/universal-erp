@@ -133,6 +133,14 @@ type ERPContextValue = {
     product: Omit<Product, "id">,
   ) => void
 
+  addProductAndReceive: (
+    product: Omit<Product, "id">,
+    batch: string,
+    expiry: string,
+    quantity: number,
+    purchasePrice: number,
+  ) => { product: Product; lot: InventoryLot }
+
   updateProduct: (
     id: string,
     product: Omit<Product, "id">,
@@ -459,6 +467,100 @@ export function ERPProvider({
         newProduct,
       ],
     })
+  }
+
+  function addProductAndReceive(
+    product: Omit<Product, "id">,
+    batch: string,
+    expiry: string,
+    quantity: number,
+    purchasePrice: number,
+  ) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
+      throw new Error(
+        "Quantity must be a whole number greater than zero.",
+      )
+    }
+
+    const normalizedBarcode =
+      product.barcode.trim()
+
+    if (!normalizedBarcode) {
+      throw new Error("Barcode is required.")
+    }
+
+    // Prevent duplicate barcode
+    const barcodeExists = store.products.some(
+      (p) => p.barcode === normalizedBarcode,
+    )
+
+    if (barcodeExists) {
+      throw new Error(
+        `A product with barcode ${normalizedBarcode} already exists.`,
+      )
+    }
+
+    // Ensure SKU uniqueness; if duplicate, append numeric suffix
+    let sku = product.sku.trim()
+
+    if (!sku) {
+      sku = "ZK-000001"
+    }
+
+    const existingSkus = new Set(
+      store.products.map((p) => p.sku),
+    )
+
+    if (existingSkus.has(sku)) {
+      let counter = 1
+      let candidate = sku
+
+      while (existingSkus.has(candidate)) {
+        counter++
+        candidate = `${sku}-${counter}`
+      }
+
+      sku = candidate
+    }
+
+    const newProduct: Product = {
+      id: `PROD-${Date.now()}`,
+      ...product,
+      sku,
+      barcode: normalizedBarcode,
+    }
+
+    const normalizedBatch = batch.trim().toUpperCase()
+
+    if (!normalizedBatch) {
+      throw new Error("Batch number is required.")
+    }
+
+    if (!expiry) {
+      throw new Error("Expiry date is required.")
+    }
+
+    const newLot: InventoryLot = {
+      id: `LOT-${Date.now()}`,
+      productId: newProduct.id,
+      batch: normalizedBatch,
+      expiry,
+      quantity,
+      purchasePrice,
+    }
+
+    const nextStore: StoredData = {
+      ...store,
+      products: [...store.products, newProduct],
+      inventoryLots: [...store.inventoryLots, newLot],
+    }
+
+    persistStore(nextStore)
+
+    return { product: newProduct, lot: newLot }
   }
 
   function updateProduct(
@@ -1181,6 +1283,7 @@ export function ERPProvider({
         purchases:
           store.purchases,
         addProduct,
+        addProductAndReceive,
         updateProduct,
         deleteProduct,
         receiveStock,

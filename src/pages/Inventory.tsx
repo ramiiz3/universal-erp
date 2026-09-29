@@ -47,6 +47,7 @@ export default function Inventory() {
     products,
     inventoryLots,
     receiveStock,
+    addProductAndReceive,
     getProductStock,
   } = useERP()
 
@@ -68,6 +69,18 @@ export default function Inventory() {
   const [quantity, setQuantity] = useState("")
   const [purchasePrice, setPurchasePrice] =
     useState("")
+  const [newProductName, setNewProductName] =
+    useState("")
+  const [newCategory, setNewCategory] =
+    useState("")
+  const [newSKU, setNewSKU] =
+    useState("")
+  const [sellingPrice, setSellingPrice] =
+    useState("")
+  const [vatRate, setVatRate] =
+    useState("5")
+  const [unit, setUnit] =
+    useState("Pack")
 
   const productMap = useMemo(
     () =>
@@ -199,21 +212,29 @@ export default function Inventory() {
     )
 
     if (!product) {
-      window.alert(
-        `No product found for barcode ${barcode}. Create the product first in Products.`,
-      )
+      // New product flow: keep barcode and prepare new product form
+      setScannerValue(barcode)
+      setScannedProductId(null)
+
+      setNewProductName("")
+      setNewCategory("")
+      setNewSKU("")
+      setSellingPrice("")
+      setVatRate("5")
+      setUnit("Pack")
+      setPurchasePrice("")
+
+      setBatch("")
+      setExpiry("")
+      setQuantity("")
+
       return
     }
 
     setScannerValue(product.barcode)
     setScannedProductId(product.id)
 
-    // Product default purchase price
-    // is loaded, but batch and expiry
-    // remain blank for the new lot.
-    setPurchasePrice(
-      String(product.purchasePrice),
-    )
+    setPurchasePrice(String(product.purchasePrice))
 
     setBatch("")
     setExpiry("")
@@ -221,24 +242,72 @@ export default function Inventory() {
   }
 
   function receive() {
-    if (!scannedProduct) {
-      window.alert(
-        "Scan a product first.",
+    // If existing product flow
+    if (scannedProduct) {
+      if (!batch.trim()) {
+        window.alert(
+          "Batch number is required.",
+        )
+        return
+      }
+
+      if (!expiry) {
+        window.alert(
+          "Expiry date is required.",
+        )
+        return
+      }
+
+      const qty = Number(quantity)
+
+      if (!qty || qty <= 0) {
+        window.alert(
+          "Enter a valid quantity greater than zero.",
+        )
+        return
+      }
+
+      const cost =
+        Number(purchasePrice) ||
+        scannedProduct.purchasePrice
+
+      receiveStock(
+        scannedProduct.id,
+        batch,
+        expiry,
+        qty,
+        cost,
       )
+
+      window.alert(
+        `${qty} units received for ${scannedProduct.name}.`,
+      )
+
+      closeReceiveStock()
+
+      return
+    }
+
+    // New product flow
+    const barcode = scannerValue.trim()
+
+    if (!barcode) {
+      window.alert("Scan a product first.")
+      return
+    }
+
+    if (!newProductName.trim()) {
+      window.alert("Product name is required.")
       return
     }
 
     if (!batch.trim()) {
-      window.alert(
-        "Batch number is required.",
-      )
+      window.alert("Batch number is required.")
       return
     }
 
     if (!expiry) {
-      window.alert(
-        "Expiry date is required.",
-      )
+      window.alert("Expiry date is required.")
       return
     }
 
@@ -251,23 +320,47 @@ export default function Inventory() {
       return
     }
 
-    const cost =
-      Number(purchasePrice) ||
-      scannedProduct.purchasePrice
+    const pPrice = Number(purchasePrice)
+    const sPrice = Number(sellingPrice)
 
-    receiveStock(
-      scannedProduct.id,
-      batch,
-      expiry,
-      qty,
-      cost,
-    )
+    if (!Number.isFinite(pPrice)) {
+      window.alert("Purchase price is required.")
+      return
+    }
 
-    window.alert(
-      `${qty} units received for ${scannedProduct.name}.`,
-    )
+    if (!Number.isFinite(sPrice)) {
+      window.alert("Selling price is required.")
+      return
+    }
 
-    closeReceiveStock()
+    try {
+      const result = addProductAndReceive(
+        {
+          name: newProductName.trim(),
+          category: newCategory.trim(),
+          sku: newSKU.trim(),
+          barcode,
+          purchasePrice: pPrice,
+          sellingPrice: sPrice,
+          minimumStock: 0,
+          vatRate: Number(vatRate) || 5,
+          unit: unit || "Pack",
+        },
+        batch,
+        expiry,
+        qty,
+        pPrice,
+      )
+
+      window.alert(
+        `${qty} units created and received for ${result.product.name}.`,
+      )
+
+      closeReceiveStock()
+    } catch (err: any) {
+      window.alert(err?.message ?? String(err))
+    }
+    // done
   }
 
   return (
@@ -661,28 +754,35 @@ export default function Inventory() {
                     <Field
                       label="Purchase Price"
                       value={purchasePrice}
-                      onChange={
-                        setPurchasePrice
-                      }
+                      onChange={setPurchasePrice}
                       type="number"
                       placeholder="10.00"
                     />
                   </div>
                 </>
               ) : (
-                <div className="rounded-2xl border border-dashed p-8 text-center dark:border-slate-700">
-                  <ScanLine
-                    size={28}
-                    className="mx-auto text-slate-400"
-                  />
-
-                  <div className="mt-3 font-medium">
-                    Waiting for barcode
+                <div className="rounded-2xl border bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="text-xs uppercase tracking-wide text-slate-400">
+                    New Product
                   </div>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    Scan a product from the Products module.
-                  </p>
+                  <div className="mt-3 text-lg font-semibold">
+                    Create product for barcode {scannerValue}
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <Field label="Product Name" value={newProductName} onChange={setNewProductName} />
+                    <Field label="Category" value={newCategory} onChange={setNewCategory} />
+                    <Field label="SKU" value={newSKU} onChange={setNewSKU} placeholder="Auto-generated" />
+                    <Field label="Barcode" value={scannerValue} onChange={setScannerValue} />
+                    <Field label="Purchase Price" value={purchasePrice} onChange={setPurchasePrice} type="number" />
+                    <Field label="Selling Price" value={sellingPrice} onChange={setSellingPrice} type="number" />
+                    <Field label="VAT Rate" value={vatRate} onChange={setVatRate} type="number" />
+                    <Field label="Unit" value={unit} onChange={setUnit} />
+                    <Field label="Batch Number" value={batch} onChange={setBatch} />
+                    <Field label="Expiry Date" value={expiry} onChange={setExpiry} type="date" />
+                    <Field label="Quantity Received" value={quantity} onChange={setQuantity} type="number" />
+                  </div>
                 </div>
               )}
 
@@ -699,12 +799,12 @@ export default function Inventory() {
 
                 <button
                   type="button"
-                  disabled={!scannedProduct}
+                  disabled={!(scannedProduct || scannerValue)}
                   onClick={receive}
                   className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus size={17} />
-                  Receive Stock
+                  {scannedProduct ? "Receive Stock" : "Create & Receive Stock"}
                 </button>
               </div>
             </div>
