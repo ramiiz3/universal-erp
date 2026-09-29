@@ -6,7 +6,6 @@ import POS from "./pages/POS"
 import Sales from "./pages/Sales"
 import Invoices from "./pages/Invoices"
 import Customers from "./pages/Customers"
-import Products from "./pages/Products"
 import Inventory from "./pages/Inventory"
 import Purchasing from "./pages/Purchasing"
 import Suppliers from "./pages/Suppliers"
@@ -61,10 +60,7 @@ export default function App() {
             element={<Customers />}
           />
 
-          <Route
-            path="/products"
-            element={<Products />}
-          />
+          {/* Products route removed — product management moved to Inventory */}
 
           <Route
             path="/inventory"
