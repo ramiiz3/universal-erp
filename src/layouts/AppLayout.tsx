@@ -10,7 +10,6 @@ import {
   CircleDollarSign,
   FileText,
   Moon,
-  Package,
   ScanBarcode,
   Settings as SettingsIcon,
   ShoppingCart,
@@ -52,11 +51,6 @@ const menuItems = [
     label: "Customers",
     path: "/customers",
     icon: Users,
-  },
-  {
-    label: "Products",
-    path: "/products",
-    icon: Package,
   },
   {
     label: "Inventory",
