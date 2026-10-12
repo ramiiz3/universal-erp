@@ -28,6 +28,17 @@ export type InventoryLot = {
   purchasePrice: number
 }
 
+export type InventoryMovement = {
+  id: string
+  type: "OPENING" | "RECEIPT" | "SALE" | "RETURN" | "ADJUSTMENT" | "DAMAGE" | "LOSS"
+  productId: string
+  lotId?: string | null
+  quantity: number
+  reason?: string
+  createdAt: string
+  metadata?: Record<string, any>
+}
+
 export type Customer = {
   id: string
   name: string
@@ -42,6 +53,21 @@ export type PaymentMethod =
   | "Card"
   | "Credit"
   | "Bank Transfer"
+
+export type SaleItemCostAllocation = {
+  lotId: string
+  batch: string
+  expiry: string
+  quantity: number
+  unitCost: number
+  totalCost: number
+}
+
+export type SaleItemCostSnapshot = {
+  cogs: number
+  unitCost: number
+  lotAllocations: SaleItemCostAllocation[]
+}
 
 export type SaleItem = {
   id: string
@@ -58,6 +84,7 @@ export type SaleItem = {
     expiry: string
     quantity: number
   }[]
+  costSnapshot?: SaleItemCostSnapshot
 }
 
 export type Sale = {
@@ -125,6 +152,7 @@ type CreatePurchaseInput = {
 type ERPContextValue = {
   products: Product[]
   inventoryLots: InventoryLot[]
+  inventoryMovements: InventoryMovement[]
   customers: Customer[]
   sales: Sale[]
   purchases: Purchase[]
@@ -140,6 +168,17 @@ type ERPContextValue = {
     quantity: number,
     purchasePrice: number,
   ) => { product: Product; lot: InventoryLot }
+
+  adjustStock: (
+    productId: string,
+    lotId: string | null,
+    quantityDelta: number,
+    reason: string,
+  ) => void
+
+  recordMovement: (
+    move: Omit<InventoryMovement, "id" | "createdAt">,
+  ) => InventoryMovement
 
   updateProduct: (
     id: string,
@@ -358,6 +397,7 @@ const STORAGE_KEY =
 type StoredData = {
   products: Product[]
   inventoryLots: InventoryLot[]
+  inventoryMovements: InventoryMovement[]
   customers: Customer[]
   sales: Sale[]
   purchases: Purchase[]
@@ -373,6 +413,7 @@ function loadStoredData(): StoredData {
         products: initialProducts,
         inventoryLots:
           initialInventoryLots,
+        inventoryMovements: [],
         customers: initialCustomers,
         sales: initialSales,
         purchases: initialPurchases,
@@ -391,6 +432,10 @@ function loadStoredData(): StoredData {
         Array.isArray(parsed.inventoryLots)
           ? parsed.inventoryLots
           : initialInventoryLots,
+
+      inventoryMovements: Array.isArray(parsed.inventoryMovements)
+        ? parsed.inventoryMovements
+        : [],
 
       customers:
         Array.isArray(parsed.customers)
@@ -412,6 +457,7 @@ function loadStoredData(): StoredData {
       products: initialProducts,
       inventoryLots:
         initialInventoryLots,
+      inventoryMovements: [],
       customers: initialCustomers,
       sales: initialSales,
       purchases: initialPurchases,
@@ -556,11 +602,91 @@ export function ERPProvider({
       ...store,
       products: [...store.products, newProduct],
       inventoryLots: [...store.inventoryLots, newLot],
+      inventoryMovements: [
+        ...store.inventoryMovements,
+        {
+          id: `MOV-${Date.now()}`,
+          type: "OPENING",
+          productId: newProduct.id,
+          lotId: newLot.id,
+          quantity: newLot.quantity,
+          createdAt: new Date().toISOString(),
+        },
+      ],
     }
 
     persistStore(nextStore)
 
     return { product: newProduct, lot: newLot }
+  }
+
+  function recordMovement(move: Omit<InventoryMovement, "id" | "createdAt">) {
+    const movement: InventoryMovement = {
+      id: `MOV-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      ...move,
+    }
+
+    persistStore({
+      ...store,
+      inventoryMovements: [movement, ...store.inventoryMovements],
+    })
+
+    return movement
+  }
+
+  function adjustStock(
+    productId: string,
+    lotId: string | null,
+    quantityDelta: number,
+    reason: string,
+  ) {
+    if (!Number.isInteger(quantityDelta)) {
+      throw new Error("Quantity delta must be an integer.")
+    }
+
+    const updatedLots = store.inventoryLots.map((l) => ({ ...l }))
+
+    if (lotId) {
+      const lot = updatedLots.find((l) => l.id === lotId)
+
+      if (!lot) throw new Error("Lot not found.")
+
+      lot.quantity += quantityDelta
+    } else {
+      // If no lot specified and delta > 0, create an unnamed opening lot
+      if (quantityDelta > 0) {
+        const newLot: InventoryLot = {
+          id: `LOT-${Date.now()}`,
+          productId,
+          batch: "OPENING",
+          expiry: "",
+          quantity: quantityDelta,
+          purchasePrice: 0,
+        }
+
+        updatedLots.push(newLot)
+      } else {
+        throw new Error("Must specify lot to decrease stock.")
+      }
+    }
+
+    persistStore({
+      ...store,
+      inventoryLots: updatedLots,
+      inventoryMovements: [
+        {
+          id: `MOV-${Date.now()}`,
+          type: "ADJUSTMENT",
+          productId,
+          lotId,
+          quantity: quantityDelta,
+          reason,
+          createdAt: new Date().toISOString(),
+        },
+        ...store.inventoryMovements,
+      ],
+    })
   }
 
   function updateProduct(
@@ -1093,6 +1219,8 @@ export function ERPProvider({
       batch: string
       expiry: string
       quantity: number
+      unitCost: number
+      totalCost: number
     }[] = []
 
     const updatedLots =
@@ -1148,6 +1276,9 @@ export function ERPProvider({
 
           remaining -= deduction
 
+          const unitCost = lot.purchasePrice
+          const totalCost = deduction * unitCost
+
           allocations.push({
             itemIndex,
             lotId: lot.id,
@@ -1157,6 +1288,8 @@ export function ERPProvider({
               lot.expiry,
             quantity:
               deduction,
+            unitCost,
+            totalCost,
           })
         }
 
@@ -1176,26 +1309,8 @@ export function ERPProvider({
         (
           requested,
           index,
-        ) => ({
-          id: `ITEM-${Date.now()}-${index}`,
-          productId:
-            requested.product.id,
-          name:
-            requested.product.name,
-          barcode:
-            requested.product
-              .barcode,
-          quantity:
-            requested.quantity,
-          unitPrice:
-            requested.unitPrice,
-          vatRate:
-            requested.product
-              .vatRate,
-          total:
-            requested.quantity *
-            requested.unitPrice,
-          batchAllocations:
+        ) => {
+          const itemAllocations =
             allocations
               .filter(
                 (
@@ -1210,6 +1325,51 @@ export function ERPProvider({
                   batch,
                   expiry,
                   quantity,
+                  unitCost,
+                  totalCost,
+                }) => ({
+                  lotId,
+                  batch,
+                  expiry,
+                  quantity,
+                  unitCost,
+                  totalCost,
+                }),
+              )
+
+          const cogs =
+            itemAllocations.reduce(
+              (sum, allocation) =>
+                sum + allocation.totalCost,
+              0,
+            )
+
+          return {
+            id: `ITEM-${Date.now()}-${index}`,
+            productId:
+              requested.product.id,
+            name:
+              requested.product.name,
+            barcode:
+              requested.product
+                .barcode,
+            quantity:
+              requested.quantity,
+            unitPrice:
+              requested.unitPrice,
+            vatRate:
+              requested.product
+                .vatRate,
+            total:
+              requested.quantity *
+              requested.unitPrice,
+            batchAllocations:
+              itemAllocations.map(
+                ({
+                  lotId,
+                  batch,
+                  expiry,
+                  quantity,
                 }) => ({
                   lotId,
                   batch,
@@ -1217,7 +1377,21 @@ export function ERPProvider({
                   quantity,
                 }),
               ),
-        }),
+            costSnapshot:
+              itemAllocations.length > 0
+                ? {
+                    cogs,
+                    unitCost:
+                      requested.quantity > 0
+                        ? cogs /
+                          requested.quantity
+                        : 0,
+                    lotAllocations:
+                      itemAllocations,
+                  }
+                : undefined,
+          }
+        },
       )
 
     const customer =
@@ -1278,12 +1452,15 @@ export function ERPProvider({
         products: store.products,
         inventoryLots:
           store.inventoryLots,
+        inventoryMovements: store.inventoryMovements,
         customers: store.customers,
         sales: store.sales,
         purchases:
           store.purchases,
         addProduct,
         addProductAndReceive,
+        adjustStock,
+        recordMovement,
         updateProduct,
         deleteProduct,
         receiveStock,

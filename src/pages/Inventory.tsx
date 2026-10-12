@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Barcode,
-  Eye,
   Package,
   Plus,
   Search,
@@ -12,7 +11,14 @@ import { useMemo, useState } from "react"
 import {
   useERP,
   type InventoryLot,
+  type Product,
 } from "../context/ERPContext"
+import {
+  expiryWithinWindow,
+  formatExpiryDisplay,
+  normalizeExpiryValue,
+  parseExpiryDate,
+} from "../lib/expiry"
 
 function money(value: number) {
   return `AED ${value.toLocaleString("en-AE", {
@@ -22,35 +28,26 @@ function money(value: number) {
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(
-    "en-GB",
-  )
+  return formatExpiryDisplay(value)
 }
 
 function expiringWithin90Days(
   date: string,
 ) {
-  const expiry = new Date(date)
+  const expiry = parseExpiryDate(date)
   const today = new Date()
+
+  if (!expiry) {
+    return false
+  }
 
   const limit = new Date(today)
   limit.setDate(limit.getDate() + 90)
 
-  return (
-    expiry >= today &&
-    expiry <= limit
-  )
+  return expiryWithinWindow(date, today, limit)
 }
 
 export default function Inventory() {
-  const {
-    products,
-    inventoryLots,
-    receiveStock,
-    addProductAndReceive,
-    getProductStock,
-  } = useERP()
-
   const [search, setSearch] = useState("")
   const [showReceive, setShowReceive] =
     useState(false)
@@ -82,6 +79,33 @@ export default function Inventory() {
   const [unit, setUnit] =
     useState("Pack")
 
+  const {
+    products,
+    inventoryLots,
+    receiveStock,
+    addProductAndReceive,
+    addProduct,
+    updateProduct,
+    adjustStock,
+    getProductStock,
+  } = useERP()
+
+  const [productForm, setProductForm] = useState({
+    name: "",
+    category: "",
+    sku: "",
+    barcode: "",
+    purchasePrice: "",
+    sellingPrice: "",
+    minimumStock: "0",
+    vatRate: "5",
+    unit: "Pack",
+    openingQuantity: "0",
+    openingBatch: "",
+    openingExpiry: "",
+    openingPurchasePrice: "",
+  })
+
   const productMap = useMemo(
     () =>
       new Map(
@@ -93,43 +117,40 @@ export default function Inventory() {
     [products],
   )
 
-  const enrichedLots = useMemo(
-    () =>
-      inventoryLots.map((lot) => {
-        const product =
-          productMap.get(lot.productId)
+  // previously we filtered lots for the lot-centric view; Inventory is now product-centric
 
-        return {
-          lot,
-          product,
-        }
-      }),
-    [inventoryLots, productMap],
-  )
+    const filteredProducts = useMemo(() => {
+      const q = search.trim().toLowerCase()
 
-  const filteredLots = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase()
+      if (!q) return products
 
-    if (!query) {
-      return enrichedLots
-    }
+      return products.filter((product) => {
+        const matchesProduct =
+          product.name.toLowerCase().includes(q) ||
+          product.sku.toLowerCase().includes(q) ||
+          product.barcode.toLowerCase().includes(q) ||
+          product.category.toLowerCase().includes(q)
 
-    return enrichedLots.filter(
-      ({ lot, product }) =>
-        product?.name
-          .toLowerCase()
-          .includes(query) ||
-        product?.sku
-          .toLowerCase()
-          .includes(query) ||
-        product?.barcode.includes(query) ||
-        lot.batch
-          .toLowerCase()
-          .includes(query),
-    )
-  }, [search, enrichedLots])
+        const matchesBatch = inventoryLots.some(
+          (lot) =>
+            lot.productId === product.id &&
+            lot.batch.toLowerCase().includes(q),
+        )
+
+        return matchesProduct || matchesBatch
+      })
+    }, [products, inventoryLots, search])
+
+    const [showAdd, setShowAdd] = useState(false)
+    const [showEdit, setShowEdit] = useState(false)
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+    const [showAdjust, setShowAdjust] = useState(false)
+    const [adjustProductId, setAdjustProductId] = useState<string | null>(null)
+    const [adjustLotId, setAdjustLotId] = useState<string | null>(null)
+    const [adjustQty, setAdjustQty] = useState("")
+    const [adjustReason, setAdjustReason] = useState("Stock Count")
+
+    const [showProductLots, setShowProductLots] = useState<string | null>(null)
 
   const totalUnits = inventoryLots.reduce(
     (sum, lot) =>
@@ -163,6 +184,7 @@ export default function Inventory() {
         getProductStock(product.id) === 0,
     )
 
+
   const expiringSoon = inventoryLots.filter(
     (lot) =>
       lot.quantity > 0 &&
@@ -191,6 +213,89 @@ export default function Inventory() {
     resetReceiveForm()
     setShowReceive(true)
   }
+
+    function openAddProduct() {
+        setEditingProduct(null)
+        setProductForm({
+          name: "",
+          category: "",
+          sku: "",
+          barcode: "",
+          purchasePrice: "",
+          sellingPrice: "",
+          minimumStock: "0",
+          vatRate: "5",
+          unit: "Pack",
+          openingQuantity: "0",
+          openingBatch: "",
+          openingExpiry: "",
+          openingPurchasePrice: "",
+        })
+        setShowAdd(true)
+    }
+
+    function openEditProduct(product: Product) {
+        setEditingProduct(product)
+        setProductForm({
+          name: product.name,
+          category: product.category,
+          sku: product.sku,
+          barcode: product.barcode,
+          purchasePrice: String(product.purchasePrice),
+          sellingPrice: String(product.sellingPrice),
+          minimumStock: String(product.minimumStock),
+          vatRate: String(product.vatRate),
+          unit: product.unit,
+          openingQuantity: "0",
+          openingBatch: "",
+          openingExpiry: "",
+          openingPurchasePrice: "",
+        })
+        setShowEdit(true)
+    }
+
+    function saveProduct(form: Omit<Product, "id">, opening?: { quantity: number; batch: string; expiry: string; purchasePrice: number } | null) {
+      if (editingProduct) {
+        updateProduct(editingProduct.id, form)
+        setShowEdit(false)
+        return
+      }
+
+      // create new product, optionally create opening stock
+      if (opening && opening.quantity > 0) {
+        addProductAndReceive(form, opening.batch, opening.expiry, opening.quantity, opening.purchasePrice)
+      } else {
+        addProduct(form)
+      }
+
+      setShowAdd(false)
+    }
+
+    function openAdjust(productId: string) {
+      setAdjustProductId(productId)
+      setAdjustLotId(null)
+      setAdjustQty("")
+      setAdjustReason("Stock Count")
+      setShowAdjust(true)
+    }
+
+    function doAdjust() {
+      if (!adjustProductId) return
+
+      const delta = Number(adjustQty)
+      if (!Number.isInteger(delta)) {
+        window.alert("Enter a whole number quantity.")
+        return
+      }
+
+      try {
+        adjustStock(adjustProductId, adjustLotId, delta, adjustReason)
+        window.alert("Stock adjusted.")
+        setShowAdjust(false)
+      } catch (err: any) {
+        window.alert(err?.message ?? String(err))
+      }
+    }
 
   function closeReceiveStock() {
     setShowReceive(false)
@@ -475,146 +580,71 @@ export default function Inventory() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex gap-2">
+            <button onClick={openReceiveStock} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><ScanLine size={16}/> Receive Stock</button>
+            <button onClick={openAddProduct} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"><Plus size={14}/> Add Product</button>
+          </div>
+
+          <div className="text-sm text-slate-500">Showing {filteredProducts.length} products</div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-sm">
             <thead className="border-b bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
               <tr className="text-left">
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Product
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Barcode
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Batch
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Expiry
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Lot Stock
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Total Product Stock
-                </th>
-
-                <th className="px-5 py-4 font-medium text-slate-500">
-                  Purchase Cost
-                </th>
-
-                <th className="px-5 py-4 text-right font-medium text-slate-500">
-                  Actions
-                </th>
+                <th className="px-5 py-4 font-medium text-slate-500">Product</th>
+                <th className="px-5 py-4 font-medium text-slate-500">SKU</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Barcode</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Category</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Purchase Price</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Selling Price</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Stock</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Status</th>
+                <th className="px-5 py-4 text-right font-medium text-slate-500">Actions</th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredLots.map(
-                ({ lot, product }) => (
-                  <tr
-                    key={lot.id}
-                    className="border-b last:border-b-0 dark:border-slate-800"
-                  >
+              {filteredProducts.map((product) => {
+                const stock = getProductStock(product.id)
+                const status = stock === 0 ? "Out of Stock" : stock <= product.minimumStock ? "Low Stock" : "In Stock"
+
+                return (
+                  <tr key={product.id} className="border-b last:border-b-0 dark:border-slate-800">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                          <Package
-                            size={18}
-                          />
-                        </div>
-
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"><Package size={18}/></div>
                         <div>
-                          <div className="font-semibold">
-                            {product?.name ??
-                              "Unknown Product"}
-                          </div>
-
-                          <div className="text-xs text-slate-500">
-                            {product?.sku ??
-                              lot.productId}
-                          </div>
+                          <div className="font-semibold">{product.name}</div>
+                          <div className="text-xs text-slate-500">{product.unit}</div>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 font-mono text-xs">
-                      {product?.barcode ??
-                        "—"}
-                    </td>
-
-                    <td className="px-5 py-4 font-medium">
-                      {lot.batch}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div>
-                        {formatDate(
-                          lot.expiry,
-                        )}
-                      </div>
-
-                      {expiringWithin90Days(
-                        lot.expiry,
-                      ) && (
-                        <div className="mt-1 text-xs font-medium text-amber-600">
-                          Expiring soon
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4 font-semibold">
-                      {lot.quantity}
-                    </td>
-
-                    <td className="px-5 py-4 font-semibold">
-                      {product
-                        ? getProductStock(
-                            product.id,
-                          )
-                        : lot.quantity}
-                    </td>
+                    <td className="px-5 py-4">{product.sku || product.id}</td>
+                    <td className="px-5 py-4 font-mono text-xs">{product.barcode}</td>
+                    <td className="px-5 py-4">{product.category}</td>
+                    <td className="px-5 py-4">{money(product.purchasePrice)}</td>
+                    <td className="px-5 py-4">{money(product.sellingPrice)}</td>
+                    <td className="px-5 py-4 font-semibold">{stock}</td>
+                    <td className="px-5 py-4">{status}</td>
 
                     <td className="px-5 py-4">
-                      {money(
-                        lot.purchasePrice,
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedLot(
-                              lot,
-                            )
-                          }
-                          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-                          title="View lot"
-                        >
-                          <Eye
-                            size={17}
-                          />
-                        </button>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => { setScannedProductId(product.id); openReceiveStock() }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Receive Stock">Receive</button>
+                        <button onClick={() => openAdjust(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Adjust Stock">Adjust</button>
+                        <button onClick={() => openEditProduct(product)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Edit Product">Edit</button>
+                        <button onClick={() => setShowProductLots(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="View Lots">Lots</button>
                       </div>
                     </td>
                   </tr>
-                ),
-              )}
+                )
+              })}
 
-              {filteredLots.length === 0 && (
+              {filteredProducts.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-5 py-12 text-center text-slate-500"
-                  >
-                    No inventory lots found.
-                  </td>
+                  <td colSpan={9} className="px-5 py-12 text-center text-slate-500">No products found.</td>
                 </tr>
               )}
             </tbody>
@@ -737,10 +767,10 @@ export default function Inventory() {
                     />
 
                     <Field
-                      label="Expiry Date"
-                      value={expiry}
+                      label="Expiry Month/Year"
+                      value={normalizeExpiryValue(expiry)}
                       onChange={setExpiry}
-                      type="date"
+                      type="month"
                     />
 
                     <Field
@@ -780,7 +810,7 @@ export default function Inventory() {
                     <Field label="VAT Rate" value={vatRate} onChange={setVatRate} type="number" />
                     <Field label="Unit" value={unit} onChange={setUnit} />
                     <Field label="Batch Number" value={batch} onChange={setBatch} />
-                    <Field label="Expiry Date" value={expiry} onChange={setExpiry} type="date" />
+                    <Field label="Expiry Month/Year" value={normalizeExpiryValue(expiry)} onChange={setExpiry} type="month" />
                     <Field label="Quantity Received" value={quantity} onChange={setQuantity} type="number" />
                   </div>
                 </div>
@@ -806,6 +836,165 @@ export default function Inventory() {
                   <Plus size={17} />
                   {scannedProduct ? "Receive Stock" : "Create & Receive Stock"}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Add Product</h3>
+                <p className="mt-1 text-sm text-slate-500">Create a new product. Optionally add opening stock.</p>
+              </div>
+              <button type="button" onClick={() => setShowAdd(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Product Name" value={productForm.name} onChange={(v) => setProductForm({...productForm, name: v})} />
+                <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
+                <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} placeholder="Auto-generated" />
+                <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
+                <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
+                <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
+                <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
+              </div>
+
+              <div className="mt-4 border-t pt-4">
+                <div className="text-sm text-slate-600">Opening Stock (optional)</div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <Field label="Quantity" value={productForm.openingQuantity} onChange={(v) => setProductForm({...productForm, openingQuantity: v})} type="number" />
+                  <Field label="Batch" value={productForm.openingBatch} onChange={(v) => setProductForm({...productForm, openingBatch: v})} />
+                  <Field label="Expiry Month/Year" value={normalizeExpiryValue(productForm.openingExpiry)} onChange={(v) => setProductForm({...productForm, openingExpiry: v})} type="month" />
+                  <Field label="Purchase Price" value={productForm.openingPurchasePrice} onChange={(v) => setProductForm({...productForm, openingPurchasePrice: v})} type="number" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => setShowAdd(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
+                <button onClick={() => {
+                  const form = {
+                    name: productForm.name.trim(),
+                    category: productForm.category.trim(),
+                    sku: productForm.sku.trim(),
+                    barcode: productForm.barcode.trim(),
+                    purchasePrice: Number(productForm.purchasePrice) || 0,
+                    sellingPrice: Number(productForm.sellingPrice) || 0,
+                    minimumStock: Number(productForm.minimumStock) || 0,
+                    vatRate: Number(productForm.vatRate) || 5,
+                    unit: productForm.unit || "Pack",
+                  }
+
+                  const openingQty = Number(productForm.openingQuantity || 0)
+                  const opening = openingQty > 0 ? { quantity: openingQty, batch: productForm.openingBatch, expiry: productForm.openingExpiry, purchasePrice: Number(productForm.openingPurchasePrice) || form.purchasePrice } : null
+
+                  saveProduct(form, opening)
+                }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Create Product</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEdit && editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Edit Product</h3>
+                <p className="mt-1 text-sm text-slate-500">Update product details.</p>
+              </div>
+              <button type="button" onClick={() => setShowEdit(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Product Name" value={productForm.name} onChange={(v) => setProductForm({...productForm, name: v})} />
+                <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
+                <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} />
+                <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
+                <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
+                <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
+                <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => setShowEdit(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
+                <button onClick={() => {
+                  const form = {
+                    name: productForm.name.trim(),
+                    category: productForm.category.trim(),
+                    sku: productForm.sku.trim(),
+                    barcode: productForm.barcode.trim(),
+                    purchasePrice: Number(productForm.purchasePrice) || 0,
+                    sellingPrice: Number(productForm.sellingPrice) || 0,
+                    minimumStock: Number(productForm.minimumStock) || 0,
+                    vatRate: Number(productForm.vatRate) || 5,
+                    unit: productForm.unit || "Pack",
+                  }
+
+                  saveProduct(form, null)
+                }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdjust && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Adjust Stock</h3>
+              </div>
+              <button type="button" onClick={() => setShowAdjust(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-3">
+                <label className="space-y-2"><span className="text-sm font-medium">Quantity Delta (use negative to reduce)</span><input type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/></label>
+                <label className="space-y-2"><span className="text-sm font-medium">Reason</span><input value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/></label>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => setShowAdjust(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
+                <button onClick={() => { doAdjust() }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProductLots && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Lots</h3>
+                <p className="mt-1 text-sm text-slate-500">Showing lots for product</p>
+              </div>
+              <button type="button" onClick={() => setShowProductLots(null)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-3">
+                {inventoryLots.filter(l => l.productId === showProductLots).map(l => (
+                  <div key={l.id} className="rounded-xl border p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">Batch {l.batch}</div>
+                      <div className="text-sm text-slate-500">{formatDate(l.expiry)}</div>
+                    </div>
+
+                    <div className="mt-2 text-sm">Qty: {l.quantity} · Cost: {money(l.purchasePrice)}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
