@@ -4,7 +4,6 @@ import jsPDF from "jspdf"
 import {
   ArrowLeft,
   CalendarDays,
-  CheckCircle2,
   Download,
   FileText,
   Mail,
@@ -24,6 +23,8 @@ const PHARMACY_ARABIC_PHONE = "هاتف: 067446775"
 const PHARMACY_ARABIC_TRN = "الرقم الضريبي: 105461855600003"
 
 type PrintFormat = "80mm" | "58mm"
+
+const REFUND_NOTE = "Medicine once sold cannot be exchanged or refunded as per MOH Regulation."
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-GB", {
@@ -517,6 +518,7 @@ export default function Invoices() {
 
   const sale = selectedSale
   const breakdown = getInvoiceBreakdown(sale)
+  const activePrintClass = selectedPrintFormat ? `print-format-${selectedPrintFormat}` : "print-format-a4"
 
   return (
     <section className="min-h-full bg-slate-100 p-4 md:p-6">
@@ -543,7 +545,10 @@ export default function Invoices() {
 
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => {
+                setSelectedPrintFormat(null)
+                window.print()
+              }}
               className="inline-flex items-center gap-2 rounded-xl bg-[#17221D] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#24342B]"
             >
               <Printer className="h-4 w-4" />
@@ -590,60 +595,42 @@ export default function Invoices() {
           </button>
         </div>
 
-        <div className="invoice-print-area mx-auto w-full max-w-[210mm] bg-white p-[10mm] shadow-xl">
-          <div className="overflow-hidden rounded-[18px] border border-slate-200">
-            <div className="relative overflow-hidden bg-[#17221D] px-7 py-7 text-white">
-              <div className="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-[#2F9E63]/20" />
-              <div className="absolute -bottom-20 right-24 h-40 w-40 rounded-full bg-[#2F9E63]/10" />
-
-              <div className="relative flex items-start justify-between gap-6">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-14 w-[190px] items-center justify-center">
-                      <img src="/brand/zaki-logo.png" alt="Zaki Pharmacy" className="h-full w-full object-contain" />
-                    </div>
+        <div className={`print-shell ${activePrintClass}`}>
+          <div className="invoice-print-area mx-auto w-full max-w-[210mm] bg-white p-[10mm] shadow-xl">
+            <div className="overflow-hidden rounded-[18px] border border-slate-200">
+              <div className="invoice-header relative overflow-hidden bg-white px-7 py-7 text-slate-900">
+                <div className="invoice-header-inner relative flex flex-col items-center justify-center gap-2 text-center">
+                  <div className="invoice-brand-block">
+                    <img src="/brand/zaki-logo.png" alt="Zaki Pharmacy" className="invoice-brand-logo h-14 w-[190px] object-contain" />
                   </div>
 
-                  <div className="mt-4 space-y-1 text-left text-[10px] font-medium text-white/75">
-                    <p>{PHARMACY_NAME}</p>
+                  <div className="invoice-brand-name text-[26px] font-black uppercase tracking-[0.08em] text-slate-900">
+                    {PHARMACY_NAME}
+                  </div>
+
+                  <div dir="rtl" className="invoice-brand-name-ar text-[22px] font-black text-slate-800">
+                    {PHARMACY_ARABIC_NAME}
+                  </div>
+
+                  <div className="invoice-header-details mt-2 flex flex-col items-center gap-1 text-[11px] font-medium text-slate-700">
                     <p>{PHARMACY_ADDRESS}</p>
+                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_ADDRESS}</p>
                     <p>{PHARMACY_PHONE}</p>
+                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_PHONE}</p>
                     <p>{PHARMACY_TRN}</p>
-                    <p dir="rtl" className="text-right text-[10px] font-medium text-white/75">
-                      {PHARMACY_ARABIC_NAME}
-                    </p>
-                    <p dir="rtl" className="text-right text-[10px] font-medium text-white/75">
-                      {PHARMACY_ARABIC_ADDRESS}
-                    </p>
-                    <p dir="rtl" className="text-right text-[10px] font-medium text-white/75">
-                      {PHARMACY_ARABIC_PHONE}
-                    </p>
-                    <p dir="rtl" className="text-right text-[10px] font-medium text-white/75">
-                      {PHARMACY_ARABIC_TRN}
-                    </p>
+                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_TRN}</p>
                   </div>
 
-                  <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
-                    <FileText className="h-3.5 w-3.5" />
-                    TAX INVOICE / فاتورة ضريبية
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-xs font-medium uppercase tracking-wider text-emerald-200/70">
-                    Invoice / رقم الفاتورة
-                  </p>
-                  <p className="mt-1 text-xl font-bold">{sale.invoiceNumber}</p>
-                  <p className="mt-1 text-xs text-white/80">{formatDate(sale.createdAt)}</p>
-                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#2F9E63] px-3 py-1.5 text-[11px] font-semibold text-white">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    {sale.status}
+                  <div className="mt-4 w-full border-t border-slate-200 pt-3 text-center">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                      <FileText className="h-3.5 w-3.5" />
+                      TAX INVOICE / فاتورة ضريبية
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid gap-4 bg-white p-6 sm:grid-cols-2">
+              <div className="grid gap-4 bg-white p-6 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-[#F7FAF8] p-5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2F9E63]">
                   Customer / العميل
@@ -781,22 +768,26 @@ export default function Invoices() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 bg-[#17221D] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold text-white">{PHARMACY_NAME}</p>
-                <p className="mt-1 text-[10px] text-white/60">{PHARMACY_ADDRESS}</p>
-                <p className="text-[10px] text-white/60">{PHARMACY_PHONE} • {PHARMACY_TRN}</p>
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+                <p className="invoice-print-note text-[10px] font-medium leading-relaxed text-slate-700">{REFUND_NOTE}</p>
               </div>
 
-              <div className="text-left sm:text-right">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/60">Powered by</p>
-                <p className="mt-1 text-xs font-bold text-[#2F9E63]">UniversalERP</p>
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-[#17221D] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-white">{PHARMACY_NAME}</p>
+                  <p className="mt-1 text-[10px] text-white/60">{PHARMACY_ADDRESS}</p>
+                  <p className="text-[10px] text-white/60">{PHARMACY_PHONE} • {PHARMACY_TRN}</p>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/60">Powered by</p>
+                  <p className="mt-1 text-xs font-bold text-[#2F9E63]">UniversalERP</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className={`thermal-receipt-area thermal-80 ${selectedPrintFormat === "80mm" ? "is-visible" : ""}`} data-format="80mm">
+          <div className={`thermal-receipt-area thermal-80 ${selectedPrintFormat === "80mm" ? "is-visible" : ""}`} data-format="80mm">
           <div className="thermal-receipt-card">
             <div className="thermal-header">
               <div className="thermal-brand">ZAKI PHARMACY LLC</div>
@@ -840,6 +831,7 @@ export default function Invoices() {
             <div className="thermal-summary-row total"><span>Net Total / صافي الإجمالي</span><span>AED {breakdown.netTotal.toFixed(2)}</span></div>
             <div className="thermal-summary-row"><span>Cash / النقد</span><span>AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}</span></div>
             <div className="thermal-summary-row"><span>Change / الباقي</span><span>AED 0.00</span></div>
+            <div className="thermal-note">{REFUND_NOTE}</div>
             <div className="thermal-footer">Thank you / شكراً لك</div>
           </div>
         </div>
@@ -877,8 +869,10 @@ export default function Invoices() {
             <div className="thermal-summary-row"><span>Disc</span><span>-{breakdown.discount.toFixed(2)}</span></div>
             <div className="thermal-summary-row"><span>VAT</span><span>{breakdown.vatAmount.toFixed(2)}</span></div>
             <div className="thermal-summary-row total"><span>Total</span><span>{breakdown.netTotal.toFixed(2)}</span></div>
+            <div className="thermal-note">{REFUND_NOTE}</div>
             <div className="thermal-footer">Thank you / شكراً لك</div>
           </div>
+        </div>
         </div>
       </div>
     </section>

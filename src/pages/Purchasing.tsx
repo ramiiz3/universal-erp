@@ -884,7 +884,7 @@ export default function Purchasing() {
                 <h2 className="mt-1 text-xl font-semibold text-slate-900">{selectedPurchase.purchaseNumber}</h2>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="no-print flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => printPurchase(selectedPurchase)}
