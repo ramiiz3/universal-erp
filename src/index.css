@@ -707,3 +707,185 @@ html.dark .shadow-2xl {
   }
 }
 
+/* =========================================================
+   THERMAL RECEIPT PRINT STYLES
+   ========================================================= */
+
+.thermal-receipt-area {
+  display: none;
+}
+
+.thermal-receipt-card {
+  width: 80mm;
+  margin: 0 auto;
+  background: #ffffff;
+  color: #111827;
+  padding: 6mm 4mm;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  box-sizing: border-box;
+  letter-spacing: 0.01em;
+}
+
+.thermal-receipt-card.compact {
+  width: 58mm;
+  padding: 5mm 3mm;
+}
+
+.thermal-header {
+  text-align: center;
+  border-bottom: 1px dashed #374151;
+  padding-bottom: 3mm;
+  margin-bottom: 3mm;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.thermal-brand {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.thermal-brand-ar {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 1mm;
+}
+
+.thermal-title {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 2mm;
+  text-transform: uppercase;
+}
+
+.thermal-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  font-size: 9px;
+  margin: 1mm 0;
+}
+
+.thermal-meta-row.compact-meta {
+  display: block;
+}
+
+.thermal-list-header,
+.thermal-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  font-size: 8.7px;
+  line-height: 1.4;
+}
+
+.thermal-list-header {
+  border-top: 1px dashed #374151;
+  border-bottom: 1px dashed #374151;
+  padding: 2mm 0;
+  margin-top: 2mm;
+  font-weight: 700;
+}
+
+.thermal-item-row,
+.thermal-item-compact {
+  padding: 2mm 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.thermal-item-head,
+.thermal-item-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+
+.thermal-item-head {
+  font-weight: 700;
+}
+
+.thermal-item-sub {
+  color: #4b5563;
+}
+
+.thermal-summary-row {
+  margin-top: 1mm;
+  font-size: 9px;
+}
+
+.thermal-summary-row.total {
+  font-weight: 800;
+  font-size: 10px;
+  border-top: 1px dashed #374151;
+  padding-top: 2mm;
+}
+
+.thermal-divider {
+  border-top: 1px dashed #374151;
+  margin: 3mm 0 2mm;
+}
+
+.thermal-footer {
+  margin-top: 3mm;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  border-top: 1px dashed #374151;
+  padding-top: 2mm;
+}
+
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .thermal-receipt-area,
+  .thermal-receipt-area * {
+    visibility: visible !important;
+  }
+
+  .thermal-receipt-area {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .thermal-receipt-area.is-visible {
+    display: block !important;
+  }
+
+  .thermal-receipt-card {
+    width: var(--thermal-width, 80mm) !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .thermal-80 {
+    --thermal-width: 80mm;
+  }
+
+  .thermal-58 {
+    --thermal-width: 58mm;
+  }
+
+  .thermal-58 .thermal-receipt-card {
+    width: 58mm !important;
+  }
+}
+
