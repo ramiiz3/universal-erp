@@ -48,6 +48,104 @@ function money(value: number) {
   return `AED ${value.toFixed(2)}`
 }
 
+function printThermalReceipt(format: PrintFormat) {
+  const widthMm = format === "80mm" ? 80 : 58
+  const receiptClass = format === "80mm" ? "thermal-80" : "thermal-58"
+  const receiptCard = document.querySelector<HTMLElement>(
+    `.${receiptClass} .thermal-receipt-card`,
+  )
+
+  if (!receiptCard) {
+    window.alert("Unable to prepare the receipt for printing.")
+    return
+  }
+
+  const printWindow = window.open("", "_blank")
+  if (!printWindow) {
+    window.alert("Allow pop-ups for this site to print thermal receipts.")
+    return
+  }
+
+  const printDocument = printWindow.document
+  const receiptStyles = `
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #111827; }
+    body { font-family: Arial, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #thermal-print-root { width: ${widthMm - 4}mm; margin: 0; padding: 0; }
+    .thermal-receipt-card { width: 100%; max-width: none; margin: 0; padding: 2mm; font-size: 9px; line-height: 1.4; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+    .thermal-receipt-card, .thermal-receipt-card * { box-sizing: border-box; }
+    .thermal-header { margin: 0 0 3mm; padding: 0 0 3mm; border-bottom: 1px dashed #374151; text-align: center; font-size: 10px; line-height: 1.5; }
+    .thermal-brand { font-size: 14px; font-weight: 800; letter-spacing: 0.04em; }
+    .thermal-brand-ar { margin-top: 1mm; font-size: 12px; font-weight: 700; }
+    .thermal-arabic { direction: rtl; unicode-bidi: plaintext; }
+    .thermal-title { margin-bottom: 2mm; text-align: center; font-size: 11px; font-weight: 800; }
+    .thermal-meta-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; font-size: 9px; }
+    .thermal-meta-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .thermal-meta-row > span:last-child { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+    .thermal-meta-row.compact-meta { display: block; }
+    .thermal-list-header, .thermal-summary-row { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.7px; line-height: 1.4; }
+    .thermal-list-header { margin-top: 2mm; padding: 2mm 0; border-top: 1px dashed #374151; border-bottom: 1px dashed #374151; font-weight: 700; }
+    .thermal-list-header > span:first-child, .thermal-summary-row > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .thermal-list-header > span:not(:first-child) { flex: 0 0 auto; text-align: right; }
+    .thermal-item-row, .thermal-item-compact { padding: 2mm 0; border-bottom: 1px dashed #e5e7eb; break-inside: avoid; }
+    .thermal-item-head, .thermal-item-sub { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.5px; line-height: 1.5; }
+    .thermal-item-head { font-weight: 700; }
+    .thermal-item-head > span:first-child, .thermal-item-sub > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .thermal-item-head > span:last-child, .thermal-item-sub > span:last-child { flex: 0 0 auto; text-align: right; }
+    .thermal-item-sub { color: #4b5563; }
+    .thermal-summary-row { margin-top: 1mm; font-size: 9px; }
+    .thermal-summary-row > span:last-child { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+    .thermal-summary-row.total { margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #374151; font-size: 10px; font-weight: 800; }
+    .thermal-divider { margin: 3mm 0 2mm; border-top: 1px dashed #374151; }
+    .thermal-footer, .thermal-note { margin-top: 3mm; padding-top: 2mm; border-top: 1px dashed #374151; text-align: center; font-size: 8.5px; font-weight: 700; break-inside: avoid; }
+    .thermal-note { font-size: 8.4px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+    @media print { html, body { page-break-before: auto; page-break-after: auto; } #thermal-print-root, .thermal-receipt-card { break-before: avoid; break-after: avoid; } }
+  `
+
+  printDocument.open()
+  printDocument.write(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Thermal invoice</title><style id="thermal-receipt-styles">${receiptStyles}</style></head><body><main id="thermal-print-root">${receiptCard.outerHTML}</main></body></html>`,
+  )
+  printDocument.close()
+
+  void (async () => {
+    try {
+      await printDocument.fonts.ready
+      await new Promise<void>((resolve) => {
+        printWindow.requestAnimationFrame(() => {
+          printWindow.requestAnimationFrame(() => resolve())
+        })
+      })
+
+      const printCard =
+        printDocument.querySelector<HTMLElement>(".thermal-receipt-card")
+      if (!printCard) {
+        throw new Error("The isolated receipt document is empty.")
+      }
+
+      const contentHeightMm =
+        (printCard.getBoundingClientRect().height * 25.4) / 96
+      if (!Number.isFinite(contentHeightMm) || contentHeightMm <= 0) {
+        throw new Error("Unable to measure the isolated receipt.")
+      }
+
+      const pageHeightMm = Math.ceil(contentHeightMm + 4.5)
+      const pageStyle = printDocument.createElement("style")
+      pageStyle.textContent = `@page { size: ${widthMm}mm ${pageHeightMm}mm; margin: 2mm; }`
+      printDocument.head.append(pageStyle)
+      printWindow.addEventListener("afterprint", () => printWindow.close(), {
+        once: true,
+      })
+      printWindow.focus()
+      printWindow.print()
+    } catch (error) {
+      printWindow.close()
+      console.error("Unable to print the thermal receipt.", error)
+      window.alert("Unable to prepare the receipt for printing.")
+    }
+  })()
+}
+
 function getBatchText(saleItem: Sale["items"][number]) {
   if (!saleItem.batchAllocations.length) return ""
 
@@ -385,9 +483,7 @@ export default function Invoices() {
 
   function printInvoice(format: PrintFormat) {
     setSelectedPrintFormat(format)
-    window.setTimeout(() => {
-      window.print()
-    }, 80)
+    printThermalReceipt(format)
   }
 
   if (invoiceId && !selectedSale) {
@@ -521,7 +617,7 @@ export default function Invoices() {
   const activePrintClass = selectedPrintFormat ? `print-format-${selectedPrintFormat}` : "print-format-a4"
 
   return (
-    <section className="min-h-full bg-slate-100 p-4 md:p-6">
+    <section className="invoice-page min-h-full bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-[1050px]">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between no-print">
           <button
@@ -547,7 +643,7 @@ export default function Invoices() {
               type="button"
               onClick={() => {
                 setSelectedPrintFormat(null)
-                window.print()
+                window.setTimeout(() => window.print(), 80)
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-[#17221D] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#24342B]"
             >
@@ -787,92 +883,189 @@ export default function Invoices() {
             </div>
           </div>
 
-          <div className={`thermal-receipt-area thermal-80 ${selectedPrintFormat === "80mm" ? "is-visible" : ""}`} data-format="80mm">
-          <div className="thermal-receipt-card">
-            <div className="thermal-header">
-              <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-              <div className="thermal-brand-ar">صيدلية زاكي ذ.م.م</div>
-              <div>{PHARMACY_ADDRESS}</div>
-              <div>{PHARMACY_PHONE}</div>
-              <div>{PHARMACY_TRN}</div>
-            </div>
-
-            <div className="thermal-title">TAX INVOICE / فاتورة ضريبية</div>
-            <div className="thermal-meta-row">
-              <span>Invoice / رقم الفاتورة: {sale.invoiceNumber}</span>
-              <span>{new Date(sale.createdAt).toLocaleDateString("en-GB")}</span>
-            </div>
-            <div className="thermal-meta-row"><span>Customer / العميل: {sale.customerName}</span></div>
-            <div className="thermal-meta-row"><span>Payment / الدفع: {sale.paymentMethod}</span></div>
-
-            <div className="thermal-list-header">
-              <span>Product / المنتج</span>
-              <span>Qty</span>
-              <span>Total</span>
-            </div>
-
-            {sale.items.map((item) => (
-              <div key={item.id} className="thermal-item-row">
-                <div className="thermal-item-head">
-                  <span>{item.name}</span>
-                  <span>{item.quantity} x AED {item.unitPrice.toFixed(2)}</span>
+          <div
+            className={`thermal-receipt-area thermal-80 ${selectedPrintFormat === "80mm" ? "is-visible" : ""}`}
+            data-format="80mm"
+          >
+            <div className="thermal-receipt-card">
+              <div className="thermal-header">
+                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
+                  صيدلية زاكي ذ.م.م
                 </div>
-                <div className="thermal-item-sub">
-                  <span>VAT {item.vatRate}%</span>
-                  <span>AED {item.total.toFixed(2)}</span>
+                <div>{PHARMACY_ADDRESS}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_ADDRESS}
+                </div>
+                <div>{PHARMACY_PHONE}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_PHONE}
+                </div>
+                <div>{PHARMACY_TRN}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_TRN}
                 </div>
               </div>
-            ))}
 
-            <div className="thermal-divider" />
-            <div className="thermal-summary-row"><span>Gross Total / الإجمالي قبل الخصم</span><span>AED {breakdown.grossTotal.toFixed(2)}</span></div>
-            <div className="thermal-summary-row"><span>Discount / الخصم</span><span>- AED {breakdown.discount.toFixed(2)}</span></div>
-            <div className="thermal-summary-row"><span>VAT Amount / مبلغ الضريبة</span><span>AED {breakdown.vatAmount.toFixed(2)}</span></div>
-            <div className="thermal-summary-row total"><span>Net Total / صافي الإجمالي</span><span>AED {breakdown.netTotal.toFixed(2)}</span></div>
-            <div className="thermal-summary-row"><span>Cash / النقد</span><span>AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}</span></div>
-            <div className="thermal-summary-row"><span>Change / الباقي</span><span>AED 0.00</span></div>
-            <div className="thermal-note">{REFUND_NOTE}</div>
-            <div className="thermal-footer">Thank you / شكراً لك</div>
-          </div>
-        </div>
+              <div className="thermal-title">
+                <span>TAX INVOICE</span> /{" "}
+                <span className="thermal-arabic" dir="rtl" lang="ar">
+                  فاتورة ضريبية
+                </span>
+              </div>
+              <div className="thermal-meta-row">
+                <span>Invoice / رقم الفاتورة: {sale.invoiceNumber}</span>
+                <span>Date / التاريخ: {new Date(sale.createdAt).toLocaleDateString("en-GB")}</span>
+              </div>
+              <div className="thermal-meta-row">
+                <span>Customer / العميل: {sale.customerName}</span>
+              </div>
+              <div className="thermal-meta-row">
+                <span>Payment / الدفع: {sale.paymentMethod}</span>
+              </div>
 
-        <div className={`thermal-receipt-area thermal-58 ${selectedPrintFormat === "58mm" ? "is-visible" : ""}`} data-format="58mm">
-          <div className="thermal-receipt-card compact">
-            <div className="thermal-header">
-              <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-              <div className="thermal-brand-ar">صيدلية زاكي ذ.م.م</div>
-              <div>{PHARMACY_ADDRESS}</div>
-              <div>{PHARMACY_PHONE}</div>
-              <div>{PHARMACY_TRN}</div>
-            </div>
+              <div className="thermal-list-header">
+                <span>Product / المنتج</span>
+                <span>Qty x Price</span>
+                <span>Total</span>
+              </div>
 
-            <div className="thermal-title">TAX INVOICE / فاتورة ضريبية</div>
-            <div className="thermal-meta-row compact-meta"><span>{sale.invoiceNumber}</span><span>{new Date(sale.createdAt).toLocaleDateString("en-GB")}</span></div>
-            <div className="thermal-meta-row compact-meta"><span>{sale.customerName}</span></div>
-            <div className="thermal-meta-row compact-meta"><span>{sale.paymentMethod}</span></div>
-
-            {sale.items.map((item) => (
-              <div key={item.id} className="thermal-item-compact">
-                <div className="thermal-item-head compact-head">
-                  <span>{item.name}</span>
-                  <span>{item.quantity} x {item.unitPrice.toFixed(2)}</span>
+              {sale.items.map((item) => (
+                <div key={item.id} className="thermal-item-row">
+                  <div className="thermal-item-head">
+                    <span>{item.name}</span>
+                    <span>{item.quantity} x AED {item.unitPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="thermal-item-sub">
+                    <span>
+                      VAT {item.vatRate}% · AED {(item.total * (item.vatRate / 100)).toFixed(2)}
+                    </span>
+                    <span>AED {item.total.toFixed(2)}</span>
+                  </div>
                 </div>
-                <div className="thermal-item-sub compact-sub">
-                  <span>VAT {item.vatRate}%</span>
-                  <span>{item.total.toFixed(2)}</span>
+              ))}
+
+              <div className="thermal-divider" />
+              <div className="thermal-summary-row">
+                <span>Gross Total / الإجمالي قبل الخصم</span>
+                <span>AED {breakdown.grossTotal.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Discount / الخصم</span>
+                <span>- AED {breakdown.discount.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>VAT Amount / مبلغ الضريبة</span>
+                <span>AED {breakdown.vatAmount.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row total">
+                <span>Net Total / صافي الإجمالي</span>
+                <span>AED {breakdown.netTotal.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Cash / النقد</span>
+                <span>
+                  AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}
+                </span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Change / الباقي</span>
+                <span>AED 0.00</span>
+              </div>
+              <div className="thermal-note">{REFUND_NOTE}</div>
+              <div className="thermal-footer">Thank you / شكراً لك</div>
+            </div>
+          </div>
+
+          <div
+            className={`thermal-receipt-area thermal-58 ${selectedPrintFormat === "58mm" ? "is-visible" : ""}`}
+            data-format="58mm"
+          >
+            <div className="thermal-receipt-card compact">
+              <div className="thermal-header">
+                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
+                  صيدلية زاكي ذ.م.م
+                </div>
+                <div>{PHARMACY_ADDRESS}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_ADDRESS}
+                </div>
+                <div>{PHARMACY_PHONE}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_PHONE}
+                </div>
+                <div>{PHARMACY_TRN}</div>
+                <div className="thermal-arabic" dir="rtl" lang="ar">
+                  {PHARMACY_ARABIC_TRN}
                 </div>
               </div>
-            ))}
 
-            <div className="thermal-divider" />
-            <div className="thermal-summary-row"><span>Gross</span><span>{breakdown.grossTotal.toFixed(2)}</span></div>
-            <div className="thermal-summary-row"><span>Disc</span><span>-{breakdown.discount.toFixed(2)}</span></div>
-            <div className="thermal-summary-row"><span>VAT</span><span>{breakdown.vatAmount.toFixed(2)}</span></div>
-            <div className="thermal-summary-row total"><span>Total</span><span>{breakdown.netTotal.toFixed(2)}</span></div>
-            <div className="thermal-note">{REFUND_NOTE}</div>
-            <div className="thermal-footer">Thank you / شكراً لك</div>
+              <div className="thermal-title">
+                <span>TAX INVOICE</span> /{" "}
+                <span className="thermal-arabic" dir="rtl" lang="ar">
+                  فاتورة ضريبية
+                </span>
+              </div>
+              <div className="thermal-meta-row compact-meta">
+                <span>Invoice / رقم الفاتورة: {sale.invoiceNumber}</span>
+              </div>
+              <div className="thermal-meta-row compact-meta">
+                <span>Date / التاريخ: {new Date(sale.createdAt).toLocaleDateString("en-GB")}</span>
+              </div>
+              <div className="thermal-meta-row compact-meta">
+                <span>Customer / العميل: {sale.customerName}</span>
+              </div>
+              <div className="thermal-meta-row compact-meta">
+                <span>Payment / الدفع: {sale.paymentMethod}</span>
+              </div>
+
+              {sale.items.map((item) => (
+                <div key={item.id} className="thermal-item-compact">
+                  <div className="thermal-item-head compact-head">
+                    <span>{item.name}</span>
+                    <span>{item.quantity} x AED {item.unitPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="thermal-item-sub compact-sub">
+                    <span>
+                      VAT {item.vatRate}% · AED {(item.total * (item.vatRate / 100)).toFixed(2)}
+                    </span>
+                    <span>AED {item.total.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+
+              <div className="thermal-divider" />
+              <div className="thermal-summary-row">
+                <span>Gross / الإجمالي</span>
+                <span>AED {breakdown.grossTotal.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Discount / الخصم</span>
+                <span>- AED {breakdown.discount.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>VAT / الضريبة</span>
+                <span>AED {breakdown.vatAmount.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row total">
+                <span>Total / الإجمالي النهائي</span>
+                <span>AED {breakdown.netTotal.toFixed(2)}</span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Cash / النقد</span>
+                <span>
+                  AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}
+                </span>
+              </div>
+              <div className="thermal-summary-row">
+                <span>Change / الباقي</span>
+                <span>AED 0.00</span>
+              </div>
+              <div className="thermal-note">{REFUND_NOTE}</div>
+              <div className="thermal-footer">Thank you / شكراً لك</div>
+            </div>
           </div>
-        </div>
         </div>
       </div>
     </section>

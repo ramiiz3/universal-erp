@@ -127,17 +127,14 @@
   html {
     @apply font-sans;
     }
-}@page {
+}
+
+@page {
   size: A4;
-  margin: 0;
+  margin: 10mm 8mm;
 }
 
 @media print {
-  @page {
-    size: A4;
-    margin: 10mm 8mm;
-  }
-
   html,
   body {
     width: 100% !important;
@@ -160,9 +157,16 @@
   }
 
   .print-shell {
-    width: 100%;
-    max-width: 100%;
+    width: 100% !important;
+    max-width: none !important;
     display: block !important;
+    background: #ffffff !important;
+  }
+
+  .invoice-page {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
   }
 
@@ -254,8 +258,9 @@
 
   .thermal-receipt-area {
     display: none !important;
-    width: auto !important;
-    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
     background: #ffffff !important;
     color: #111827 !important;
   }
@@ -263,7 +268,11 @@
   .thermal-receipt-card {
     box-shadow: none !important;
     border: none !important;
-    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    box-sizing: border-box !important;
   }
 
   .invoice-print-area .absolute,
@@ -414,33 +423,37 @@
   }
 
   .thermal-80 {
-    width: 80mm !important;
+    width: 100% !important;
     max-width: 80mm !important;
   }
 
   .thermal-80 .thermal-receipt-card {
-    width: 80mm !important;
+    width: 100% !important;
     max-width: 80mm !important;
   }
 
   .thermal-58 {
-    width: 58mm !important;
+    width: 100% !important;
     max-width: 58mm !important;
   }
 
   .thermal-58 .thermal-receipt-card {
-    width: 58mm !important;
+    width: 100% !important;
     max-width: 58mm !important;
   }
 
   .thermal-receipt-card {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    padding: 5mm 3mm !important;
     font-size: 9px !important;
     line-height: 1.4 !important;
     box-sizing: border-box !important;
-    page-break-inside: avoid !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .thermal-item-row,
+  .thermal-item-compact,
+  .thermal-header,
+  .thermal-footer,
+  .thermal-note {
     break-inside: avoid !important;
   }
 
@@ -466,6 +479,40 @@
     margin-top: 2mm !important;
     border-top: 1px dashed #374151 !important;
     padding-top: 2mm !important;
+  }
+
+  .thermal-item-head > span:first-child,
+  .thermal-item-sub > span:first-child {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .thermal-item-head > span:last-child,
+  .thermal-item-sub > span:last-child,
+  .thermal-list-header > span:not(:first-child) {
+    flex: 0 0 auto !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+  }
+
+  .thermal-meta-row > span:first-child,
+  .thermal-summary-row > span:first-child,
+  .thermal-list-header > span:first-child {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .thermal-meta-row > span:nth-child(2),
+  .thermal-summary-row > span:last-child {
+    min-width: 0 !important;
+    text-align: right !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .thermal-summary-row > span:last-child {
+    white-space: nowrap !important;
   }
 }
 
@@ -513,6 +560,13 @@
   font-size: 12px;
   font-weight: 700;
   margin-top: 1mm;
+  direction: rtl;
+  unicode-bidi: plaintext;
+}
+
+.thermal-arabic {
+  direction: rtl;
+  unicode-bidi: plaintext;
 }
 
 .thermal-title {
@@ -607,4 +661,3 @@
   line-height: 1.5;
   text-wrap: pretty;
 }
-
