@@ -5,6 +5,16 @@ import {
   useState,
 } from "react"
 import type { ReactNode } from "react"
+import {
+  applyInventoryImport as buildImportedInventory,
+  type InventoryImportMode,
+  type InventoryImportRecord,
+  type InventoryImportResult,
+} from "../lib/inventoryTransfer"
+import {
+  allocateSaleLots,
+  calculateLotSaleTotals,
+} from "../lib/saleLotAllocation"
 
 export type Product = {
   id: string
@@ -17,6 +27,7 @@ export type Product = {
   minimumStock: number
   vatRate: number
   unit: string
+  manufacturer?: string
 }
 
 export type InventoryLot = {
@@ -26,6 +37,9 @@ export type InventoryLot = {
   expiry: string
   quantity: number
   purchasePrice: number
+  sellingPrice?: number
+  totalPurchaseValue?: number
+  totalSellingValue?: number
 }
 
 export type InventoryMovement = {
@@ -194,6 +208,11 @@ type ERPContextValue = {
     quantity: number,
     purchasePrice: number,
   ) => InventoryLot
+
+  importInventory: (
+    records: InventoryImportRecord[],
+    mode: InventoryImportMode,
+  ) => Promise<InventoryImportResult>
 
   addCustomer: (
     customer: Omit<Customer, "id">,
@@ -498,6 +517,68 @@ export function ERPProvider({
     setStore(nextStore)
   }
 
+  async function importInventory(
+    records: InventoryImportRecord[],
+    mode: InventoryImportMode,
+  ) {
+    const result = buildImportedInventory(
+      store.products,
+      store.inventoryLots,
+      records,
+      mode,
+    )
+    const nextStore: StoredData = {
+      ...store,
+      products: result.products,
+      inventoryLots: result.inventoryLots,
+    }
+    const nextRaw = JSON.stringify(nextStore)
+    const storedRaw = localStorage.getItem(STORAGE_KEY)
+    const currentRaw = storedRaw ?? JSON.stringify(store)
+    const backupBase =
+      `${STORAGE_KEY}-backup-${new Date().toISOString().replace(/[:.]/g, "-")}`
+    let backupKey = backupBase
+    let backupIndex = 1
+    while (localStorage.getItem(backupKey) !== null) {
+      backupKey = `${backupBase}-${backupIndex++}`
+    }
+
+    const byteSize = (value: string) => value.length * 2
+    const storageEstimate = await navigator.storage?.estimate()
+    if (
+      storageEstimate?.quota !== undefined &&
+      storageEstimate.usage !== undefined
+    ) {
+      const addedBytes =
+        byteSize(backupKey) +
+        byteSize(currentRaw) +
+        byteSize(STORAGE_KEY) +
+        byteSize(nextRaw) -
+        (storedRaw === null
+          ? 0
+          : byteSize(STORAGE_KEY) + byteSize(storedRaw))
+      if (storageEstimate.usage + addedBytes > storageEstimate.quota) {
+        throw new Error(
+          "There may not be enough browser storage for both the import and its required backup. Free browser storage and try again.",
+        )
+      }
+    }
+
+    try {
+      localStorage.setItem(backupKey, currentRaw)
+      localStorage.setItem(STORAGE_KEY, nextRaw)
+    } catch (error) {
+      const reason =
+        error instanceof DOMException && error.name === "QuotaExceededError"
+          ? "Browser storage is full. The import was not saved; the original ERP data remains unchanged."
+          : `The import could not be saved. The original ERP data remains unchanged. ${error instanceof Error ? error.message : String(error)}`
+      throw new Error(reason)
+    }
+
+    setStore(nextStore)
+    return result
+  }
+
   function addProduct(
     product: Omit<Product, "id">,
   ) {
@@ -701,6 +782,7 @@ export function ERPProvider({
             ? {
                 id,
                 ...product,
+                manufacturer: product.manufacturer ?? item.manufacturer,
               }
             : item,
       ),
@@ -1160,239 +1242,52 @@ export function ERPProvider({
         }
       })
 
-    const subtotal =
-      requestedItems.reduce(
-        (
-          sum: number,
-          item,
-        ) =>
-          sum +
-          item.quantity *
-            item.unitPrice,
-        0,
-      )
-
-    const appliedDiscount =
-      Math.min(
-        discount,
-        subtotal,
-      )
-
-    const discountRatio =
-      subtotal > 0
-        ? appliedDiscount /
-          subtotal
-        : 0
-
-    const vat =
-      requestedItems.reduce(
-        (
-          sum: number,
-          item,
-        ) => {
-          const lineTotal =
-            item.quantity *
-            item.unitPrice
-
-          const discountedLine =
-            lineTotal *
-            (1 - discountRatio)
-
-          return (
-            sum +
-            discountedLine *
-              (item.product
-                .vatRate / 100)
-          )
-        },
-        0,
-      )
-
-    const total =
-      subtotal -
-      appliedDiscount +
-      vat
-
-    const allocations: {
-      itemIndex: number
-      lotId: string
-      batch: string
-      expiry: string
-      quantity: number
-      unitCost: number
-      totalCost: number
-    }[] = []
-
-    const updatedLots =
-      store.inventoryLots.map(
-        (lot) => ({
-          ...lot,
-        }),
-      )
-
-    requestedItems.forEach(
-      (
-        requested,
-        itemIndex,
-      ) => {
-        let remaining =
-          requested.quantity
-
-        const matchingLots =
-          updatedLots
-            .filter(
-              (lot) =>
-                lot.productId ===
-                  requested.product.id &&
-                lot.quantity > 0,
-            )
-            .sort(
-              (a, b) =>
-                new Date(
-                  a.expiry,
-                ).getTime() -
-                new Date(
-                  b.expiry,
-                ).getTime(),
-            )
-
-        for (
-          const lot of matchingLots
-        ) {
-          if (
-            remaining <= 0
-          ) {
-            break
-          }
-
-          const deduction =
-            Math.min(
-              remaining,
-              lot.quantity,
-            )
-
-          lot.quantity -=
-            deduction
-
-          remaining -= deduction
-
-          const unitCost = lot.purchasePrice
-          const totalCost = deduction * unitCost
-
-          allocations.push({
-            itemIndex,
-            lotId: lot.id,
-            batch:
-              lot.batch,
-            expiry:
-              lot.expiry,
-            quantity:
-              deduction,
-            unitCost,
-            totalCost,
-          })
-        }
-
-        if (
-          remaining > 0
-        ) {
-          throw new Error(
-            `Unable to allocate stock for ${requested.product.name}.`,
-          )
-        }
-      },
+    const allocation = allocateSaleLots(
+      requestedItems,
+      store.inventoryLots,
     )
 
-    const saleItems:
-      SaleItem[] =
-      requestedItems.map(
-        (
-          requested,
-          index,
-        ) => {
-          const itemAllocations =
-            allocations
-              .filter(
-                (
-                  allocation,
-                ) =>
-                  allocation.itemIndex ===
-                  index,
-              )
-              .map(
-                ({
-                  lotId,
-                  batch,
-                  expiry,
-                  quantity,
-                  unitCost,
-                  totalCost,
-                }) => ({
-                  lotId,
-                  batch,
-                  expiry,
-                  quantity,
-                  unitCost,
-                  totalCost,
-                }),
-              )
-
-          const cogs =
-            itemAllocations.reduce(
-              (sum, allocation) =>
-                sum + allocation.totalCost,
-              0,
-            )
-
-          return {
-            id: `ITEM-${Date.now()}-${index}`,
-            productId:
-              requested.product.id,
-            name:
-              requested.product.name,
-            barcode:
-              requested.product
-                .barcode,
-            quantity:
-              requested.quantity,
-            unitPrice:
-              requested.unitPrice,
-            vatRate:
-              requested.product
-                .vatRate,
-            total:
-              requested.quantity *
-              requested.unitPrice,
-            batchAllocations:
-              itemAllocations.map(
-                ({
-                  lotId,
-                  batch,
-                  expiry,
-                  quantity,
-                }) => ({
-                  lotId,
-                  batch,
-                  expiry,
-                  quantity,
-                }),
-              ),
-            costSnapshot:
-              itemAllocations.length > 0
-                ? {
-                    cogs,
-                    unitCost:
-                      requested.quantity > 0
-                        ? cogs /
-                          requested.quantity
-                        : 0,
-                    lotAllocations:
-                      itemAllocations,
-                  }
-                : undefined,
-          }
-        },
+    if (allocation.unallocated.length > 0) {
+      const shortfall = allocation.unallocated[0]
+      throw new Error(
+        `Unable to allocate ${shortfall.quantity} unit(s) of ${shortfall.productName}.`,
       )
+    }
+
+    const totals = calculateLotSaleTotals(allocation.lines, discount)
+
+    const saleItems: SaleItem[] = allocation.lines.map((line, index) => {
+      const lotAllocation = {
+        lotId: line.lotId,
+        batch: line.batch,
+        expiry: line.expiry,
+        quantity: line.quantity,
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+      }
+
+      return {
+        id: `ITEM-${Date.now()}-${index}`,
+        productId: line.product.id,
+        name: line.product.name,
+        barcode: line.product.barcode,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        vatRate: line.product.vatRate,
+        total: line.quantity * line.unitPrice,
+        batchAllocations: [{
+          lotId: line.lotId,
+          batch: line.batch,
+          expiry: line.expiry,
+          quantity: line.quantity,
+        }],
+        costSnapshot: {
+          cogs: line.totalCost,
+          unitCost: line.unitCost,
+          lotAllocations: [lotAllocation],
+        },
+      }
+    })
 
     const customer =
       input.customerId
@@ -1418,11 +1313,10 @@ export function ERPProvider({
         "Walk-in Customer",
       paymentMethod:
         input.paymentMethod,
-      subtotal,
-      discount:
-        appliedDiscount,
-      vat,
-      total,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      vat: totals.vat,
+      total: totals.total,
       status:
         input.paymentMethod ===
         "Credit"
@@ -1434,7 +1328,7 @@ export function ERPProvider({
     const nextStore: StoredData = {
       ...store,
       inventoryLots:
-        updatedLots,
+        allocation.updatedLots,
       sales: [
         sale,
         ...store.sales,
@@ -1464,6 +1358,7 @@ export function ERPProvider({
         updateProduct,
         deleteProduct,
         receiveStock,
+        importInventory,
         addCustomer,
         updateCustomer,
         deleteCustomer,

@@ -18,6 +18,10 @@ import {
 import { BrowserMultiFormatReader } from "@zxing/browser"
 import { useERP, type PaymentMethod, type Product } from "../context/ERPContext"
 import { getERPSettings } from "../lib/erpSettings"
+import {
+  allocateSaleLots,
+  calculateLotSaleTotals,
+} from "../lib/saleLotAllocation"
 
 type CartItem = {
   productId: string
@@ -30,6 +34,7 @@ export default function POS() {
   const navigate = useNavigate()
   const {
     products,
+    inventoryLots,
     customers,
     getProductStock,
     completeSale,
@@ -165,42 +170,26 @@ export default function POS() {
     })
   }, [products, search])
 
-  const subtotal = useMemo(() => {
-    return cart.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0,
-    )
-  }, [cart])
-
-  const discountAmount = useMemo(() => {
-    const value = Number(discount) || 0
-    return Math.min(Math.max(value, 0), subtotal)
-  }, [discount, subtotal])
-
-  const vatAmount = useMemo(() => {
-    if (!subtotal) return 0
-
-    let vat = 0
-
-    for (const item of cart) {
-      const lineSubtotal = item.quantity * item.unitPrice
-      const lineDiscount =
-        discountAmount > 0
-          ? discountAmount * (lineSubtotal / subtotal)
-          : 0
-
-      const taxableAmount = Math.max(0, lineSubtotal - lineDiscount)
-
-      vat += taxableAmount * (item.product.vatRate / 100)
-    }
-
-    return vat
-  }, [cart, discountAmount, subtotal])
-
-  const total = Math.max(
-    0,
-    Number((subtotal - discountAmount + vatAmount).toFixed(2)),
+  const saleAllocationPreview = useMemo(
+    () =>
+      allocateSaleLots(
+        cart.map((item) => ({
+          product: item.product,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        inventoryLots,
+      ),
+    [cart, inventoryLots],
   )
+  const lotPricedLines = saleAllocationPreview.lines
+
+  const saleTotals = useMemo(
+    () => calculateLotSaleTotals(lotPricedLines, Number(discount) || 0),
+    [discount, lotPricedLines],
+  )
+  const { subtotal, discount: discountAmount, vat: vatAmount } = saleTotals
+  const total = Math.max(0, Number(saleTotals.total.toFixed(2)))
 
   function handleBarcode(code: string) {
     const cleanCode = code.trim()
@@ -548,71 +537,92 @@ export default function POS() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div
-                      key={item.productId}
-                      className="rounded-xl border border-slate-200 p-3"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-slate-900">
-                            {item.product.name}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            AED {item.unitPrice.toFixed(2)} × {item.quantity}
-                          </p>
-                        </div>
+                  {cart.map((item) => {
+                    const itemLines = lotPricedLines.filter(
+                      (line) => line.product.id === item.productId,
+                    )
+                    const itemTotal = itemLines.reduce(
+                      (sum, line) => sum + line.quantity * line.unitPrice,
+                      0,
+                    )
 
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.productId)}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                          aria-label={`Remove ${item.product.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="inline-flex items-center rounded-lg border border-slate-200">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.productId,
-                                item.quantity - 1,
-                              )
-                            }
-                            className="p-2 text-slate-500 hover:bg-slate-50"
-                          >
-                            <Minus className="h-4 w-4" />
-                          </button>
-
-                          <span className="min-w-10 text-center text-sm font-medium text-slate-800">
-                            {item.quantity}
-                          </span>
+                    return (
+                      <div
+                        key={item.productId}
+                        className="rounded-xl border border-slate-200 p-3"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-slate-900">
+                              {item.product.name}
+                            </p>
+                            <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                              {itemLines.map((line, index) => (
+                                <p key={`${item.productId}-${line.lotId}-${index}`}>
+                                  {itemLines.length > 1
+                                    ? `Lot ${line.batch || "—"} · `
+                                    : ""}
+                                  {line.quantity} × AED {line.unitPrice.toFixed(2)}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
 
                           <button
                             type="button"
-                            onClick={() =>
-                              updateQuantity(
-                                item.productId,
-                                item.quantity + 1,
-                              )
-                            }
-                            className="p-2 text-slate-500 hover:bg-slate-50"
+                            onClick={() => removeItem(item.productId)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label={`Remove ${item.product.name}`}
                           >
-                            <Plus className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
 
-                        <p className="font-semibold text-slate-900">
-                          AED{" "}
-                          {(item.quantity * item.unitPrice).toFixed(2)}
-                        </p>
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="inline-flex items-center rounded-lg border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateQuantity(
+                                  item.productId,
+                                  item.quantity - 1,
+                                )
+                              }
+                              className="p-2 text-slate-500 hover:bg-slate-50"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+
+                            <span className="min-w-10 text-center text-sm font-medium text-slate-800">
+                              {item.quantity}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateQuantity(
+                                  item.productId,
+                                  item.quantity + 1,
+                                )
+                              }
+                              className="p-2 text-slate-500 hover:bg-slate-50"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <p className="font-semibold text-slate-900">
+                            AED {itemTotal.toFixed(2)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
+                  {saleAllocationPreview.unallocated.length > 0 && (
+                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                      Not enough stock to allocate the full cart. Review quantities before completing this sale.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -727,7 +737,10 @@ export default function POS() {
               <button
                 type="button"
                 onClick={handleCompleteSale}
-                disabled={cart.length === 0}
+                disabled={
+                  cart.length === 0 ||
+                  saleAllocationPreview.unallocated.length > 0
+                }
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <CheckCircle2 className="h-5 w-5" />

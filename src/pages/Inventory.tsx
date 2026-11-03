@@ -1,18 +1,33 @@
 import {
   AlertTriangle,
   Barcode,
+  Download,
+  FileSpreadsheet,
   Package,
   Plus,
   Search,
   ScanLine,
+  Upload,
   X,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
+import * as XLSX from "xlsx"
 import {
   useERP,
   type InventoryLot,
   type Product,
 } from "../context/ERPContext"
+import {
+  buildInventoryExportRows,
+  detectInventoryHeaderRow,
+  detectInventoryColumnMapping,
+  INVENTORY_COLUMNS,
+  inventoryRowsToCsv,
+  previewInventoryImport,
+  type InventoryColumnMapping,
+  type InventoryImportMode,
+  type InventoryImportResult,
+} from "../lib/inventoryTransfer"
 import {
   expiryWithinWindow,
   formatExpiryDisplay,
@@ -25,6 +40,11 @@ function money(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
+}
+
+function importMoney(value: number | undefined) {
+  if (value === undefined) return "—"
+  return money(value)
 }
 
 function formatDate(value: string) {
@@ -46,6 +66,14 @@ function expiringWithin90Days(
 
   return expiryWithinWindow(date, today, limit)
 }
+
+type ParsedWorkbook = {
+  sheetNames: string[]
+  sheets: Record<string, unknown[][]>
+}
+
+const EMPTY_SHEET_ROWS: unknown[][] = []
+const EMPTY_ROW: unknown[] = []
 
 export default function Inventory() {
   const [search, setSearch] = useState("")
@@ -78,6 +106,19 @@ export default function Inventory() {
     useState("5")
   const [unit, setUnit] =
     useState("Pack")
+  const [showImport, setShowImport] = useState(false)
+  const [showExport, setShowExport] = useState(false)
+  const [exportError, setExportError] = useState("")
+  const [importWorkbook, setImportWorkbook] = useState<ParsedWorkbook | null>(null)
+  const [selectedSheet, setSelectedSheet] = useState("")
+  const [headerRowIndex, setHeaderRowIndex] = useState(0)
+  const [columnMapping, setColumnMapping] = useState<InventoryColumnMapping>({})
+  const [importMode, setImportMode] = useState<InventoryImportMode>("merge")
+  const [importFileName, setImportFileName] = useState("")
+  const [importError, setImportError] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<InventoryImportResult | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
     products,
@@ -88,6 +129,7 @@ export default function Inventory() {
     updateProduct,
     adjustStock,
     getProductStock,
+    importInventory,
   } = useERP()
 
   const [productForm, setProductForm] = useState({
@@ -191,6 +233,35 @@ export default function Inventory() {
       expiringWithin90Days(lot.expiry),
   ).length
 
+  const activeSheetRows = importWorkbook?.sheets[selectedSheet] ?? EMPTY_SHEET_ROWS
+  const importHeaders = activeSheetRows[headerRowIndex] ?? EMPTY_ROW
+  const selectedHeaderDetection = useMemo(
+    () => detectInventoryHeaderRow([importHeaders]),
+    [importHeaders],
+  )
+  const importPreview = useMemo(
+    () =>
+      importWorkbook
+        ? previewInventoryImport(
+            activeSheetRows.slice(headerRowIndex + 1),
+            columnMapping,
+            headerRowIndex + 2,
+            selectedHeaderDetection?.isZakiStockSummary ?? false,
+          )
+        : { records: [], invalidRows: [], duplicateRows: [] },
+    [activeSheetRows, columnMapping, headerRowIndex, importWorkbook, selectedHeaderDetection],
+  )
+  const importProductCount = new Set(
+    importPreview.records.map((record) => record.productKey),
+  ).size
+  const importBatchCount = importPreview.records.filter(
+    (record) => record.forceNewLot || record.quantity > 0 || record.batch || record.expiry,
+  ).length
+  const importDataRowCount =
+    importPreview.records.length +
+    importPreview.invalidRows.length +
+    importPreview.duplicateRows.length
+
   const scannedProduct =
     scannedProductId
       ? products.find(
@@ -212,6 +283,140 @@ export default function Inventory() {
   function openReceiveStock() {
     resetReceiveForm()
     setShowReceive(true)
+  }
+
+  function openImport() {
+    setShowImport(true)
+    setImportWorkbook(null)
+    setSelectedSheet("")
+    setHeaderRowIndex(0)
+    setColumnMapping({})
+    setImportError("")
+    setImportResult(null)
+    setImportMode("merge")
+  }
+
+  async function handleImportFile(file?: File) {
+    if (!file) return
+
+    setImportError("")
+    setImportResult(null)
+    setImportFileName(file.name)
+    try {
+      const isCsv = file.name.toLowerCase().endsWith(".csv")
+      if (!isCsv && !/\.(xls|xlsx)$/i.test(file.name)) {
+        throw new Error("Choose an .xls, .xlsx or .csv file.")
+      }
+      const input = isCsv ? await file.text() : await file.arrayBuffer()
+      const workbook = XLSX.read(input, {
+        type: isCsv ? "string" : "array",
+        raw: isCsv,
+      })
+      if (workbook.SheetNames.length === 0) {
+        throw new Error("The selected file does not contain any worksheets.")
+      }
+
+      const sheets: Record<string, unknown[][]> = {}
+      for (const sheetName of workbook.SheetNames) {
+        sheets[sheetName] = XLSX.utils.sheet_to_json<unknown[]>(
+          workbook.Sheets[sheetName],
+          { header: 1, raw: true, defval: "", blankrows: true },
+        )
+      }
+      const firstSheet = workbook.SheetNames[0]
+      const firstRows = sheets[firstSheet] ?? []
+      const detectedHeader = detectInventoryHeaderRow(firstRows)
+      const headerRowIndex = detectedHeader?.rowIndex ?? 0
+      const headers = firstRows[headerRowIndex] ?? []
+      setImportWorkbook({ sheetNames: workbook.SheetNames, sheets })
+      setSelectedSheet(firstSheet)
+      setHeaderRowIndex(headerRowIndex)
+      setColumnMapping(detectedHeader?.mapping ?? detectInventoryColumnMapping(headers))
+    } catch (error) {
+      setImportWorkbook(null)
+      setImportError(
+        `Could not read ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
+  function selectImportSheet(sheetName: string) {
+    const sheetRows = importWorkbook?.sheets[sheetName] ?? []
+    const detectedHeader = detectInventoryHeaderRow(sheetRows)
+    setSelectedSheet(sheetName)
+    setHeaderRowIndex(detectedHeader?.rowIndex ?? 0)
+    setColumnMapping(
+      detectedHeader?.mapping ?? detectInventoryColumnMapping(sheetRows[0] ?? []),
+    )
+  }
+
+  function selectHeaderRow(index: number) {
+    setHeaderRowIndex(index)
+    const detectedHeader = detectInventoryHeaderRow([activeSheetRows[index] ?? []])
+    setColumnMapping(detectedHeader?.mapping ?? detectInventoryColumnMapping(activeSheetRows[index] ?? []))
+  }
+
+  function downloadInventory(format: "csv" | "xlsx") {
+    setExportError("")
+    try {
+      const rows = buildInventoryExportRows(products, inventoryLots)
+      const filename = `inventory-${new Date().toISOString().slice(0, 10)}`
+      if (format === "csv") {
+        const blob = new Blob([`\uFEFF${inventoryRowsToCsv(rows)}`], {
+          type: "text/csv;charset=utf-8",
+        })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = `${filename}.csv`
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      } else {
+        const worksheet = XLSX.utils.aoa_to_sheet(rows)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory")
+        XLSX.writeFile(workbook, `${filename}.xlsx`)
+      }
+    } catch (error) {
+      setExportError(
+        `Could not export inventory: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return
+    }
+    setShowExport(false)
+  }
+
+  async function confirmImport() {
+    if (importPreview.invalidRows.length > 0) {
+      setImportError("Fix or remove every invalid row before importing.")
+      return
+    }
+    if (importPreview.records.length === 0) {
+      setImportError("There are no valid inventory rows to import.")
+      return
+    }
+    const duplicateNotice = importPreview.duplicateRows.length
+      ? ` ${importPreview.duplicateRows.length} duplicate row(s) will be skipped.`
+      : ""
+    const modeLabel = importMode === "merge" ? "Merge" : "Replace Existing Stock"
+    if (!window.confirm(
+      `${modeLabel} ${importPreview.records.length} inventory row(s) for ${importProductCount} product(s)?${duplicateNotice} A recoverable backup will be created before saving.`,
+    )) {
+      return
+    }
+
+    setImporting(true)
+    setImportError("")
+    try {
+      const result = await importInventory(importPreview.records, importMode)
+      setImportResult(result)
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setImporting(false)
+    }
   }
 
     function openAddProduct() {
@@ -481,14 +686,35 @@ export default function Inventory() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openReceiveStock}
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
-          <ScanLine size={17} />
-          Receive Stock
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={openImport}
+            className="flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <Upload size={17} />
+            Import Inventory
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setExportError("")
+              setShowExport(true)
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <Download size={17} />
+            Export Inventory
+          </button>
+          <button
+            type="button"
+            onClick={openReceiveStock}
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <ScanLine size={17} />
+            Receive Stock
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -651,6 +877,229 @@ export default function Inventory() {
           </table>
         </div>
       </div>
+
+      {showImport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+              <div>
+                <h3 className="text-lg font-semibold">Import Inventory</h3>
+                <p className="mt-1 text-sm text-slate-500">Review and validate the spreadsheet before saving.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImport(false)}
+                className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Close import dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xls,.xlsx,.csv"
+                className="hidden"
+                onChange={(event) => {
+                  void handleImportFile(event.target.files?.[0])
+                  event.target.value = ""
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  <FileSpreadsheet size={17} />
+                  Choose Excel or CSV file
+                </button>
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  {importFileName || "No file selected"}
+                </span>
+                <span className="text-xs text-slate-500">Supports .xls, .xlsx and .csv</span>
+              </div>
+
+              {importWorkbook && (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {importWorkbook.sheetNames.length > 1 && (
+                      <label className="space-y-2">
+                        <span className="text-sm font-medium">Worksheet</span>
+                        <select
+                          value={selectedSheet}
+                          onChange={(event) => selectImportSheet(event.target.value)}
+                          className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          {importWorkbook.sheetNames.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Column headings are on row</span>
+                      <select
+                        value={headerRowIndex}
+                        onChange={(event) => selectHeaderRow(Number(event.target.value))}
+                        className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      >
+                        {activeSheetRows.slice(0, 20).map((row, index) => (
+                          <option key={index} value={index}>
+                            {index + 1}: {row.map((cell) => String(cell ?? "").trim()).filter(Boolean).slice(0, 4).join(" · ") || "(blank row)"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {selectedHeaderDetection && (
+                    <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                      Headings detected on row {headerRowIndex + 1}
+                      {selectedHeaderDetection.isZakiStockSummary
+                        ? " · ZAKI PHARMACY STOCK SUMMARY layout · each source row imports as a separate lot"
+                        : " · column positions, including blank spacer columns, are retained"}
+                    </p>
+                  )}
+
+                  <section className="rounded-xl border p-4 dark:border-slate-700">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h4 className="font-semibold">Map spreadsheet columns</h4>
+                      <p className="text-xs text-slate-500">Product name and stock quantity are required. Unmapped or blank optional fields are left unchanged on existing products.</p>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {INVENTORY_COLUMNS.map(({ key, label }) => (
+                        <label key={key} className="space-y-1.5">
+                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
+                          <select
+                            value={columnMapping[key] == null ? "" : String(columnMapping[key])}
+                            onChange={(event) => setColumnMapping((current) => ({
+                              ...current,
+                              [key]: event.target.value === "" ? null : Number(event.target.value),
+                            }))}
+                            className="h-9 w-full rounded-lg border bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          >
+                            <option value="">Not mapped</option>
+                            {importHeaders.map((header, index) => (
+                              <option key={index} value={index}>
+                                {String.fromCharCode(65 + index)} · {String(header ?? "").trim() || `Column ${index + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+
+                  <fieldset className="grid gap-3 md:grid-cols-2">
+                    <legend className="mb-2 text-sm font-semibold">Import mode</legend>
+                    <label className="flex cursor-pointer gap-3 rounded-xl border p-4 dark:border-slate-700">
+                      <input type="radio" name="inventory-import-mode" value="merge" checked={importMode === "merge"} onChange={() => setImportMode("merge")} />
+                      <span>
+                        <span className="block text-sm font-semibold">Merge</span>
+                        <span className="text-xs text-slate-500">Update matching products and add imported quantities to matching lots, except exported lot IDs which update as a snapshot.</span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-3 rounded-xl border p-4 dark:border-slate-700">
+                      <input type="radio" name="inventory-import-mode" value="replace" checked={importMode === "replace"} onChange={() => setImportMode("replace")} />
+                      <span>
+                        <span className="block text-sm font-semibold">Replace Existing Stock</span>
+                        <span className="text-xs text-slate-500">Set existing lot quantities to zero, then apply the imported stock. Products, lots, sales and purchase history are retained.</span>
+                      </span>
+                    </label>
+                  </fieldset>
+
+                  <section className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950">
+                    <h4 className="font-semibold">Import preview</h4>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                      <div><span className="text-slate-500">Products</span><div className="font-semibold">{importProductCount}</div></div>
+                      <div><span className="text-slate-500">Data rows / separate lots</span><div className="font-semibold">{importDataRowCount} / {importBatchCount}</div></div>
+                      <div><span className="text-slate-500">Stock quantity</span><div className="font-semibold">{importPreview.records.reduce((sum, record) => sum + record.quantity, 0)}</div></div>
+                      <div><span className="text-slate-500">Invalid / duplicate rows</span><div className="font-semibold">{importPreview.invalidRows.length} / {importPreview.duplicateRows.length}</div></div>
+                    </div>
+                    {importPreview.records.length > 0 && (
+                      <div className="mt-4 max-h-56 overflow-auto rounded-lg border dark:border-slate-700">
+                        <table className="w-full min-w-[980px] text-left text-xs">
+                          <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800">
+                            <tr>{["Row", "Product", "Barcode / SKU", "Batch", "Expiry", "Quantity", "COST (Purchase / Unit)", "TOTAL (Purchase Value)", "S PRICE (Selling / Unit)", "TOTAL (Selling Value)"].map((heading) => <th key={heading} className="px-3 py-2 font-semibold">{heading}</th>)}</tr>
+                          </thead>
+                          <tbody>
+                            {importPreview.records.slice(0, 30).map((record) => (
+                              <tr key={record.rowNumber} className="border-t dark:border-slate-800">
+                                <td className="px-3 py-2">{record.rowNumber}</td>
+                                <td className="px-3 py-2">{record.product.name}</td>
+                                <td className="px-3 py-2">{record.product.barcode || record.product.sku || "—"}</td>
+                                <td className="px-3 py-2">{record.batch || "Not provided"}</td>
+                                <td className="px-3 py-2">{record.expiry || "—"}</td>
+                                <td className="px-3 py-2">{record.quantity}</td>
+                                <td className="px-3 py-2">{importMoney(record.lotPurchasePrice ?? record.product.purchasePrice)}</td>
+                                <td className="px-3 py-2">{importMoney(record.lotTotalPurchaseValue)}</td>
+                                <td className="px-3 py-2">{importMoney(record.lotSellingPrice ?? record.product.sellingPrice)}</td>
+                                <td className="px-3 py-2">{importMoney(record.lotTotalSellingValue)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {importPreview.records.length > 30 && <p className="p-2 text-center text-xs text-slate-500">Showing first 30 valid rows.</p>}
+                      </div>
+                    )}
+                    {(importPreview.invalidRows.length > 0 || importPreview.duplicateRows.length > 0) && (
+                      <div className="mt-3 max-h-36 space-y-1 overflow-auto text-xs">
+                        {importPreview.invalidRows.map((issue) => <p key={`invalid-${issue.rowNumber}`} className="text-red-700 dark:text-red-400">Row {issue.rowNumber}: {issue.message}</p>)}
+                        {importPreview.duplicateRows.map((issue) => <p key={`duplicate-${issue.rowNumber}`} className="text-amber-700 dark:text-amber-400">Row {issue.rowNumber}: {issue.message}</p>)}
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
+
+              {importError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{importError}</p>}
+              {importResult && (
+                <div role="status" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  <p className="font-semibold">Inventory import completed. A recoverable backup was saved before the update.</p>
+                  <p className="mt-1">Products: {importResult.createdProducts} created, {importResult.updatedProducts} updated. Lots: {importResult.createdLots} created, {importResult.updatedLots} updated. Imported stock quantity: {importResult.totalImportedQuantity}.</p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-4 dark:border-slate-800">
+                <button type="button" onClick={() => setShowImport(false)} className="rounded-xl border px-4 py-2.5 text-sm dark:border-slate-700">
+                  {importResult ? "Done" : "Cancel"}
+                </button>
+                {importWorkbook && !importResult && (
+                  <button
+                    type="button"
+                    disabled={importing || importPreview.records.length === 0 || importPreview.invalidRows.length > 0}
+                    onClick={() => void confirmImport()}
+                    className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {importing ? "Importing…" : `Import ${importPreview.records.length} rows`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Export Inventory</h3>
+                <p className="mt-1 text-sm text-slate-500">{products.length} products, including zero-stock products and individual lots.</p>
+              </div>
+              <button type="button" onClick={() => setShowExport(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close export dialog"><X size={18} /></button>
+            </div>
+            <div className="grid gap-3 p-5 sm:grid-cols-2">
+              <button type="button" onClick={() => downloadInventory("xlsx")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700"><FileSpreadsheet size={17} />Download Excel</button>
+              <button type="button" onClick={() => downloadInventory("csv")} className="flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"><Download size={17} />Download CSV</button>
+            </div>
+            {exportError && <p role="alert" className="mx-5 mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{exportError}</p>}
+          </div>
+        </div>
+      )}
 
       {showReceive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -992,7 +1441,14 @@ export default function Inventory() {
                       <div className="text-sm text-slate-500">{formatDate(l.expiry)}</div>
                     </div>
 
-                    <div className="mt-2 text-sm">Qty: {l.quantity} · Cost: {money(l.purchasePrice)}</div>
+                    <div className="mt-2 text-sm">Qty: {l.quantity} · Cost: {importMoney(l.purchasePrice)}{l.sellingPrice === undefined ? "" : ` · Selling: ${importMoney(l.sellingPrice)}`}</div>
+                    {(l.totalPurchaseValue !== undefined || l.totalSellingValue !== undefined) && (
+                      <div className="mt-1 text-xs text-slate-500">
+                        {l.totalPurchaseValue === undefined ? "" : `Purchase value: ${importMoney(l.totalPurchaseValue)}`}
+                        {l.totalPurchaseValue !== undefined && l.totalSellingValue !== undefined ? " · " : ""}
+                        {l.totalSellingValue === undefined ? "" : `Selling value: ${importMoney(l.totalSellingValue)}`}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
