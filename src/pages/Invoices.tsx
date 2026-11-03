@@ -48,6 +48,17 @@ function money(value: number) {
   return `AED ${value.toFixed(2)}`
 }
 
+function getInvoiceLineAmounts(sale: Sale, item: Sale["items"][number]) {
+  const discountShare =
+    sale.subtotal > 0 ? (sale.discount * item.total) / sale.subtotal : 0
+  const taxableAmount = Math.max(0, item.total - discountShare)
+
+  return {
+    taxableAmount,
+    vatAmount: taxableAmount * (item.vatRate / 100),
+  }
+}
+
 function printThermalReceipt(format: PrintFormat) {
   const widthMm = format === "80mm" ? 80 : 58
   const receiptClass = format === "80mm" ? "thermal-80" : "thermal-58"
@@ -69,36 +80,59 @@ function printThermalReceipt(format: PrintFormat) {
   const printDocument = printWindow.document
   const receiptStyles = `
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #111827; }
+    html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #111; }
     body { font-family: Arial, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     #thermal-print-root { width: ${widthMm - 4}mm; margin: 0; padding: 0; }
-    .thermal-receipt-card { width: 100%; max-width: none; margin: 0; padding: 2mm; font-size: 9px; line-height: 1.4; letter-spacing: 0.01em; overflow-wrap: anywhere; }
+    .thermal-receipt-card { width: 100%; max-width: none; margin: 0; padding: 2mm; font-size: 9px; line-height: 1.35; letter-spacing: 0; overflow-wrap: anywhere; }
     .thermal-receipt-card, .thermal-receipt-card * { box-sizing: border-box; }
-    .thermal-header { margin: 0 0 3mm; padding: 0 0 3mm; border-bottom: 1px dashed #374151; text-align: center; font-size: 10px; line-height: 1.5; }
-    .thermal-brand { font-size: 14px; font-weight: 800; letter-spacing: 0.04em; }
-    .thermal-brand-ar { margin-top: 1mm; font-size: 12px; font-weight: 700; }
+    .thermal-header { margin: 0 0 2mm; padding: 0 0 2mm; border-bottom: 1px solid #222; text-align: center; font-size: 9px; line-height: 1.35; }
+    .thermal-brand { font-size: 15px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.2; }
+    .thermal-brand-ar { margin-top: 0.7mm; font-size: 12px; font-weight: 700; }
     .thermal-arabic { direction: rtl; unicode-bidi: plaintext; }
-    .thermal-title { margin-bottom: 2mm; text-align: center; font-size: 11px; font-weight: 800; }
-    .thermal-meta-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; font-size: 9px; }
-    .thermal-meta-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
-    .thermal-meta-row > span:last-child { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+    .thermal-address { font-size: 9px; }
+    .thermal-title { margin: 2mm 0; text-align: center; font-size: 11px; font-weight: 800; }
+    .thermal-meta { display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 2mm; row-gap: 0.6mm; margin-bottom: 2mm; font-size: 8.8px; }
+    .thermal-meta-label { font-weight: 700; }
+    .thermal-meta-value { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+    .thermal-meta-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; font-size: 8.5px; }
+    .thermal-meta-row > span:first-child, .thermal-item-head > span:first-child, .thermal-item-sub > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .thermal-meta-row > span:last-child, .thermal-item-head > span:last-child, .thermal-item-sub > span:last-child { flex: 0 0 auto; text-align: right; }
     .thermal-meta-row.compact-meta { display: block; }
-    .thermal-list-header, .thermal-summary-row { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.7px; line-height: 1.4; }
-    .thermal-list-header { margin-top: 2mm; padding: 2mm 0; border-top: 1px dashed #374151; border-bottom: 1px dashed #374151; font-weight: 700; }
-    .thermal-list-header > span:first-child, .thermal-summary-row > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .thermal-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8px; line-height: 1.3; }
+    .thermal-table col.product { width: 31%; }
+    .thermal-table col.uom { width: 10%; }
+    .thermal-table col.qty { width: 8%; }
+    .thermal-table col.price { width: 16%; }
+    .thermal-table col.vat { width: 15%; }
+    .thermal-table col.total { width: 20%; }
+    .thermal-table thead { border-top: 1px solid #333; border-bottom: 1px solid #333; }
+    .thermal-table th { padding: 1.2mm 0.35mm; text-align: right; font-size: 7.6px; font-weight: 700; vertical-align: bottom; }
+    .thermal-table th:first-child, .thermal-table td:first-child { padding-left: 0; text-align: left; }
+    .thermal-table td { padding: 1.5mm 0.35mm; text-align: right; vertical-align: top; border-bottom: 1px dotted #888; }
+    .thermal-table td.product { text-align: left; font-weight: 600; overflow-wrap: anywhere; word-break: normal; }
+    .thermal-table td.uom { font-size: 7.8px; overflow-wrap: anywhere; word-break: normal; }
+    .thermal-table .numeric { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .thermal-table .vat-rate { display: block; margin-top: 0.3mm; font-size: 7px; font-weight: 400; }
+    .thermal-list-header { display: flex; justify-content: space-between; gap: 2mm; margin-top: 2mm; padding: 2mm 0; border-top: 1px dashed #555; border-bottom: 1px dashed #555; font-size: 8px; font-weight: 700; }
+    .thermal-list-header > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
     .thermal-list-header > span:not(:first-child) { flex: 0 0 auto; text-align: right; }
-    .thermal-item-row, .thermal-item-compact { padding: 2mm 0; border-bottom: 1px dashed #e5e7eb; break-inside: avoid; }
-    .thermal-item-head, .thermal-item-sub { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.5px; line-height: 1.5; }
+    .thermal-item-row, .thermal-item-compact { break-inside: avoid; }
+    .thermal-item-compact { padding: 2mm 0; border-bottom: 1px dashed #aaa; }
+    .thermal-item-head, .thermal-item-sub { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.2px; line-height: 1.45; }
     .thermal-item-head { font-weight: 700; }
-    .thermal-item-head > span:first-child, .thermal-item-sub > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
-    .thermal-item-head > span:last-child, .thermal-item-sub > span:last-child { flex: 0 0 auto; text-align: right; }
-    .thermal-item-sub { color: #4b5563; }
-    .thermal-summary-row { margin-top: 1mm; font-size: 9px; }
-    .thermal-summary-row > span:last-child { flex: 0 0 auto; text-align: right; white-space: nowrap; }
-    .thermal-summary-row.total { margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #374151; font-size: 10px; font-weight: 800; }
-    .thermal-divider { margin: 3mm 0 2mm; border-top: 1px dashed #374151; }
-    .thermal-footer, .thermal-note { margin-top: 3mm; padding-top: 2mm; border-top: 1px dashed #374151; text-align: center; font-size: 8.5px; font-weight: 700; break-inside: avoid; }
-    .thermal-note { font-size: 8.4px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+    .thermal-item-sub { color: #333; }
+    .thermal-item-head.compact-head, .thermal-item-sub.compact-sub { font-size: 7.8px; }
+    .thermal-summary { margin-top: 2mm; }
+    .thermal-summary-row, .thermal-payment-row { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; margin: 0.8mm 0; font-size: 8.8px; line-height: 1.3; }
+    .thermal-summary-row > span:first-child, .thermal-payment-row > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+    .thermal-summary-row > span:last-child, .thermal-payment-row > span:last-child { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .thermal-summary-row.total { margin-top: 1.5mm; padding: 1.5mm 0; border-top: 1px solid #222; border-bottom: 1px solid #222; font-size: 11px; font-weight: 800; }
+    .thermal-payment { margin-top: 2mm; }
+    .thermal-payment-title { margin-bottom: 1mm; font-size: 8px; font-weight: 700; text-transform: uppercase; }
+    .thermal-divider { margin: 2mm 0 1.5mm; border-top: 1px dashed #555; }
+    .thermal-footer, .thermal-note { margin-top: 2mm; text-align: center; break-inside: avoid; }
+    .thermal-footer { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; }
+    .thermal-note { margin-top: 1mm; font-size: 8px; font-weight: 400; line-height: 1.35; overflow-wrap: anywhere; }
     @media print { html, body { page-break-before: auto; page-break-after: auto; } #thermal-print-root, .thermal-receipt-card { break-before: avoid; break-after: avoid; } }
   `
 
@@ -179,13 +213,13 @@ function getInvoiceBreakdown(sale: Sale) {
     .reduce((sum, item) => sum + item.total, 0)
 
   const discount = sale.discount
-  const taxableAfterDiscount = Math.max(0, taxableAmount - discount)
+  const discountRatio = sale.subtotal > 0 ? discount / sale.subtotal : 0
 
   return {
     grossTotal: sale.subtotal,
     discount,
-    taxableAmount: taxableAfterDiscount,
-    nonTaxableAmount,
+    taxableAmount: Math.max(0, taxableAmount * (1 - discountRatio)),
+    nonTaxableAmount: Math.max(0, nonTaxableAmount * (1 - discountRatio)),
     vatAmount: sale.vat,
     netTotal: sale.total,
   }
@@ -893,16 +927,16 @@ export default function Invoices() {
                 <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
                   صيدلية زاكي ذ.م.م
                 </div>
-                <div>{PHARMACY_ADDRESS}</div>
-                <div className="thermal-arabic" dir="rtl" lang="ar">
+                <div className="thermal-address">Shop No. 3, Nuaimeya 1, AJMAN</div>
+                <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
                   {PHARMACY_ARABIC_ADDRESS}
                 </div>
-                <div>{PHARMACY_PHONE}</div>
-                <div className="thermal-arabic" dir="rtl" lang="ar">
+                <div className="thermal-address">{PHARMACY_PHONE}</div>
+                <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
                   {PHARMACY_ARABIC_PHONE}
                 </div>
-                <div>{PHARMACY_TRN}</div>
-                <div className="thermal-arabic" dir="rtl" lang="ar">
+                <div className="thermal-address">{PHARMACY_TRN}</div>
+                <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
                   {PHARMACY_ARABIC_TRN}
                 </div>
               </div>
@@ -913,67 +947,109 @@ export default function Invoices() {
                   فاتورة ضريبية
                 </span>
               </div>
-              <div className="thermal-meta-row">
-                <span>Invoice / رقم الفاتورة: {sale.invoiceNumber}</span>
-                <span>Date / التاريخ: {new Date(sale.createdAt).toLocaleDateString("en-GB")}</span>
-              </div>
-              <div className="thermal-meta-row">
-                <span>Customer / العميل: {sale.customerName}</span>
-              </div>
-              <div className="thermal-meta-row">
-                <span>Payment / الدفع: {sale.paymentMethod}</span>
-              </div>
-
-              <div className="thermal-list-header">
-                <span>Product / المنتج</span>
-                <span>Qty x Price</span>
-                <span>Total</span>
-              </div>
-
-              {sale.items.map((item) => (
-                <div key={item.id} className="thermal-item-row">
-                  <div className="thermal-item-head">
-                    <span>{item.name}</span>
-                    <span>{item.quantity} x AED {item.unitPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="thermal-item-sub">
-                    <span>
-                      VAT {item.vatRate}% · AED {(item.total * (item.vatRate / 100)).toFixed(2)}
-                    </span>
-                    <span>AED {item.total.toFixed(2)}</span>
-                  </div>
-                </div>
-              ))}
-
-              <div className="thermal-divider" />
-              <div className="thermal-summary-row">
-                <span>Gross Total / الإجمالي قبل الخصم</span>
-                <span>AED {breakdown.grossTotal.toFixed(2)}</span>
-              </div>
-              <div className="thermal-summary-row">
-                <span>Discount / الخصم</span>
-                <span>- AED {breakdown.discount.toFixed(2)}</span>
-              </div>
-              <div className="thermal-summary-row">
-                <span>VAT Amount / مبلغ الضريبة</span>
-                <span>AED {breakdown.vatAmount.toFixed(2)}</span>
-              </div>
-              <div className="thermal-summary-row total">
-                <span>Net Total / صافي الإجمالي</span>
-                <span>AED {breakdown.netTotal.toFixed(2)}</span>
-              </div>
-              <div className="thermal-summary-row">
-                <span>Cash / النقد</span>
-                <span>
-                  AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}
+              <div className="thermal-meta">
+                <span className="thermal-meta-label">Date / التاريخ</span>
+                <span className="thermal-meta-value">
+                  {new Date(sale.createdAt).toLocaleDateString("en-GB")}
                 </span>
+                <span className="thermal-meta-label">Invoice No. / فاتورة رقم</span>
+                <span className="thermal-meta-value">{sale.invoiceNumber}</span>
+                <span className="thermal-meta-label">Customer / الزبون</span>
+                <span className="thermal-meta-value">{sale.customerName}</span>
               </div>
-              <div className="thermal-summary-row">
-                <span>Change / الباقي</span>
-                <span>AED 0.00</span>
+
+              <table className="thermal-table">
+                <colgroup>
+                  <col className="product" />
+                  <col className="uom" />
+                  <col className="qty" />
+                  <col className="price" />
+                  <col className="vat" />
+                  <col className="total" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>PRODUCT</th>
+                    <th>UOM</th>
+                    <th>QTY</th>
+                    <th>PRICE</th>
+                    <th>VAT 5%</th>
+                    <th>TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sale.items.map((item) => {
+                    const product = products.find(
+                      (candidate) => candidate.id === item.productId,
+                    )
+                    const lineAmounts = getInvoiceLineAmounts(sale, item)
+
+                    return (
+                      <tr key={item.id} className="thermal-item-row">
+                        <td className="product">{item.name}</td>
+                        <td className="uom">{product?.unit ?? "Unit"}</td>
+                        <td className="numeric">{item.quantity}</td>
+                        <td className="numeric">{item.unitPrice.toFixed(2)}</td>
+                        <td className="numeric">
+                          {lineAmounts.vatAmount.toFixed(2)}
+                          <span className="vat-rate">{item.vatRate}%</span>
+                        </td>
+                        <td className="numeric">{item.total.toFixed(2)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              <div className="thermal-summary">
+                <div className="thermal-summary-row">
+                  <span>Gross Total / المجموع الكلي</span>
+                  <span>{money(breakdown.grossTotal)}</span>
+                </div>
+                <div className="thermal-summary-row">
+                  <span>You have saved / خصم</span>
+                  <span>{money(breakdown.discount)}</span>
+                </div>
+                <div className="thermal-summary-row">
+                  <span>Taxable Amount / المبلغ الخاضع للضريبة</span>
+                  <span>{money(breakdown.taxableAmount)}</span>
+                </div>
+                <div className="thermal-summary-row">
+                  <span>Non Taxable Amount / مبلغ غير خاضع للضريبة</span>
+                  <span>{money(breakdown.nonTaxableAmount)}</span>
+                </div>
+                <div className="thermal-summary-row">
+                  <span>VAT / ضريبة</span>
+                  <span>{money(breakdown.vatAmount)}</span>
+                </div>
+                <div className="thermal-summary-row total">
+                  <span>Net Total / صافي الإجمالي</span>
+                  <span>{money(breakdown.netTotal)}</span>
+                </div>
               </div>
+
+              <div className="thermal-payment">
+                <div className="thermal-payment-title">Payment Details</div>
+                <div className="thermal-payment-row">
+                  <span>Cash / السيولة النقدية</span>
+                  <span>{sale.paymentMethod === "Cash" ? money(sale.total) : "—"}</span>
+                </div>
+                <div className="thermal-payment-row">
+                  <span>Change / توازن</span>
+                  <span>Not recorded</span>
+                </div>
+                <div className="thermal-payment-row">
+                  <span>Payment Mode</span>
+                  <span>{sale.paymentMethod}</span>
+                </div>
+                <div className="thermal-payment-row">
+                  <span>Associate</span>
+                  <span>Not recorded</span>
+                </div>
+              </div>
+
               <div className="thermal-note">{REFUND_NOTE}</div>
-              <div className="thermal-footer">Thank you / شكراً لك</div>
+              <div className="thermal-footer">THANK YOU</div>
             </div>
           </div>
 
