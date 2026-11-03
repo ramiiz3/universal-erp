@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import jsPDF from "jspdf"
+import JsBarcode from "jsbarcode"
 import {
   ArrowLeft,
   CalendarDays,
@@ -59,17 +60,51 @@ function getInvoiceLineAmounts(sale: Sale, item: Sale["items"][number]) {
   }
 }
 
-function printThermalReceipt(format: PrintFormat) {
+function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
   const widthMm = format === "80mm" ? 80 : 58
   const receiptClass = format === "80mm" ? "thermal-80" : "thermal-58"
-  const receiptCard = document.querySelector<HTMLElement>(
+  const receiptTemplate = document.querySelector<HTMLElement>(
     `.${receiptClass} .thermal-receipt-card`,
   )
 
-  if (!receiptCard) {
+  if (!receiptTemplate) {
     window.alert("Unable to prepare the receipt for printing.")
     return
   }
+
+  const receiptCard = receiptTemplate.cloneNode(true) as HTMLElement
+  const barcode = receiptCard.querySelector<SVGSVGElement>(".thermal-barcode svg")
+  if (!barcode) {
+    window.alert("Unable to prepare the invoice barcode.")
+    return
+  }
+
+  try {
+    JsBarcode(barcode, invoiceNumber, {
+      format: "CODE128",
+      width: 1.4,
+      height: 48,
+      displayValue: false,
+      lineColor: "#000000",
+      background: "#ffffff",
+      margin: 10,
+    })
+  } catch (error) {
+    console.error("Unable to generate the invoice barcode.", error)
+    window.alert("Unable to generate the invoice barcode.")
+    return
+  }
+
+  const barcodeWidth = Number.parseFloat(barcode.getAttribute("width") ?? "")
+  if (!Number.isFinite(barcodeWidth) || barcodeWidth <= 0) {
+    window.alert("Unable to measure the invoice barcode.")
+    return
+  }
+  barcode.style.width = `${Math.min((barcodeWidth * 25.4) / 96, widthMm - 12)}mm`
+  barcode.style.maxWidth = "100%"
+  barcode.style.height = "auto"
+  barcode.setAttribute("role", "img")
+  barcode.setAttribute("aria-label", `Code 128 barcode for invoice ${invoiceNumber}`)
 
   const printWindow = window.open("", "_blank")
   if (!printWindow) {
@@ -83,22 +118,22 @@ function printThermalReceipt(format: PrintFormat) {
     html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #111; }
     body { font-family: Arial, "Segoe UI", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     #thermal-print-root { width: ${widthMm - 4}mm; margin: 0; padding: 0; }
-    .thermal-receipt-card { width: 100%; max-width: none; margin: 0; padding: 2mm; font-size: 9px; line-height: 1.35; letter-spacing: 0; overflow-wrap: anywhere; }
+    .thermal-receipt-card { width: 100%; max-width: none; margin: 0; padding: 2mm; font-size: 14px; line-height: 1.3; letter-spacing: 0; overflow-wrap: anywhere; }
     .thermal-receipt-card, .thermal-receipt-card * { box-sizing: border-box; }
-    .thermal-header { margin: 0 0 2mm; padding: 0 0 2mm; border-bottom: 1px solid #222; text-align: center; font-size: 9px; line-height: 1.35; }
-    .thermal-brand { font-size: 15px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.2; }
-    .thermal-brand-ar { margin-top: 0.7mm; font-size: 12px; font-weight: 700; }
+    .thermal-header { margin: 0 0 2mm; padding: 0 0 2mm; border-bottom: 1px solid #222; text-align: center; font-size: 14px; line-height: 1.3; }
+    .thermal-brand { font-size: 21px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.2; }
+    .thermal-brand-ar { margin-top: 0.7mm; font-size: 18px; font-weight: 700; }
     .thermal-arabic { direction: rtl; unicode-bidi: plaintext; }
-    .thermal-address { font-size: 9px; }
-    .thermal-title { margin: 2mm 0; text-align: center; font-size: 11px; font-weight: 800; }
-    .thermal-meta { display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 2mm; row-gap: 0.6mm; margin-bottom: 2mm; font-size: 8.8px; }
+    .thermal-address { font-size: 14px; }
+    .thermal-title { margin: 2mm 0; text-align: center; font-size: 18px; font-weight: 800; }
+    .thermal-meta { display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 2mm; row-gap: 0.6mm; margin-bottom: 2mm; font-size: 14px; }
     .thermal-meta-label { font-weight: 700; }
     .thermal-meta-value { min-width: 0; text-align: right; overflow-wrap: anywhere; }
-    .thermal-meta-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; font-size: 8.5px; }
+    .thermal-meta-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1mm 0; font-size: 13px; }
     .thermal-meta-row > span:first-child, .thermal-item-head > span:first-child, .thermal-item-sub > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
     .thermal-meta-row > span:last-child, .thermal-item-head > span:last-child, .thermal-item-sub > span:last-child { flex: 0 0 auto; text-align: right; }
     .thermal-meta-row.compact-meta { display: block; }
-    .thermal-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8px; line-height: 1.3; }
+    .thermal-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; line-height: 1.25; }
     .thermal-table col.product { width: 31%; }
     .thermal-table col.uom { width: 10%; }
     .thermal-table col.qty { width: 8%; }
@@ -106,39 +141,59 @@ function printThermalReceipt(format: PrintFormat) {
     .thermal-table col.vat { width: 15%; }
     .thermal-table col.total { width: 20%; }
     .thermal-table thead { border-top: 1px solid #333; border-bottom: 1px solid #333; }
-    .thermal-table th { padding: 1.2mm 0.35mm; text-align: right; font-size: 7.6px; font-weight: 700; vertical-align: bottom; }
+    .thermal-table th { padding: 1.2mm 0.25mm; text-align: right; font-size: 9px; font-weight: 700; vertical-align: bottom; }
     .thermal-table th:first-child, .thermal-table td:first-child { padding-left: 0; text-align: left; }
-    .thermal-table td { padding: 1.5mm 0.35mm; text-align: right; vertical-align: top; border-bottom: 1px dotted #888; }
-    .thermal-table td.product { text-align: left; font-weight: 600; overflow-wrap: anywhere; word-break: normal; }
-    .thermal-table td.uom { font-size: 7.8px; overflow-wrap: anywhere; word-break: normal; }
+    .thermal-table td { padding: 1.5mm 0.25mm; text-align: right; vertical-align: top; border-bottom: 1px dotted #888; }
+    .thermal-table td.product { text-align: left; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; word-break: normal; }
+    .thermal-table td.uom { font-size: 11px; overflow-wrap: anywhere; word-break: normal; }
+    .thermal-table td.numeric { font-size: 12px; }
     .thermal-table .numeric { white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .thermal-table .vat-rate { display: block; margin-top: 0.3mm; font-size: 7px; font-weight: 400; }
+    .thermal-table .vat-rate { display: block; margin-top: 0.3mm; font-size: 9px; font-weight: 400; }
     .thermal-list-header { display: flex; justify-content: space-between; gap: 2mm; margin-top: 2mm; padding: 2mm 0; border-top: 1px dashed #555; border-bottom: 1px dashed #555; font-size: 8px; font-weight: 700; }
     .thermal-list-header > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
     .thermal-list-header > span:not(:first-child) { flex: 0 0 auto; text-align: right; }
     .thermal-item-row, .thermal-item-compact { break-inside: avoid; }
     .thermal-item-compact { padding: 2mm 0; border-bottom: 1px dashed #aaa; }
-    .thermal-item-head, .thermal-item-sub { display: flex; justify-content: space-between; gap: 2mm; font-size: 8.2px; line-height: 1.45; }
+    .thermal-item-head, .thermal-item-sub { display: flex; justify-content: space-between; gap: 2mm; font-size: 12px; line-height: 1.35; }
     .thermal-item-head { font-weight: 700; }
     .thermal-item-sub { color: #333; }
-    .thermal-item-head.compact-head, .thermal-item-sub.compact-sub { font-size: 7.8px; }
+    .thermal-item-head.compact-head, .thermal-item-sub.compact-sub { font-size: 11px; }
     .thermal-summary { margin-top: 2mm; }
-    .thermal-summary-row, .thermal-payment-row { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; margin: 0.8mm 0; font-size: 8.8px; line-height: 1.3; }
+    .thermal-summary-row, .thermal-payment-row { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; margin: 0.8mm 0; font-size: 14px; line-height: 1.3; }
     .thermal-summary-row > span:first-child, .thermal-payment-row > span:first-child { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
     .thermal-summary-row > span:last-child, .thermal-payment-row > span:last-child { flex: 0 0 auto; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .thermal-summary-row.total { margin-top: 1.5mm; padding: 1.5mm 0; border-top: 1px solid #222; border-bottom: 1px solid #222; font-size: 11px; font-weight: 800; }
+    .thermal-summary-row.total { margin-top: 1.5mm; padding: 1.5mm 0; border-top: 1px solid #222; border-bottom: 1px solid #222; font-size: 18px; font-weight: 800; }
     .thermal-payment { margin-top: 2mm; }
-    .thermal-payment-title { margin-bottom: 1mm; font-size: 8px; font-weight: 700; text-transform: uppercase; }
+    .thermal-payment-title { margin-bottom: 1mm; font-size: 13px; font-weight: 700; text-transform: uppercase; }
     .thermal-divider { margin: 2mm 0 1.5mm; border-top: 1px dashed #555; }
-    .thermal-footer, .thermal-note { margin-top: 2mm; text-align: center; break-inside: avoid; }
-    .thermal-footer { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; }
-    .thermal-note { margin-top: 1mm; font-size: 8px; font-weight: 400; line-height: 1.35; overflow-wrap: anywhere; }
+    .thermal-footer, .thermal-note, .thermal-barcode { margin-top: 2mm; text-align: center; break-inside: avoid; }
+    .thermal-footer { font-size: 15px; font-weight: 800; letter-spacing: 0.08em; }
+    .thermal-note { margin-top: 1mm; font-size: 13px; font-weight: 400; line-height: 1.3; overflow-wrap: anywhere; }
+    .thermal-barcode { display: flex; flex-direction: column; align-items: center; margin-top: 1.5mm; }
+    .thermal-barcode svg { display: block; }
+    .thermal-barcode-number { margin-top: 0.5mm; font-family: monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+    body[data-format="58mm"] .thermal-receipt-card { font-size: 11px; }
+    body[data-format="58mm"] .thermal-brand { font-size: 16px; }
+    body[data-format="58mm"] .thermal-brand-ar { font-size: 14px; }
+    body[data-format="58mm"] .thermal-header, body[data-format="58mm"] .thermal-address { font-size: 10.5px; }
+    body[data-format="58mm"] .thermal-title { font-size: 13px; }
+    body[data-format="58mm"] .thermal-meta { font-size: 10px; }
+    body[data-format="58mm"] .thermal-table { font-size: 8px; }
+    body[data-format="58mm"] .thermal-table th { font-size: 7px; }
+    body[data-format="58mm"] .thermal-table td.product { font-size: 10px; }
+    body[data-format="58mm"] .thermal-table td.numeric { font-size: 8px; }
+    body[data-format="58mm"] .thermal-table .vat-rate { font-size: 7px; }
+    body[data-format="58mm"] .thermal-summary-row, body[data-format="58mm"] .thermal-payment-row { font-size: 10px; }
+    body[data-format="58mm"] .thermal-summary-row.total { font-size: 13px; }
+    body[data-format="58mm"] .thermal-note { font-size: 9px; }
+    body[data-format="58mm"] .thermal-footer { font-size: 11px; }
+    body[data-format="58mm"] .thermal-barcode-number { font-size: 10px; }
     @media print { html, body { page-break-before: auto; page-break-after: auto; } #thermal-print-root, .thermal-receipt-card { break-before: avoid; break-after: avoid; } }
   `
 
   printDocument.open()
   printDocument.write(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Thermal invoice</title><style id="thermal-receipt-styles">${receiptStyles}</style></head><body><main id="thermal-print-root">${receiptCard.outerHTML}</main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Thermal invoice</title><style id="thermal-receipt-styles">${receiptStyles}</style></head><body data-format="${format}"><main id="thermal-print-root">${receiptCard.outerHTML}</main></body></html>`,
   )
   printDocument.close()
 
@@ -517,7 +572,7 @@ export default function Invoices() {
 
   function printInvoice(format: PrintFormat) {
     setSelectedPrintFormat(format)
-    printThermalReceipt(format)
+    printThermalReceipt(format, sale.invoiceNumber)
   }
 
   if (invoiceId && !selectedSale) {
@@ -1050,6 +1105,10 @@ export default function Invoices() {
 
               <div className="thermal-note">{REFUND_NOTE}</div>
               <div className="thermal-footer">THANK YOU</div>
+              <div className="thermal-barcode">
+                <svg aria-hidden="true" />
+                <div className="thermal-barcode-number">{sale.invoiceNumber}</div>
+              </div>
             </div>
           </div>
 
@@ -1140,6 +1199,10 @@ export default function Invoices() {
               </div>
               <div className="thermal-note">{REFUND_NOTE}</div>
               <div className="thermal-footer">Thank you / شكراً لك</div>
+              <div className="thermal-barcode">
+                <svg aria-hidden="true" />
+                <div className="thermal-barcode-number">{sale.invoiceNumber}</div>
+              </div>
             </div>
           </div>
         </div>
