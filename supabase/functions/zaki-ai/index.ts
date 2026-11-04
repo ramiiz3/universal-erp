@@ -71,8 +71,84 @@ function findProductHint(message: string) {
 }
 
 function findInvoiceHint(message: string) {
-  const match = message.match(/\b(?:invoice|inv|bill)\s*(?:number|no\.?|#|:|-)?\s*([a-z0-9][a-z0-9/-]{2,40})/i)
-  return match?.[1]?.trim() ?? ""
+  const match = message.match(/\b(?:invoice|inv|bill)\s*(?:number|no\.?|#|:|-)\s*([a-z0-9][a-z0-9/-]{2,40})/i)
+  if (match?.[1]) return match[1].trim()
+  const bare = message.match(/\b((?:INV|FTE|PO)-[A-Z0-9/-]{3,36})\b/i)
+  return bare?.[1]?.trim() ?? ""
+}
+
+function dateParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return { year: Number(values.year), month: Number(values.month), day: Number(values.day) }
+}
+
+function zonedMidnight(year: number, month: number, day: number, timeZone: string) {
+  const target = Date.UTC(year, month - 1, day)
+  let guess = target
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const local = dateParts(new Date(guess), timeZone)
+    const represented = Date.UTC(local.year, local.month - 1, local.day)
+    const adjustment = target - represented
+    if (adjustment === 0) break
+    guess += adjustment
+  }
+  return new Date(guess).toISOString()
+}
+
+function resolveDateRange(message: string, requestedTimeZone: string) {
+  const text = message.toLowerCase()
+  let timeZone = "UTC"
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: requestedTimeZone }).format()
+    timeZone = requestedTimeZone
+  } catch { /* Use UTC for an invalid client-supplied timezone. */ }
+
+  const now = new Date()
+  const current = dateParts(now, timeZone)
+  const today = Date.UTC(current.year, current.month - 1, current.day)
+  const day = 86_400_000
+  const shifted = (offset: number) => {
+    const date = new Date(today + offset * day)
+    return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() }
+  }
+  const currentStart = zonedMidnight(current.year, current.month, current.day, timeZone)
+  const tomorrow = shifted(1)
+  const todayEnd = zonedMidnight(tomorrow.year, tomorrow.month, tomorrow.day, timeZone)
+
+  if (/\byesterday\b/.test(text)) {
+    const previous = shifted(-1)
+    return { start: zonedMidnight(previous.year, previous.month, previous.day, timeZone), end: currentStart, label: "yesterday" }
+  }
+  if (/\b(last 7 days|past 7 days|last week)\b/.test(text)) {
+    return { start: new Date(now.getTime() - 7 * day).toISOString(), end: now.toISOString(), label: "last 7 days" }
+  }
+  if (/\b(today|tonight|this morning|this afternoon)\b/.test(text)) {
+    return { start: currentStart, end: todayEnd, label: "today" }
+  }
+  if (/\b(last month|previous month)\b/.test(text)) {
+    const firstThisMonth = zonedMidnight(current.year, current.month, 1, timeZone)
+    const previous = new Date(Date.UTC(current.year, current.month - 2, 1))
+    const firstPreviousMonth = zonedMidnight(previous.getUTCFullYear(), previous.getUTCMonth() + 1, 1, timeZone)
+    return { start: firstPreviousMonth, end: firstThisMonth, label: "last month" }
+  }
+  if (/\b(this month|month to date|monthly)\b/.test(text)) {
+    const next = new Date(Date.UTC(current.year, current.month, 1))
+    return { start: zonedMidnight(current.year, current.month, 1, timeZone), end: zonedMidnight(next.getUTCFullYear(), next.getUTCMonth() + 1, 1, timeZone), label: "this month" }
+  }
+  if (/\b(this year|year to date|ytd|annual)\b/.test(text)) {
+    return { start: zonedMidnight(current.year, 1, 1, timeZone), end: now.toISOString(), label: "this year to date" }
+  }
+  if (/\b(this week|week to date)\b/.test(text)) {
+    const weekday = new Date(today).getUTCDay()
+    const mondayOffset = (weekday + 6) % 7
+    const monday = shifted(-mondayOffset)
+    const nextMonday = shifted(7 - mondayOffset)
+    return { start: zonedMidnight(monday.year, monday.month, monday.day, timeZone), end: zonedMidnight(nextMonday.year, nextMonday.month, nextMonday.day, timeZone), label: "this week" }
+  }
+  return null
 }
 
 function emptySet(): RecordSet {
@@ -87,6 +163,7 @@ async function fetchCompanyRows(
   limit: number,
   orderColumn: string,
   filter?: { column: string; value: string },
+  dateRange?: { start: string; end: string; label: string } | null,
 ): Promise<RecordSet> {
   try {
     let query = db
@@ -97,8 +174,11 @@ async function fetchCompanyRows(
     if (filter?.value) {
       query = query.ilike(filter.column, "%" + escapedLike(filter.value) + "%")
     }
+    if (dateRange) {
+      query = query.gte("created_at", dateRange.start).lt("created_at", dateRange.end)
+    }
     if (orderColumn) {
-      query = query.order(orderColumn, { ascending: false })
+      query = query.order(orderColumn, { ascending: orderColumn === "name" })
     }
 
     const result = await query.limit(limit)
@@ -242,6 +322,9 @@ async function loadCloudBusinessData(
   const supplierHint = findSupplierHint(message)
   const productHint = findProductHint(message) || findQuotedHint(message)
   const invoiceHint = findInvoiceHint(message)
+  const timeZone = asMessage(body.timeZone) || "UTC"
+  const dateRange = resolveDateRange(message, timeZone)
+  const asksForContactDetails = /\b(phone|mobile|email|contact details|address|tax registration)\b/i.test(message)
 
   const cloud: Record<string, unknown> = {
     company: {
@@ -256,6 +339,7 @@ async function loadCloudBusinessData(
       branchMembership: companyRow.branch_id ?? null,
       rowLevelSecurity: "enabled",
     },
+    dateRange,
     notes: [
       "Rows returned by these queries are limited to records visible to this signed-in user under Supabase row-level security.",
       "Counts are counts of rows visible to this user, not necessarily all company rows.",
@@ -271,8 +355,9 @@ async function loadCloudBusinessData(
     limit: number,
     orderColumn: string,
     filter?: { column: string; value: string },
+    range?: { start: string; end: string; label: string } | null,
   ) => {
-    cloud[key] = await fetchCompanyRows(db, companyId, table, columns, limit, orderColumn, filter)
+    cloud[key] = await fetchCompanyRows(db, companyId, table, columns, limit, orderColumn, filter, range)
   }
 
   // The product catalogue is a common lookup dependency for stock, purchasing, and sales questions.
@@ -303,6 +388,8 @@ async function loadCloudBusinessData(
       "id, product_id, lot_id, branch_id, warehouse_id, movement_type, quantity, reason, metadata, created_at",
       150,
       "created_at",
+      undefined,
+      dateRange,
     ))
   }
 
@@ -312,13 +399,17 @@ async function loadCloudBusinessData(
       : customerHint
         ? { column: "customer_name", value: customerHint }
         : undefined
+    const salesColumns = asksForContactDetails
+      ? "id, invoice_number, branch_id, warehouse_id, customer_name, customer_phone, customer_email, subtotal, discount_total, vat_total, total, amount_paid, payment_status, currency, created_at"
+      : "id, invoice_number, branch_id, warehouse_id, customer_name, subtotal, discount_total, vat_total, total, amount_paid, payment_status, currency, created_at"
     tasks.push(add(
       "sales",
       "cloud_sales",
-      "id, invoice_number, branch_id, warehouse_id, customer_name, customer_phone, customer_email, subtotal, discount_total, vat_total, total, amount_paid, payment_status, currency, created_at",
+      salesColumns,
       250,
       "created_at",
       salesFilter,
+      dateRange,
     ))
   }
 
@@ -326,7 +417,9 @@ async function loadCloudBusinessData(
     tasks.push(add(
       "suppliers",
       "cloud_suppliers",
-      "id, name, email, phone, address, tax_registration_number, is_active, created_at",
+      asksForContactDetails
+        ? "id, name, email, phone, address, tax_registration_number, is_active, created_at"
+        : "id, name, is_active, created_at",
       200,
       "name",
       supplierHint ? { column: "name", value: supplierHint } : undefined,
@@ -337,6 +430,8 @@ async function loadCloudBusinessData(
       "id, purchase_number, branch_id, warehouse_id, supplier_id, supplier_invoice_reference, status, subtotal, discount_total, vat_total, total, currency, created_at",
       200,
       "created_at",
+      undefined,
+      dateRange,
     ))
   }
 
