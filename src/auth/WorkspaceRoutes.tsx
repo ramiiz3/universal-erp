@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
-import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom"
+import { Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom"
 import {
   Building2,
   LogOut,
@@ -16,6 +16,16 @@ import { LoginPage } from "./AuthPages"
 import { supabase } from "../lib/supabase"
 import type { CompanyMembership } from "./AuthProvider"
 import { useTheme } from "../context/ThemeContext"
+import WorkspaceShell from "../inventory-cloud/WorkspaceShell"
+import ProductsPage from "../inventory-cloud/ProductsPage"
+import WarehousesPage from "../inventory-cloud/WarehousesPage"
+import InventoryPage from "../inventory-cloud/InventoryPage"
+import MovementsPage from "../inventory-cloud/MovementsPage"
+import {
+  createBranchOnce,
+  mapCompanyMembers,
+  type CompanyMember,
+} from "./workspaceManagement"
 
 const EMPTY_COMPANY = {
   name: "",
@@ -57,6 +67,16 @@ function WorkspaceGuard() {
   }
   if (!user) return <Navigate to="/auth/login" replace state={{ from: "/workspace" }} />
   return <WorkspaceHome />
+}
+
+function InventoryWorkspaceGuard() {
+  const { configured, loading, user } = useAuth()
+  if (!configured) return <SetupNotice />
+  if (loading) {
+    return <main className="grid min-h-screen place-items-center text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-200">Checking authenticated session…</main>
+  }
+  if (!user) return <Navigate to="/auth/login" replace state={{ from: "/workspace/products" }} />
+  return <Outlet />
 }
 
 function CreateCompanyForm({ onCreated }: { onCreated: (companyId: string) => void }) {
@@ -225,6 +245,7 @@ function WorkspaceHome() {
           <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white">
             <Plus className="h-4 w-4" /> Register company
           </button>
+          {activeCompany && <Link to="/workspace/products" className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white">Open company inventory</Link>}
         </div>
 
         <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -304,7 +325,7 @@ function CompanyCard({
 }) {
   const { user, refreshMemberships } = useAuth()
   const [editing, setEditing] = useState(false)
-  const [members, setMembers] = useState<Record<string, unknown>[]>([])
+  const [members, setMembers] = useState<CompanyMember[]>([])
   const [branches, setBranches] = useState<Record<string, unknown>[]>([])
   const [logoUrl, setLogoUrl] = useState("")
   const [error, setError] = useState("")
@@ -319,25 +340,28 @@ function CompanyCard({
   useEffect(() => {
     if (!supabase) return
     let active = true
-    void Promise.all([
-      supabase
-        .from("company_memberships")
-        .select("id, user_id, branch_id, status, profiles(full_name), roles(role_key, display_name), branches(name)")
-        .eq("company_id", company.companyId)
-        .eq("status", "active"),
-      supabase
+    void (async () => {
+      if (canManageMembers) {
+        const { data, error: memberError } = await supabase.rpc("list_company_members", {
+          p_company_id: company.companyId,
+        })
+        if (!active) return
+        if (memberError) setError(`Could not load company members. ${memberError.message}`)
+        else setMembers(mapCompanyMembers(data ?? []))
+      } else {
+        setMembers([])
+      }
+
+      const { data, error: branchError } = await supabase
         .from("branches")
         .select("id, name, address, phone, is_default")
-        .eq("company_id", company.companyId),
-    ]).then(([membershipResult, branchResult]) => {
+        .eq("company_id", company.companyId)
       if (!active) return
-      if (membershipResult.error) setError(`Could not load company members. ${membershipResult.error.message}`)
-      else setMembers((membershipResult.data ?? []) as unknown as Record<string, unknown>[])
-      if (branchResult.error) setError(`Could not load company branches. ${branchResult.error.message}`)
-      else setBranches((branchResult.data ?? []) as unknown as Record<string, unknown>[])
-    })
+      if (branchError) setError(`Could not load company branches. ${branchError.message}`)
+      else setBranches((data ?? []) as unknown as Record<string, unknown>[])
+    })()
     return () => { active = false }
-  }, [company.companyId])
+  }, [company.companyId, canManageMembers])
 
   useEffect(() => {
     if (!supabase || !company.logoPath) {
@@ -496,28 +520,67 @@ function BranchManager({
 }) {
   const { user } = useAuth()
   const [error, setError] = useState("")
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+  const submitting = useRef(false)
 
   async function createBranch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!supabase || !user) return
-    const formData = new FormData(event.currentTarget)
+    if (!supabase || !user || submitting.current) return
+    const client = supabase
+    const form = event.currentTarget
+    const formData = new FormData(form)
     const name = String(formData.get("branch_name") ?? "").trim()
-    const { error: insertError } = await supabase.from("branches").insert({
-      company_id: companyId,
-      name,
-      created_by: user.id,
-    })
-    if (insertError) {
-      setError(insertError.message)
+    if (!name) {
+      setError("Enter a branch name.")
       return
     }
-    event.currentTarget.reset()
-    const { data, error: listError } = await supabase
-      .from("branches")
-      .select("id, name, is_default")
-      .eq("company_id", companyId)
-    if (listError) setError(listError.message)
-    else onChanged((data ?? []) as unknown as Record<string, unknown>[])
+    submitting.current = true
+    setBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const result = await createBranchOnce(
+        { companyId, name, createdBy: user.id },
+        {
+          insert: async (draft) => {
+            const { data, error: insertError } = await client
+              .from("branches")
+              .insert({
+                company_id: draft.companyId,
+                name: draft.name,
+                created_by: draft.createdBy,
+              })
+              .select("id, name, is_default")
+              .single()
+            return { data, error: insertError }
+          },
+          findExisting: async (targetCompanyId, targetName) => {
+            const { data, error: lookupError } = await client
+              .from("branches")
+              .select("id, name, is_default")
+              .eq("company_id", targetCompanyId)
+              .eq("name", targetName)
+              .maybeSingle()
+            return { data, error: lookupError }
+          },
+        },
+      )
+      if (!branches.some((branch) => branch.id === result.branch.id)) {
+        onChanged([...branches, {
+          id: result.branch.id,
+          name: result.branch.name,
+          is_default: result.branch.is_default,
+        }])
+      }
+      form.reset()
+      setMessage(result.created ? "Branch created." : "Branch already exists; no duplicate was created.")
+    } catch (branchError) {
+      setError(branchError instanceof Error ? branchError.message : "Could not create branch.")
+    } finally {
+      submitting.current = false
+      setBusy(false)
+    }
   }
 
   return (
@@ -530,9 +593,10 @@ function BranchManager({
       </ul>
       <form onSubmit={(event) => void createBranch(event)} className="mt-2 flex gap-2">
         <input required name="branch_name" placeholder="New branch name" className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm" />
-        <button className="rounded-lg border border-slate-300 px-3 text-sm font-medium">Add</button>
+        <button disabled={busy} className="rounded-lg border border-slate-300 px-3 text-sm font-medium disabled:opacity-50">{busy ? "Adding…" : "Add"}</button>
       </form>
       {error && <p role="alert" className="mt-2 text-xs text-red-700">{error}</p>}
+      {message && <p role="status" className="mt-2 text-xs text-emerald-700">{message}</p>}
     </section>
   )
 }
@@ -545,7 +609,7 @@ function MemberManager({
 }: {
   company: CompanyMembership
   assignments: CompanyMembership[]
-  members: Record<string, unknown>[]
+  members: CompanyMember[]
   branches: Record<string, unknown>[]
 }) {
   const { user } = useAuth()
@@ -627,12 +691,11 @@ function MemberManager({
     if (revokeError) setError(revokeError.message)
     else {
       setMessage("Membership revoked.")
-      const { data } = await supabase
-        .from("company_memberships")
-        .select("id, user_id, branch_id, status, profiles(full_name), roles(role_key, display_name), branches(name)")
-        .eq("company_id", company.companyId)
-        .eq("status", "active")
-      setVisibleMembers((data ?? []) as unknown as Record<string, unknown>[])
+      const { data, error: listError } = await supabase.rpc("list_company_members", {
+        p_company_id: company.companyId,
+      })
+      if (listError) setError(`Membership was revoked, but the list could not be refreshed. ${listError.message}`)
+      else setVisibleMembers(mapCompanyMembers(data ?? []))
     }
   }
 
@@ -655,17 +718,15 @@ function MemberManager({
       </h3>
       <ul className="mt-2 space-y-2">
         {visibleMembers.map((member) => {
-          const profile = member.profiles as Record<string, unknown> | null
-          const memberRole = member.roles as Record<string, unknown> | null
-          const memberBranch = member.branches as Record<string, unknown> | null
           return (
-            <li key={String(member.id)} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+            <li key={member.membershipId} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm">
               <span className="min-w-0 truncate">
-                {String(profile?.full_name || member.user_id)} · {String(memberRole?.display_name || "Member")}
-                {memberBranch?.name ? ` · ${String(memberBranch.name)}` : " · All branches"}
+                {member.fullName} · {member.email} · {member.roleName}
+                {member.branchName ? ` · ${member.branchName}` : " · All branches"}
+                {` · ${member.status}`}
               </span>
-              {member.user_id !== (user?.id ?? "") && memberRole?.role_key !== "owner" && (
-                <button type="button" onClick={() => void revokeMembership(String(member.id))} className="shrink-0 text-xs font-medium text-red-700 hover:underline">Revoke</button>
+              {member.status === "active" && member.userId !== (user?.id ?? "") && member.roleKey !== "owner" && (
+                <button type="button" onClick={() => void revokeMembership(member.membershipId)} className="shrink-0 text-xs font-medium text-red-700 hover:underline">Revoke</button>
               )}
             </li>
           )
@@ -735,6 +796,14 @@ export default function WorkspaceRoutes() {
   return (
     <Routes>
       <Route index element={<WorkspaceGuard />} />
+      <Route element={<InventoryWorkspaceGuard />}>
+        <Route element={<WorkspaceShell />}>
+          <Route path="products" element={<ProductsPage />} />
+          <Route path="warehouses" element={<WarehousesPage />} />
+          <Route path="inventory" element={<InventoryPage />} />
+          <Route path="movements" element={<MovementsPage />} />
+        </Route>
+      </Route>
       <Route path="*" element={<Navigate to="/workspace" replace />} />
     </Routes>
   )

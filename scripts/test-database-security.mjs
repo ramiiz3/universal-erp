@@ -10,6 +10,7 @@ import {
 const suites = [
   { file: "supabase/tests/rls.test.sql", assertions: 39 },
   { file: "supabase/tests/inventory_tenant_rls.test.sql", assertions: 26 },
+  { file: "supabase/tests/inventory_workflows.test.sql", assertions: 36 },
 ]
 
 function tapValues(results) {
@@ -105,7 +106,8 @@ try {
   for (const suite of suites) {
     await runSuite(databaseUrl, suite)
   }
-  console.log("PASS local database security suites: 65/65 assertions")
+  const totalAssertions = suites.reduce((sum, suite) => sum + suite.assertions, 0)
+  console.log(`PASS local database security suites: ${totalAssertions}/${totalAssertions} assertions`)
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))
   process.exitCode = 1

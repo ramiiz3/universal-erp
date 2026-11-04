@@ -9,6 +9,9 @@ correction.
 | `20261103000100_company_auth_foundation.sql` | Profiles, companies, branches, memberships, roles and permissions, invitations, platform-admin separation, company creation and invitation RPCs, private company-file storage, grants, and RLS. |
 | `20261104000100_company_inventory_foundation.sql` | Company-scoped products, warehouses, inventory lots and movements; company/branch constraints, permission-checked stock mutations, indexes, grants, and RLS. |
 | `20261104000200_fix_company_storage_rls.sql` | Corrects company-file Storage policies to validate company-scoped object paths against the actual Storage object name. |
+| `20261104000300_company_inventory_workflows.sql` | Adds product descriptions and archive state, atomic stock receipt and adjustment balance snapshots, and a branch-authorized default-warehouse RPC. |
+| `20261104000400_idempotent_inventory_operations.sql` | Adds request identifiers and retry-safe, permission-checked stock receipt and adjustment RPCs. |
+| `20261104121100_company_member_directory.sql` | Adds a company- and branch-authorized member-directory RPC that returns profile names, account emails, roles, and membership status without relying on an invalid profile relationship. |
 
 Use the local Native Runtime for development and security tests. See
 [`../../docs/supabase-development.md`](../../docs/supabase-development.md) for

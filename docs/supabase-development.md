@@ -47,15 +47,19 @@ and then run:
 ```sh
 npm run test:db:security
 npm run test:storage:security
+npm run test:security
 ```
 
 The database runner executes each complete pgTAP SQL file on a single
 connection, verifies all planned assertions, and confirms that each test
-transaction rolled back. The Storage test creates temporary local users and
-companies, authenticates through local Auth, tests private-file upload,
-cross-company access and deletion through the Storage HTTP API, and cleans up
-its temporary resources. Both scripts are local-only and must not be modified
-to accept remote URLs or credentials.
+transaction rolled back. The authentication/company suite has 39 assertions,
+the inventory tenant suite has 26, and the inventory workflow suite has 36
+assertions covering stock permissions, atomicity, retry idempotency, and the
+company member directory (101 database assertions total). The Storage test creates
+temporary local users and companies, authenticates through local Auth, tests
+private-file upload, cross-company access and deletion through the Storage
+HTTP API, and cleans up its temporary resources. Both scripts are local-only
+and must not be modified to accept remote URLs or credentials.
 
 ## Keys and environment separation
 
@@ -84,5 +88,8 @@ grant this privilege.
 - `/auth/login`, `/auth/register`, `/auth/recover`, and `/auth/invite/:token`
   are public authentication and invitation routes.
 - `/workspace` is the authenticated, membership-verified company workspace.
+- `/workspace/products`, `/workspace/warehouses`, `/workspace/inventory`, and
+  `/workspace/movements` use company-scoped Supabase data under RLS and the
+  active company verified by `AuthProvider`.
 - The legacy ERP routes remain backed by the existing local ERP context and
   browser storage. They are not authenticated company data.
