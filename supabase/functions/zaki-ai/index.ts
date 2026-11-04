@@ -208,6 +208,7 @@ async function fetchCompanyRows(
     if (orderColumn) {
       query = query.order(orderColumn, { ascending: orderColumn === "name" })
     }
+    const result = await query.limit(limit)
 
     if (result.error) {
       return {
