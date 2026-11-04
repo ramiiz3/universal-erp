@@ -20,12 +20,15 @@ import {
   Warehouse,
   X,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   Bot,
   CheckCircle2,
   Clock3,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { useTheme } from "../context/ThemeContext"
+import { useAuth } from "../auth/AuthProvider"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
@@ -150,6 +153,7 @@ function loadReadNotifications(): string[] {
 export default function AppLayout() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const { user: cloudUser, configured: cloudAuthConfigured, signOut } = useAuth()
   const darkMode = theme === "dark"
 
   const {
@@ -166,6 +170,9 @@ export default function AppLayout() {
 
   const [profileOpen, setProfileOpen] =
     useState(false)
+
+  const [cloudAuthBusy, setCloudAuthBusy] = useState(false)
+  const [cloudAuthError, setCloudAuthError] = useState("")
 
   const [owner, setOwner] =
     useState<OwnerProfile>(loadOwner)
@@ -337,6 +344,19 @@ export default function AppLayout() {
     setProfileOpen(false)
   }
 
+  async function signOutCloudAccount() {
+    setCloudAuthBusy(true)
+    setCloudAuthError("")
+    try {
+      await signOut()
+      setOwnerOpen(false)
+    } catch (error) {
+      setCloudAuthError(error instanceof Error ? error.message : "Could not sign out of the cloud workspace.")
+    } finally {
+      setCloudAuthBusy(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#0b120e] dark:text-slate-100">
       <div className="flex min-h-screen">
@@ -391,7 +411,7 @@ export default function AppLayout() {
                 className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-emerald-800 hover:underline dark:text-emerald-300"
               >
                 <Building2 size={14} />
-                Open company workspace
+                {cloudUser ? "Open company workspace" : "Sign in / Open company workspace"}
               </NavLink>
             </div>
           </div>
@@ -655,6 +675,62 @@ export default function AppLayout() {
                         <SettingsIcon className="h-4 w-4" />
                         Settings
                       </button>
+                    </div>
+
+                    <div className="border-t border-slate-200 p-3 dark:border-slate-700">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Cloud workspace account
+                      </p>
+                      {cloudAuthConfigured ? (
+                        cloudUser ? (
+                          <>
+                            <p className="mb-2 truncate text-xs text-slate-500 dark:text-slate-400">
+                              Signed in as {cloudUser.email || "Cloud user"}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOwnerOpen(false)
+                                navigate("/workspace")
+                              }}
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              <Building2 className="h-4 w-4" />
+                              Open company workspace
+                            </button>
+                            <button
+                              type="button"
+                              disabled={cloudAuthBusy}
+                              onClick={() => void signOutCloudAccount()}
+                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              <LogOut className="h-4 w-4" />
+                              {cloudAuthBusy ? "Signing out…" : "Sign out of cloud account"}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOwnerOpen(false)
+                              navigate("/auth/login", { state: { from: "/workspace" } })
+                            }}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                          >
+                            <LogIn className="h-4 w-4" />
+                            Sign in to company workspace
+                          </button>
+                        )
+                      ) : (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          Cloud authentication is not configured. The legacy local ERP remains available.
+                        </p>
+                      )}
+                      {cloudAuthError && (
+                        <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+                          {cloudAuthError}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
