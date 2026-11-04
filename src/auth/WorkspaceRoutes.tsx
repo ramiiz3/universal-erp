@@ -25,6 +25,7 @@ import CloudPOSPage from "../inventory-cloud/CloudPOSPage"
 import CloudPurchasingPage from "../inventory-cloud/CloudPurchasingPage"
 import CloudSalesPage from "../inventory-cloud/CloudSalesPage"
 import CloudInvoicePage from "../inventory-cloud/CloudInvoicePage"
+import CloudAIPage from "../inventory-cloud/CloudAIPage"
 import {
   createBranchOnce,
   mapCompanyMembers,
@@ -810,6 +811,7 @@ export default function WorkspaceRoutes() {
           <Route path="purchasing" element={<CloudPurchasingPage />} />
           <Route path="sales" element={<CloudSalesPage />} />
           <Route path="invoices/:saleId" element={<CloudInvoicePage />} />
+          <Route path="ai" element={<CloudAIPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/workspace" replace />} />
