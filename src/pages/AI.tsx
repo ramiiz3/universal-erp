@@ -381,8 +381,9 @@ export default function AI() {
               </p>
 
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {activeCompany?.address || settings.emirate},{" "}
-                {activeCompany?.country || settings.country}
+                {activeCompany
+                  ? [activeCompany.address, activeCompany.country].filter(Boolean).join(", ") || "Company location not provided"
+                  : [settings.emirate, settings.country].filter(Boolean).join(", ") || "Location not set"}
               </p>
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
