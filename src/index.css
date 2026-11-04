@@ -641,6 +641,202 @@
   padding-top: 2mm;
 }
 
+@media screen {
+  html.dark,
+  html.dark body {
+    background-color: #0b120e;
+    color: #e5ece7;
+  }
+
+  html.dark .bg-white,
+  html.dark .bg-slate-50,
+  html.dark .bg-slate-100 {
+    background-color: #111a15 !important;
+  }
+
+  html.dark .bg-slate-200 {
+    background-color: #1b2820 !important;
+  }
+
+  html.dark .bg-slate-800,
+  html.dark .bg-slate-900,
+  html.dark .bg-slate-950 {
+    background-color: #18231c !important;
+  }
+
+  html.dark [class*="bg-white/"] {
+    background-color: rgb(255 255 255 / 6%) !important;
+  }
+
+  html.dark [class~="bg-[#F7FAF8]"],
+  html.dark [class~="bg-[#FBFCFB]"],
+  html.dark [class~="bg-[#F3FAF6]"] {
+    background-color: #141f18 !important;
+  }
+
+  html.dark .bg-emerald-50,
+  html.dark .bg-emerald-100,
+  html.dark .bg-emerald-950,
+  html.dark [class*="bg-emerald-950/"] {
+    background-color: #10251a !important;
+  }
+
+  html.dark .bg-blue-50,
+  html.dark .bg-blue-950,
+  html.dark .bg-violet-50 {
+    background-color: #142033 !important;
+  }
+
+  html.dark .bg-amber-50,
+  html.dark .bg-amber-950 {
+    background-color: #2b2110 !important;
+  }
+
+  html.dark .bg-red-50,
+  html.dark .bg-red-100,
+  html.dark .bg-red-950 {
+    background-color: #2a1718 !important;
+  }
+
+  html.dark .text-black,
+  html.dark .text-slate-900,
+  html.dark .text-slate-800,
+  html.dark [class~="text-[#17221D]"] {
+    color: #edf4ef !important;
+  }
+
+  html.dark .text-slate-700,
+  html.dark .text-slate-600 {
+    color: #c3cec6 !important;
+  }
+
+  html.dark .text-slate-500,
+  html.dark .text-slate-400 {
+    color: #9eaca2 !important;
+  }
+
+  html.dark .text-slate-300,
+  html.dark .text-slate-200,
+  html.dark .text-slate-100 {
+    color: #dce5df !important;
+  }
+
+  html.dark .text-emerald-950,
+  html.dark .text-emerald-900,
+  html.dark .text-emerald-800,
+  html.dark .text-emerald-700,
+  html.dark .text-emerald-600,
+  html.dark .text-emerald-500,
+  html.dark [class~="text-[#2F9E63]"] {
+    color: #78d69a !important;
+  }
+
+  html.dark .text-blue-800,
+  html.dark .text-blue-700,
+  html.dark .text-blue-600 {
+    color: #93c5fd !important;
+  }
+
+  html.dark .text-violet-700 {
+    color: #c4b5fd !important;
+  }
+
+  html.dark .text-amber-900,
+  html.dark .text-amber-800,
+  html.dark .text-amber-700,
+  html.dark .text-amber-600,
+  html.dark .text-amber-500,
+  html.dark .text-amber-400 {
+    color: #fcd477 !important;
+  }
+
+  html.dark .text-red-800,
+  html.dark .text-red-700,
+  html.dark .text-red-600,
+  html.dark .text-red-500,
+  html.dark .text-red-400,
+  html.dark .text-red-300 {
+    color: #fca5a5 !important;
+  }
+
+  html.dark .border-slate-100,
+  html.dark .border-slate-200,
+  html.dark .border-slate-300 {
+    border-color: #2a3930 !important;
+  }
+
+  html.dark .border-slate-400,
+  html.dark .border-slate-500 {
+    border-color: #435248 !important;
+  }
+
+  html.dark .border-emerald-100,
+  html.dark .border-emerald-200,
+  html.dark .border-emerald-300 {
+    border-color: #28523a !important;
+  }
+
+  html.dark .border-blue-200,
+  html.dark .border-blue-300 {
+    border-color: #294465 !important;
+  }
+
+  html.dark .border-amber-100 {
+    border-color: #51421f !important;
+  }
+
+  html.dark .border-amber-200,
+  html.dark .border-amber-300 {
+    border-color: #64501f !important;
+  }
+
+  html.dark .border-red-100 {
+    border-color: #512a2f !important;
+  }
+
+  html.dark .border-red-200,
+  html.dark .border-red-300 {
+    border-color: #633136 !important;
+  }
+
+  html.dark .hover\:bg-slate-50:hover,
+  html.dark .hover\:bg-slate-100:hover,
+  html.dark .hover\:bg-white:hover {
+    background-color: #202e25 !important;
+  }
+
+  html.dark .hover\:bg-slate-800:hover,
+  html.dark .hover\:bg-slate-900:hover,
+  html.dark [class~="hover:bg-[#24342B]"]:hover {
+    background-color: #28382e !important;
+  }
+
+  html.dark .recharts-cartesian-axis-tick-value,
+  html.dark .recharts-legend-item-text {
+    fill: #aebbb2;
+    color: #aebbb2 !important;
+  }
+
+  html.dark .recharts-cartesian-axis-line,
+  html.dark .recharts-cartesian-grid line {
+    stroke: #33443a;
+  }
+
+  html.dark input:not([type="checkbox"]):not([type="radio"]),
+  html.dark select,
+  html.dark textarea {
+    background-color: #121b16;
+    color: #edf4ef;
+    border-color: #3a4b40;
+    color-scheme: dark;
+  }
+
+  html.dark input::placeholder,
+  html.dark textarea::placeholder {
+    color: #9eaca2;
+  }
+}
+
 .thermal-divider {
   border-top: 1px dashed #374151;
   margin: 3mm 0 2mm;

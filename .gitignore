@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+!.env.development.example
+!.env.production.example
+npm-audit.json
 
 # Editor directories and files
 .vscode/*

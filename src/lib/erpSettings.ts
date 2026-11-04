@@ -1,3 +1,5 @@
+import { ERP_SETTINGS_STORAGE_KEY } from "./erpStorageKeys"
+
 export type PaymentSettings = {
   cash: boolean
   card: boolean
@@ -24,8 +26,6 @@ export type ERPSettings = {
   vatRegistered: boolean
   payment: PaymentSettings
 }
-
-const STORAGE_KEY = "universal-erp-settings"
 
 export const DEFAULT_ERP_SETTINGS: ERPSettings = {
   businessName: "Zaki Pharmacy",
@@ -56,7 +56,7 @@ export const DEFAULT_ERP_SETTINGS: ERPSettings = {
 export function getERPSettings(): ERPSettings {
   try {
     const raw =
-      localStorage.getItem(STORAGE_KEY)
+      localStorage.getItem(ERP_SETTINGS_STORAGE_KEY)
 
     if (!raw) {
       return DEFAULT_ERP_SETTINGS

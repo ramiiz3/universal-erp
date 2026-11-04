@@ -1,7 +1,7 @@
 {
-  "name": "Zaki Pharmacy | UniversalERP",
-  "short_name": "Zaki ERP",
-  "description": "UniversalERP pharmacy management and point-of-sale system for Zaki Pharmacy.",
+  "name": "UniversalERP | Business workspace",
+  "short_name": "UniversalERP",
+  "description": "UniversalERP business management and point-of-sale platform.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

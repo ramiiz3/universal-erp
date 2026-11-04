@@ -14,85 +14,44 @@ import Settings from "./pages/Settings"
 import AI from "./pages/AI"
 
 import { ERPProvider } from "./context/ERPContext"
+import { ThemeProvider } from "./context/ThemeContext"
+import { AuthProvider } from "./auth/AuthProvider"
+import {
+  InvitationPage,
+  LoginPage,
+  RecoveryPage,
+  RegistrationPage,
+} from "./auth/AuthPages"
+import WorkspaceRoutes from "./auth/WorkspaceRoutes"
 
 export default function App() {
   return (
-    <ERPProvider>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route
-            path="/"
-            element={
-              <Navigate
-                to="/dashboard"
-                replace
-              />
-            }
-          />
-
-          <Route
-            path="/dashboard"
-            element={<Dashboard />}
-          />
-
-          <Route
-            path="/pos"
-            element={<POS />}
-          />
-
-          <Route
-            path="/sales"
-            element={<Sales />}
-          />
-
-          <Route
-            path="/invoices"
-            element={<Invoices />}
-          />
-
-          <Route
-            path="/invoices/:invoiceId"
-            element={<Invoices />}
-          />
-
-          <Route
-            path="/customers"
-            element={<Customers />}
-          />
-
-          {/* Products route removed — product management moved to Inventory */}
-
-          <Route
-            path="/inventory"
-            element={<Inventory />}
-          />
-
-          <Route
-            path="/purchasing"
-            element={<Purchasing />}
-          />
-
-          <Route
-            path="/suppliers"
-            element={<Suppliers />}
-          />
-
-          <Route
-            path="/reports"
-            element={<Reports />}
-          />
-
-          <Route
-            path="/ai"
-            element={<AI />}
-          />
-
-          <Route
-            path="/settings"
-            element={<Settings />}
-          />
-        </Route>
-      </Routes>
-    </ERPProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/auth/login" element={<LoginPage />} />
+          <Route path="/auth/register" element={<RegistrationPage />} />
+          <Route path="/auth/recover" element={<RecoveryPage />} />
+          <Route path="/auth/invite/:token" element={<InvitationPage />} />
+          <Route path="/workspace/*" element={<WorkspaceRoutes />} />
+          <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/pos" element={<POS />} />
+            <Route path="/sales" element={<Sales />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/invoices/:invoiceId" element={<Invoices />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/purchasing" element={<Purchasing />} />
+            <Route path="/suppliers" element={<Suppliers />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/ai" element={<AI />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

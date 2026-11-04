@@ -9,6 +9,8 @@ import {
   Save,
   Settings as SettingsIcon,
 } from "lucide-react"
+import BackupRestorePanel from "../components/BackupRestorePanel"
+import { ERP_SETTINGS_STORAGE_KEY } from "../lib/erpStorageKeys"
 
 type PaymentSettings = {
   cash: boolean
@@ -36,8 +38,6 @@ type SettingsData = {
   vatRegistered: boolean
   payment: PaymentSettings
 }
-
-const STORAGE_KEY = "universal-erp-settings"
 
 const defaultSettings: SettingsData = {
   businessName: "Zaki Pharmacy",
@@ -67,7 +67,7 @@ const defaultSettings: SettingsData = {
 
 function loadSettings(): SettingsData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(ERP_SETTINGS_STORAGE_KEY)
 
     if (!raw) return defaultSettings
 
@@ -125,7 +125,7 @@ export default function Settings() {
     event.preventDefault()
 
     localStorage.setItem(
-      STORAGE_KEY,
+      ERP_SETTINGS_STORAGE_KEY,
       JSON.stringify(settings),
     )
 
@@ -634,6 +634,10 @@ export default function Settings() {
             </div>
           </div>
         </form>
+
+        <div className="mt-8 space-y-6">
+          <BackupRestorePanel onRestored={() => window.location.reload()} />
+        </div>
       </div>
     </section>
   )

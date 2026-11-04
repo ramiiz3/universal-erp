@@ -25,6 +25,7 @@ import {
   YAxis,
 } from "recharts"
 import { useERP } from "../context/ERPContext"
+import { useTheme } from "../context/ThemeContext"
 import { expiryWithinWindow, parseExpiryDate } from "../lib/expiry"
 import {
   buildReportDataset,
@@ -69,6 +70,18 @@ export default function Reports() {
     inventoryLots,
     sales,
   } = useERP()
+  const { theme } = useTheme()
+  const darkMode = theme === "dark"
+  const chartColors = darkMode
+    ? ["#4ade80", "#cbd5e1", "#fbbf24"]
+    : [GREEN, DARK, AMBER]
+  const chartGrid = darkMode ? "#33443a" : "#E5E7EB"
+  const chartAxisText = darkMode ? "#aebbb2" : SLATE
+  const chartTooltipStyle = {
+    backgroundColor: darkMode ? "#18231c" : "#ffffff",
+    borderColor: darkMode ? "#405248" : "#E2E8F0",
+    color: darkMode ? "#edf4ef" : "#17221D",
+  }
 
   const [rangeMode, setRangeMode] = useState<ReportRangeMode>("monthly")
   const [customStart, setCustomStart] = useState(() => {
@@ -185,7 +198,7 @@ export default function Reports() {
     return data
   }, [currentRange, report.dailyBreakdown])
 
-  const paymentColors = [GREEN, DARK, AMBER]
+  const paymentColors = chartColors
 
   const customRangeInvalid =
     rangeMode === "custom" &&
@@ -370,11 +383,11 @@ export default function Reports() {
             <div className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={salesChart}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="label" tick={{ fill: SLATE, fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fill: SLATE, fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} />
-                  <Bar dataKey="sales" fill={GREEN} radius={[6, 6, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                  <XAxis dataKey="label" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
+                  <Bar dataKey="sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -395,7 +408,7 @@ export default function Reports() {
                         <Cell key={`payment-${index}`} fill={paymentColors[index % paymentColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} />
+                    <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -423,11 +436,11 @@ export default function Reports() {
                 <div className="h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={topProductsChart} layout="vertical" margin={{ left: 10, right: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-                      <XAxis type="number" tick={{ fill: SLATE, fontSize: 11 }} tickLine={false} axisLine={false} />
-                      <YAxis type="category" dataKey="name" width={105} tick={{ fill: SLATE, fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <Tooltip />
-                      <Bar dataKey="units" fill={DARK} radius={[0, 6, 6, 0]} />
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={chartGrid} />
+                      <XAxis type="number" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="name" width={105} tick={{ fill: chartAxisText, fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Bar dataKey="units" fill={chartColors[1]} radius={[0, 6, 6, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

@@ -15,6 +15,11 @@ import {
   allocateSaleLots,
   calculateLotSaleTotals,
 } from "../lib/saleLotAllocation"
+import {
+  ERP_STORAGE_KEY,
+} from "../lib/erpBackup"
+import { readStoredData } from "../lib/erpStorage"
+import BackupRestorePanel from "../components/BackupRestorePanel"
 
 export type Product = {
   id: string
@@ -410,9 +415,6 @@ const initialCustomers: Customer[] = [
 const initialSales: Sale[] = []
 const initialPurchases: Purchase[] = []
 
-const STORAGE_KEY =
-  "universal-erp-demo-store"
-
 type StoredData = {
   products: Product[]
   inventoryLots: InventoryLot[]
@@ -422,64 +424,29 @@ type StoredData = {
   purchases: Purchase[]
 }
 
-function loadStoredData(): StoredData {
+function createDemoStore(): StoredData {
+  return {
+    products: initialProducts,
+    inventoryLots: initialInventoryLots,
+    inventoryMovements: [],
+    customers: initialCustomers,
+    sales: initialSales,
+    purchases: initialPurchases,
+  }
+}
+
+function loadStoredData() {
   try {
-    const raw =
-      localStorage.getItem(STORAGE_KEY)
-
-    if (!raw) {
-      return {
-        products: initialProducts,
-        inventoryLots:
-          initialInventoryLots,
-        inventoryMovements: [],
-        customers: initialCustomers,
-        sales: initialSales,
-        purchases: initialPurchases,
-      }
-    }
-
-    const parsed = JSON.parse(raw)
-
+    return readStoredData<StoredData>(
+      localStorage,
+      ERP_STORAGE_KEY,
+      createDemoStore,
+    )
+  } catch (error) {
     return {
-      products:
-        Array.isArray(parsed.products)
-          ? parsed.products
-          : initialProducts,
-
-      inventoryLots:
-        Array.isArray(parsed.inventoryLots)
-          ? parsed.inventoryLots
-          : initialInventoryLots,
-
-      inventoryMovements: Array.isArray(parsed.inventoryMovements)
-        ? parsed.inventoryMovements
-        : [],
-
-      customers:
-        Array.isArray(parsed.customers)
-          ? parsed.customers
-          : initialCustomers,
-
-      sales:
-        Array.isArray(parsed.sales)
-          ? parsed.sales
-          : initialSales,
-
-      purchases:
-        Array.isArray(parsed.purchases)
-          ? parsed.purchases
-          : initialPurchases,
-    }
-  } catch {
-    return {
-      products: initialProducts,
-      inventoryLots:
-        initialInventoryLots,
-      inventoryMovements: [],
-      customers: initialCustomers,
-      sales: initialSales,
-      purchases: initialPurchases,
+      data: createDemoStore(),
+      raw: null,
+      error: `Browser storage could not be accessed. ${error instanceof Error ? error.message : String(error)}`,
     }
   }
 }
@@ -494,23 +461,23 @@ export function ERPProvider({
 }: {
   children: ReactNode
 }) {
+  const [loadResult] = useState(loadStoredData)
   const [store, setStore] =
-    useState<StoredData>(
-      loadStoredData,
-    )
+    useState<StoredData>(loadResult.data)
 
   useEffect(() => {
+    if (loadResult.error) return
     localStorage.setItem(
-      STORAGE_KEY,
+      ERP_STORAGE_KEY,
       JSON.stringify(store),
     )
-  }, [store])
+  }, [loadResult.error, store])
 
   function persistStore(
     nextStore: StoredData,
   ) {
     localStorage.setItem(
-      STORAGE_KEY,
+      ERP_STORAGE_KEY,
       JSON.stringify(nextStore),
     )
 
@@ -533,10 +500,10 @@ export function ERPProvider({
       inventoryLots: result.inventoryLots,
     }
     const nextRaw = JSON.stringify(nextStore)
-    const storedRaw = localStorage.getItem(STORAGE_KEY)
+    const storedRaw = localStorage.getItem(ERP_STORAGE_KEY)
     const currentRaw = storedRaw ?? JSON.stringify(store)
     const backupBase =
-      `${STORAGE_KEY}-backup-${new Date().toISOString().replace(/[:.]/g, "-")}`
+      `${ERP_STORAGE_KEY}-backup-${new Date().toISOString().replace(/[:.]/g, "-")}`
     let backupKey = backupBase
     let backupIndex = 1
     while (localStorage.getItem(backupKey) !== null) {
@@ -552,11 +519,11 @@ export function ERPProvider({
       const addedBytes =
         byteSize(backupKey) +
         byteSize(currentRaw) +
-        byteSize(STORAGE_KEY) +
+        byteSize(ERP_STORAGE_KEY) +
         byteSize(nextRaw) -
         (storedRaw === null
           ? 0
-          : byteSize(STORAGE_KEY) + byteSize(storedRaw))
+          : byteSize(ERP_STORAGE_KEY) + byteSize(storedRaw))
       if (storageEstimate.usage + addedBytes > storageEstimate.quota) {
         throw new Error(
           "There may not be enough browser storage for both the import and its required backup. Free browser storage and try again.",
@@ -566,7 +533,7 @@ export function ERPProvider({
 
     try {
       localStorage.setItem(backupKey, currentRaw)
-      localStorage.setItem(STORAGE_KEY, nextRaw)
+      localStorage.setItem(ERP_STORAGE_KEY, nextRaw)
     } catch (error) {
       const reason =
         error instanceof DOMException && error.name === "QuotaExceededError"
@@ -1338,6 +1305,45 @@ export function ERPProvider({
     persistStore(nextStore)
 
     return sale
+  }
+
+  if (loadResult.error) {
+    return (
+      <main className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-8">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-amber-300 bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-amber-900">
+            Saved ERP data needs recovery
+          </h1>
+          <p role="alert" className="mt-3 text-sm text-slate-700">
+            {loadResult.error} No demo data was written over the saved value.
+            Restore a valid full backup or download the original value before
+            taking further action.
+          </p>
+          {loadResult.raw !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                const blob = new Blob([loadResult.raw ?? ""], {
+                  type: "application/json;charset=utf-8",
+                })
+                const url = URL.createObjectURL(blob)
+                const link = document.createElement("a")
+                link.href = url
+                link.download = `universal-erp-corrupted-store-${new Date().toISOString().replace(/[:.]/g, "-")}.json`
+                link.click()
+                window.setTimeout(() => URL.revokeObjectURL(url), 0)
+              }}
+              className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Download original stored value
+            </button>
+          )}
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <BackupRestorePanel onRestored={() => window.location.reload()} />
+          </div>
+        </div>
+      </main>
+    )
   }
 
   return (

@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
+import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 
 type Supplier = {
   id: string
@@ -24,8 +25,6 @@ type Supplier = {
 
 type SupplierForm = Omit<Supplier, "id">
 
-const STORAGE_KEY = "universal-erp-suppliers"
-
 const emptyForm: SupplierForm = {
   name: "",
   contactPerson: "",
@@ -38,7 +37,7 @@ const emptyForm: SupplierForm = {
 
 function loadSuppliers(): Supplier[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(ERP_SUPPLIERS_STORAGE_KEY)
 
     if (!raw) return []
 
@@ -52,7 +51,7 @@ function loadSuppliers(): Supplier[] {
 
 function saveSuppliers(suppliers: Supplier[]) {
   localStorage.setItem(
-    STORAGE_KEY,
+    ERP_SUPPLIERS_STORAGE_KEY,
     JSON.stringify(suppliers),
   )
 }

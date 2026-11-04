@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import {
@@ -25,6 +25,11 @@ import {
   Clock3,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
+import { useTheme } from "../context/ThemeContext"
+import {
+  ERP_OWNER_PROFILE_STORAGE_KEY,
+  ERP_READ_NOTIFICATIONS_STORAGE_KEY,
+} from "../lib/erpStorageKeys"
 
 const menuItems = [
   {
@@ -99,11 +104,6 @@ type AppNotification = {
   tone: "red" | "amber" | "blue"
 }
 
-const THEME_KEY = "universal-erp-theme"
-const OWNER_KEY = "universal-erp-owner-profile"
-const READ_NOTIFICATIONS_KEY =
-  "universal-erp-read-notifications"
-
 const defaultOwner: OwnerProfile = {
   name: "Admin Owner",
   email: "",
@@ -114,7 +114,7 @@ const defaultOwner: OwnerProfile = {
 function loadOwner(): OwnerProfile {
   try {
     const raw =
-      localStorage.getItem(OWNER_KEY)
+      localStorage.getItem(ERP_OWNER_PROFILE_STORAGE_KEY)
 
     if (!raw) return defaultOwner
 
@@ -132,7 +132,7 @@ function loadOwner(): OwnerProfile {
 function loadReadNotifications(): string[] {
   try {
     const raw = localStorage.getItem(
-      READ_NOTIFICATIONS_KEY,
+      ERP_READ_NOTIFICATIONS_STORAGE_KEY,
     )
 
     if (!raw) return []
@@ -147,29 +147,16 @@ function loadReadNotifications(): string[] {
   }
 }
 
-function getInitialDarkMode() {
-  const stored =
-    localStorage.getItem(THEME_KEY)
-
-  if (stored === "dark") return true
-  if (stored === "light") return false
-
-  return window.matchMedia(
-    "(prefers-color-scheme: dark)",
-  ).matches
-}
-
 export default function AppLayout() {
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
+  const darkMode = theme === "dark"
 
   const {
     products,
     inventoryLots,
     sales,
   } = useERP()
-
-  const [darkMode, setDarkMode] =
-    useState(getInitialDarkMode)
 
   const [notificationsOpen, setNotificationsOpen] =
     useState(false)
@@ -190,18 +177,6 @@ export default function AppLayout() {
     useState<string[]>(
       loadReadNotifications,
     )
-
-  useEffect(() => {
-    document.documentElement.classList.toggle(
-      "dark",
-      darkMode,
-    )
-
-    localStorage.setItem(
-      THEME_KEY,
-      darkMode ? "dark" : "light",
-    )
-  }, [darkMode])
 
   const notifications = useMemo<
     AppNotification[]
@@ -309,7 +284,7 @@ export default function AppLayout() {
     setReadNotifications(next)
 
     localStorage.setItem(
-      READ_NOTIFICATIONS_KEY,
+      ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(next),
     )
 
@@ -326,7 +301,7 @@ export default function AppLayout() {
     setReadNotifications(allIds)
 
     localStorage.setItem(
-      READ_NOTIFICATIONS_KEY,
+      ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(allIds),
     )
   }
@@ -355,7 +330,7 @@ export default function AppLayout() {
     setOwner(nextOwner)
 
     localStorage.setItem(
-      OWNER_KEY,
+      ERP_OWNER_PROFILE_STORAGE_KEY,
       JSON.stringify(nextOwner),
     )
 
@@ -409,8 +384,15 @@ export default function AppLayout() {
               </div>
 
               <p className="text-xs leading-5 text-emerald-700/80 dark:text-emerald-300/70">
-                Zaki Pharmacy management system
+                Legacy local ERP workspace
               </p>
+              <NavLink
+                to="/workspace"
+                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-emerald-800 hover:underline dark:text-emerald-300"
+              >
+                <Building2 size={14} />
+                Open company workspace
+              </NavLink>
             </div>
           </div>
         </aside>
@@ -426,7 +408,7 @@ export default function AppLayout() {
 
               <div className="hidden border-l border-slate-200 pl-4 dark:border-slate-700 lg:block">
                 <h1 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  UniversalERP
+                  UniversalERP · Legacy local workspace
                 </h1>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -570,11 +552,7 @@ export default function AppLayout() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setDarkMode(
-                    (value) => !value,
-                  )
-                }
+                onClick={toggleTheme}
                 className="rounded-xl border border-slate-200 p-2.5 text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 aria-label={
                   darkMode

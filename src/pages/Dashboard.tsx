@@ -24,6 +24,7 @@ import {
   YAxis,
 } from "recharts"
 import { useERP } from "../context/ERPContext"
+import { useTheme } from "../context/ThemeContext"
 
 const GREEN = "#2F9E63"
 const DARK = "#17221D"
@@ -56,6 +57,18 @@ export default function Dashboard() {
     sales,
     purchases,
   } = useERP()
+  const { theme } = useTheme()
+  const darkMode = theme === "dark"
+  const chartColors = darkMode
+    ? ["#4ade80", "#cbd5e1", "#fbbf24"]
+    : [GREEN, DARK, AMBER]
+  const chartGrid = darkMode ? "#33443a" : "#E5E7EB"
+  const chartAxisText = darkMode ? "#aebbb2" : "#64748B"
+  const chartTooltipStyle = {
+    backgroundColor: darkMode ? "#18231c" : "#ffffff",
+    borderColor: darkMode ? "#405248" : "#E2E8F0",
+    color: darkMode ? "#edf4ef" : "#17221D",
+  }
 
   const today = startOfDay(new Date())
 
@@ -476,7 +489,7 @@ export default function Dashboard() {
                   <CartesianGrid
                     strokeDasharray="3 3"
                     vertical={false}
-                    stroke="#E5E7EB"
+                    stroke={chartGrid}
                   />
 
                   <XAxis
@@ -484,7 +497,7 @@ export default function Dashboard() {
                     tickLine={false}
                     axisLine={false}
                     tick={{
-                      fill: "#64748B",
+                      fill: chartAxisText,
                       fontSize: 11,
                     }}
                   />
@@ -493,7 +506,7 @@ export default function Dashboard() {
                     tickLine={false}
                     axisLine={false}
                     tick={{
-                      fill: "#64748B",
+                      fill: chartAxisText,
                       fontSize: 11,
                     }}
                   />
@@ -502,11 +515,12 @@ export default function Dashboard() {
                     formatter={(value) =>
                       money(Number(value))
                     }
+                    contentStyle={chartTooltipStyle}
                   />
 
                   <Bar
                     dataKey="sales"
-                    fill={GREEN}
+                    fill={chartColors[0]}
                     radius={[
                       6,
                       6,
@@ -549,11 +563,7 @@ export default function Dashboard() {
                         (_, index) => (
                           <Cell
                             key={index}
-                            fill={[
-                              GREEN,
-                              DARK,
-                              AMBER,
-                            ][
+                            fill={chartColors[
                               index % 3
                             ]}
                           />
@@ -565,6 +575,7 @@ export default function Dashboard() {
                       formatter={(value) =>
                         money(Number(value))
                       }
+                      contentStyle={chartTooltipStyle}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -588,14 +599,7 @@ export default function Dashboard() {
                           className="h-2.5 w-2.5 rounded-full"
                           style={{
                             backgroundColor:
-                              [
-                                GREEN,
-                                DARK,
-                                AMBER,
-                              ][
-                                index %
-                                  3
-                              ],
+                              chartColors[index % 3],
                           }}
                         />
 

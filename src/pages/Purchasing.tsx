@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { useERP, type Purchase } from "../context/ERPContext"
+import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 
 type PurchaseLine = {
   id: string
@@ -68,14 +69,11 @@ export default function Purchasing() {
   const [successNumber, setSuccessNumber] = useState("")
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
 
-  const supplierMasterKey =
-    "universal-erp-suppliers"
-
   useMemo(() => {
     try {
       const raw =
         localStorage.getItem(
-          supplierMasterKey,
+          ERP_SUPPLIERS_STORAGE_KEY,
         )
 
       if (!raw) {

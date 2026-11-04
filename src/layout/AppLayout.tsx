@@ -15,8 +15,8 @@ import {
   Users,
   Warehouse,
 } from "lucide-react"
-import { useState } from "react"
 import { NavLink, Outlet } from "react-router-dom"
+import { useTheme } from "../context/ThemeContext"
 
 const navigation = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -31,10 +31,11 @@ const navigation = [
 ]
 
 export default function AppLayout() {
-  const [darkMode, setDarkMode] = useState(false)
+  const { theme, toggleTheme } = useTheme()
+  const darkMode = theme === "dark"
 
   return (
-    <div className={darkMode ? "dark" : ""}>
+    <div>
       <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
         <div className="flex min-h-screen">
           <aside className="hidden w-64 shrink-0 border-r bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
@@ -145,7 +146,9 @@ export default function AppLayout() {
                 </button>
 
                 <button
-                  onClick={() => setDarkMode((value) => !value)}
+                  type="button"
+                  onClick={toggleTheme}
+                  aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
                   className="rounded-xl border p-2.5 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   {darkMode ? <Sun size={18} /> : <Moon size={18} />}

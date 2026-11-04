@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:db:security": "node scripts/test-database-security.mjs",
+    "test:storage:security": "node scripts/test-storage-api-security.mjs",
+    "test:security": "npm run test:db:security && npm run test:storage:security"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -39,6 +42,8 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "pg": "^8.23.1",
+    "supabase": "^3.0.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.3"
