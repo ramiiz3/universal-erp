@@ -387,7 +387,7 @@ export default function AI() {
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
                 <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  {activeCompany?.companyName ? "Zaki AI searches live records in this company using your signed-in permissions. Your legacy local records are not mixed into this answer." : "Zaki AI reads the legacy ERP data stored in this browser. Select a cloud company workspace to search live company records."} External actions such as changing records or sending invoices are not available in this read-only assistant.
+                  {activeCompany?.companyName ? "Zaki AI searches live records in this company using your signed-in permissions. Your legacy local records are not mixed into this answer." : "Zaki AI reads the legacy ERP data stored in this browser. Select a cloud company workspace to search live company records."} Your question and the relevant business data used to answer it are sent to the configured AI provider. When enabled, OpenRouter may receive the same context as a free fallback if Gemini is unavailable. Avoid requesting or sharing personal details that are not needed. This assistant is read-only and cannot change records or send invoices.
                 </p>
               </div>
             </div>
