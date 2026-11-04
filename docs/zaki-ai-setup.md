@@ -1,46 +1,60 @@
-# Zaki AI (Gemini) deployment
+# Zaki AI (Gemini-only) deployment
 
-The legacy ERP AI page invokes the Supabase Edge Function named `zaki-ai`.
-It does not call a browser-side Gemini API or a `localhost:8787` service.
+Zaki AI uses Google Gemini as its only AI model provider. It does not call
+OpenRouter or any other model provider.
 
-## Configure the Gemini secret
+The frontend invokes the Supabase Edge Function named `zaki-ai`. Gemini is
+called only from that server-side function; the Gemini API key is never
+exposed in browser code.
 
-In the hosted Supabase project, open the Edge Function Secrets page and add:
+## Configure Gemini
 
-- Key: `GEMINI_API_KEY`
-- Value: the Gemini API key from Google AI Studio
+In the hosted Supabase project, open **Edge Functions → Secrets** and add:
 
-Optionally set:
+- Name: `GEMINI_API_KEY`
+- Value: your Gemini API key from Google AI Studio
 
-- Key: `GEMINI_MODEL`
+Optionally add:
+
+- Name: `GEMINI_MODEL`
 - Value: `gemini-3.8-flash`
 
 The function defaults to `gemini-3.8-flash` when `GEMINI_MODEL` is omitted.
-Keep the Gemini key in Supabase Edge Function Secrets. Do not put it in a
-`VITE_` variable, frontend source code, or a public repository. A Gemini key
-previously stored in Render is no longer used by this architecture; remove
-that unused Render variable after the Supabase secret is saved. If the key was
-ever stored in a `VITE_` variable or exposed in a deployed browser bundle,
+No OpenRouter key or model setting is required. A previously configured
+`OPENROUTER_API_KEY` secret is unused by this version and may be removed
+from Supabase Edge Function Secrets.
+
+Keep the Gemini key only in Supabase Edge Function Secrets. Do not put it in
+a `VITE_` variable, frontend source code, or a public repository. If the key
+was ever stored in a `VITE_` variable or exposed in a deployed browser bundle,
 rotate it in Google AI Studio.
 
-## Authentication and data
+## Temporary Gemini service errors
+
+The Edge Function retries temporary network failures and Gemini HTTP 429,
+500, 502, 503, and 504 responses up to three attempts, using bounded
+exponential backoff. A daily quota-exceeded response is returned immediately;
+retries cannot restore exhausted quota. Persistent service overload is
+reported to the user rather than silently routing ERP data to another provider.
+
+## Authentication and ERP data
 
 The frontend calls `supabase.functions.invoke("zaki-ai")` with the active
-Supabase Auth session. The function verifies the user token through Supabase
-Auth before sending the supplied ERP snapshot to Gemini. Requests without a
-valid signed-in user are rejected. The function does not use a Supabase
-service-role or secret key to read or modify ERP tables.
+Supabase Auth session. The function verifies the signed-in user through
+Supabase Auth before reading company data. Cloud company data is queried with
+that user's session, so Supabase row-level security and branch permissions
+remain in force. The function does not use a Supabase service-role key.
 
-The current legacy AI page sends the current local ERP snapshot and up to eight
-recent chat messages with each request. The snapshot is processed by Gemini
-only to answer that request; it is not written to the ERP database by this
-function. The function is read-only: it cannot create transactions, send
-invoices, issue refunds, or change ERP records.
+When a cloud company is selected, the function retrieves relevant live ERP
+records for that company. Otherwise, it uses the legacy ERP snapshot supplied
+by the browser. The AI request and relevant business data are sent to Google
+Gemini to generate the answer. Zaki AI is read-only: it cannot create
+transactions, issue refunds, send invoices, or modify ERP records.
 
 ## Deployment
 
 The function is declared in `supabase/config.toml` as
 `[functions.zaki-ai]`. With Supabase GitHub integration enabled and
-**Deploy to production** selected for `main`, changes pushed to `main` deploy
-the declared Edge Function. Check the Supabase deployment log for the
-`deploy` step before testing the live AI page.
+**Deploy to production** selected for `main`, changes pushed to `main`
+deploy the declared Edge Function. Check the Supabase deployment log for the
+function deployment before testing the live AI page.
