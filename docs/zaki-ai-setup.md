@@ -1,46 +1,69 @@
-# Zaki AI (Gemini) deployment
+# Zaki AI — cloud ERP data search and model fallback
 
-The legacy ERP AI page invokes the Supabase Edge Function named `zaki-ai`.
-It does not call a browser-side Gemini API or a `localhost:8787` service.
+Zaki AI is available inside the authenticated company workspace at
+`/workspace/ai`. The legacy `/ai` navigation entry redirects to this page
+after the user signs in and selects an active company.
 
-## Configure the Gemini secret
+## Required Supabase Edge Function secrets
 
-In the hosted Supabase project, open the Edge Function Secrets page and add:
+In the hosted Supabase project, open Edge Function Secrets and add:
 
-- Key: `GEMINI_API_KEY`
-- Value: the Gemini API key from Google AI Studio
+- `GEMINI_API_KEY`: Google AI Studio API key (primary provider).
+- `OPENROUTER_API_KEY`: OpenRouter API key (free-model fallback).
 
-Optionally set:
+Optional:
 
-- Key: `GEMINI_MODEL`
-- Value: `gemini-3.8-flash`
+- `GEMINI_MODEL`: Gemini model ID. The function currently defaults to
+  `gemini-3.8-flash`.
+- `OPENROUTER_MODEL`: A free OpenRouter model slug. The function accepts
+  `openrouter/free` or model IDs ending in `:free`; any paid model ID is
+  replaced with `openrouter/free`.
 
-The function defaults to `gemini-3.8-flash` when `GEMINI_MODEL` is omitted.
-Keep the Gemini key in Supabase Edge Function Secrets. Do not put it in a
-`VITE_` variable, frontend source code, or a public repository. A Gemini key
-previously stored in Render is no longer used by this architecture; remove
-that unused Render variable after the Supabase secret is saved. If the key was
-ever stored in a `VITE_` variable or exposed in a deployed browser bundle,
-rotate it in Google AI Studio.
+Keep both provider keys in Supabase Edge Function Secrets. Never put them in a
+`VITE_` variable, frontend code, Render environment variables, or the
+repository. Do not add Supabase service-role or secret API keys for this feature.
 
-## Authentication and data
+OpenRouter free models are rate-limited and availability can vary. Its free
+router selects only free models; it does not guarantee uninterrupted inference.
 
-The frontend calls `supabase.functions.invoke("zaki-ai")` with the active
-Supabase Auth session. The function verifies the user token through Supabase
-Auth before sending the supplied ERP snapshot to Gemini. Requests without a
-valid signed-in user are rejected. The function does not use a Supabase
-service-role or secret key to read or modify ERP tables.
+## Data access and security
 
-The current legacy AI page sends the current local ERP snapshot and up to eight
-recent chat messages with each request. The snapshot is processed by Gemini
-only to answer that request; it is not written to the ERP database by this
-function. The function is read-only: it cannot create transactions, send
-invoices, issue refunds, or change ERP records.
+The frontend invokes `supabase.functions.invoke("zaki-ai")` with the signed-in
+user session, the selected company ID, the question, and recent chat history.
+It does not send a browser localStorage snapshot.
+
+The Edge Function:
+
+1. Validates the caller's Supabase Auth access token.
+2. Verifies an active membership for the requested company and derives branch
+   assignments from the caller's membership rows.
+3. Uses a Supabase client carrying the caller's JWT to query company tables.
+   Row Level Security therefore remains in force. No service-role key is used.
+4. Retrieves only the data domains relevant to the question, with bounded row
+   limits: products, inventory lots, stock movements, sales/invoices, payment
+   records, suppliers, purchase orders, and purchase lines.
+5. Sends the question and retrieved records to Gemini. If Gemini is unavailable
+   or fails, it tries the configured OpenRouter free model.
+
+Contact fields are omitted unless the question explicitly asks for phone,
+mobile, email, contact details, or address. The cloud schema currently has no
+separate customer master table; customer lookup is based on customer snapshots
+stored on cloud invoices. The assistant must disclose this limitation.
+
+Zaki AI is read-only. It cannot create sales, receive purchases, change stock,
+edit invoices, issue refunds, or send messages.
+
+## Privacy and provider use
+
+Questions and the retrieved records required to answer them are sent to the
+configured AI provider. Gemini is primary; OpenRouter may receive the same
+question and context when fallback is needed. Avoid asking for or sending
+unnecessary sensitive personal or medical information.
 
 ## Deployment
 
 The function is declared in `supabase/config.toml` as
-`[functions.zaki-ai]`. With Supabase GitHub integration enabled and
-**Deploy to production** selected for `main`, changes pushed to `main` deploy
-the declared Edge Function. Check the Supabase deployment log for the
-`deploy` step before testing the live AI page.
+`[functions.zaki-ai]`. With the Supabase GitHub integration enabled and
+production deployment configured for `main`, pushing changes to `main`
+deploys the updated function. Check the Supabase deployment log for the
+function deploy step before testing the hosted AI page.
