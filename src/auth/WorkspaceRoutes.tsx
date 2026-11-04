@@ -25,6 +25,8 @@ import CloudPOSPage from "../inventory-cloud/CloudPOSPage"
 import CloudPurchasingPage from "../inventory-cloud/CloudPurchasingPage"
 import CloudSalesPage from "../inventory-cloud/CloudSalesPage"
 import CloudInvoicePage from "../inventory-cloud/CloudInvoicePage"
+import AI from "../pages/AI"
+import { ERPProvider } from "../context/ERPContext"
 import {
   createBranchOnce,
   mapCompanyMembers,
@@ -792,6 +794,14 @@ function MemberManager({
   )
 }
 
+function WorkspaceAIAssistant() {
+  return (
+    <ERPProvider>
+      <AI />
+    </ERPProvider>
+  )
+}
+
 export default function WorkspaceRoutes() {
   const { configured, loading, user } = useAuth()
   if (!configured) return <SetupNotice />
@@ -809,6 +819,7 @@ export default function WorkspaceRoutes() {
           <Route path="pos" element={<CloudPOSPage />} />
           <Route path="purchasing" element={<CloudPurchasingPage />} />
           <Route path="sales" element={<CloudSalesPage />} />
+          <Route path="ai" element={<WorkspaceAIAssistant />} />
           <Route path="invoices/:saleId" element={<CloudInvoicePage />} />
         </Route>
       </Route>

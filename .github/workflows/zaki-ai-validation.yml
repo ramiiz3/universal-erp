@@ -1,0 +1,50 @@
+name: Zaki AI validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/pages/AI.tsx"
+      - "src/auth/WorkspaceRoutes.tsx"
+      - "src/inventory-cloud/WorkspaceShell.tsx"
+      - "supabase/functions/zaki-ai/**"
+      - ".github/workflows/zaki-ai-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/pages/AI.tsx"
+      - "src/auth/WorkspaceRoutes.tsx"
+      - "src/inventory-cloud/WorkspaceShell.tsx"
+      - "supabase/functions/zaki-ai/**"
+      - ".github/workflows/zaki-ai-validation.yml"
+
+jobs:
+  validate:
+    name: Frontend tests, build, and Edge Function type check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Zaki AI Edge Function
+        run: deno check supabase/functions/zaki-ai/index.ts
