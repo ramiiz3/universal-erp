@@ -334,6 +334,7 @@ async function loadCloudBusinessData(
   userId: string,
   companyId: string,
   message: string,
+  requestedTimeZone: string,
 ) {
   const membership = await db
     .from("company_memberships")
@@ -369,7 +370,7 @@ async function loadCloudBusinessData(
   const supplierHint = findSupplierHint(message)
   const productHint = findProductHint(message) || findQuotedHint(message)
   const invoiceHint = findInvoiceHint(message)
-  const timeZone = asMessage(body.timeZone) || "UTC"
+  const timeZone = asMessage(requestedTimeZone) || "UTC"
   const dateRange = resolveDateRange(message, timeZone)
   const asksForContactDetails = /\b(phone|mobile|email|contact details|address|tax registration)\b/i.test(message)
 
@@ -784,7 +785,7 @@ Deno.serve(async (request) => {
   let cloudContext: Record<string, unknown> | null = null
   if (companyId) {
     try {
-      cloudContext = await loadCloudBusinessData(db, userData.user.id, companyId, message)
+      cloudContext = await loadCloudBusinessData(db, userData.user.id, companyId, message, asMessage(body.timeZone) || "UTC")
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Company data access could not be verified."
       return jsonResponse({ error: detail }, 403)
