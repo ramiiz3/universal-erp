@@ -27,10 +27,6 @@ function getPublishableKey() {
   return Deno.env.get("SUPABASE_ANON_KEY") ?? ""
 }
 
-function isRetryableProviderFailure(status: number) {
-  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-}
-
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 25_000) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -359,7 +355,6 @@ Deno.serve(async (request) => {
   let reply = ""
   let provider = ""
   let model = ""
-  let primaryError = ""
 
   if (geminiKey) {
     try {
@@ -374,7 +369,6 @@ Deno.serve(async (request) => {
       model = geminiModel
     } catch (error) {
       const status = Number((error as { status?: number }).status ?? 0)
-      primaryError = error instanceof Error ? error.message.slice(0, 240) : "Gemini request failed"
       console.warn("Zaki AI primary provider unavailable", { status, model: geminiModel })
       // Any primary-provider failure may use the explicitly configured free fallback.
     }
