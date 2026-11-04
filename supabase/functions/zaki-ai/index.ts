@@ -166,6 +166,20 @@ function resolveDateRange(message: string, requestedTimeZone: string) {
     const next = new Date(Date.UTC(current.year, current.month, 1))
     return { start: zonedMidnight(current.year, current.month, 1, timeZone), end: zonedMidnight(next.getUTCFullYear(), next.getUTCMonth() + 1, 1, timeZone), label: "this month" }
   }
+  if (/\b(last 30 days|past 30 days)\b/.test(text)) {
+    return { start: new Date(now.getTime() - 30 * day).toISOString(), end: now.toISOString(), label: "last 30 days" }
+  }
+  const quarterStartMonth = Math.floor((current.month - 1) / 3) * 3 + 1
+  const thisQuarterStart = zonedMidnight(current.year, quarterStartMonth, 1, timeZone)
+  const nextQuarterStartDate = new Date(Date.UTC(current.year, quarterStartMonth + 2, 1))
+  const nextQuarterStart = zonedMidnight(nextQuarterStartDate.getUTCFullYear(), nextQuarterStartDate.getUTCMonth() + 1, 1, timeZone)
+  if (/\b(last quarter|previous quarter)\b/.test(text)) {
+    const previousQuarterStartDate = new Date(Date.UTC(current.year, quarterStartMonth - 4, 1))
+    return { start: zonedMidnight(previousQuarterStartDate.getUTCFullYear(), previousQuarterStartDate.getUTCMonth() + 1, 1, timeZone), end: thisQuarterStart, label: "last quarter" }
+  }
+  if (/\b(this quarter|quarter to date|qtd|quarterly)\b/.test(text)) {
+    return { start: thisQuarterStart, end: nextQuarterStart, label: "this quarter" }
+  }
   if (/\b(this year|year to date|ytd|annual)\b/.test(text)) {
     return { start: zonedMidnight(current.year, 1, 1, timeZone), end: now.toISOString(), label: "this year to date" }
   }
