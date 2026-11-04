@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { buildCloudAIRequest, cloudAIProviderLabel } from "./cloudAI"
+import {
+  buildCloudAIContext,
+  inferCloudAIDataScopes,
+  sanitizeCloudAIHistory,
+} from "../../supabase/functions/zaki-ai/data"
 
 describe("buildCloudAIRequest", () => {
   it("requires a selected company and a non-empty question", () => {
@@ -47,11 +52,6 @@ describe("cloudAIProviderLabel", () => {
   })
 })
 
-import {
-  buildCloudAIContext,
-  inferCloudAIDataScopes,
-  sanitizeCloudAIHistory,
-} from "../../supabase/functions/zaki-ai/data"
 
 describe("cloud ERP data retrieval scope", () => {
   it("selects inventory records for stock and expiry questions", () => {
@@ -75,7 +75,7 @@ describe("cloud ERP data retrieval scope", () => {
   })
 
   it("sanitizes conversation history and keeps only the latest eight messages", () => {
-    const history = Array.from({ length: 10 }, (_, index) => ({
+    const history: unknown[] = Array.from({ length: 10 }, (_, index) => ({
       role: index % 2 ? "assistant" : "user",
       text: `Question ${index}`,
     }))
