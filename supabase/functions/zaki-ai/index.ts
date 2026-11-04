@@ -246,7 +246,7 @@ async function fetchChildRows(
 ): Promise<RecordSet> {
   if (!parentIds.length) return emptySet()
   try {
-    const result = await db
+    let query = db
       .from(table)
       .select(columns, { count: "exact" })
       .eq("company_id", companyId)
