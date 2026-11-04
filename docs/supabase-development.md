@@ -53,9 +53,10 @@ npm run test:security
 The database runner executes each complete pgTAP SQL file on a single
 connection, verifies all planned assertions, and confirms that each test
 transaction rolled back. The authentication/company suite has 39 assertions,
-the inventory tenant suite has 26, and the inventory workflow suite has 36
-assertions covering stock permissions, atomicity, retry idempotency, and the
-company member directory (101 database assertions total). The Storage test creates
+the inventory tenant suite has 26, the inventory workflow suite has 36, and
+the cloud transaction suite has 62 assertions covering tenant/branch isolation,
+FEFO sales, invoice payments, partial purchase receipts, stock ledger entries,
+and retry idempotency (163 database assertions total). The Storage test creates
 temporary local users and companies, authenticates through local Auth, tests
 private-file upload, cross-company access and deletion through the Storage
 HTTP API, and cleans up its temporary resources. Both scripts are local-only
@@ -91,5 +92,16 @@ grant this privilege.
 - `/workspace/products`, `/workspace/warehouses`, `/workspace/inventory`, and
   `/workspace/movements` use company-scoped Supabase data under RLS and the
   active company verified by `AuthProvider`.
+- `/workspace/pos` checks out sales through `checkout_cloud_sale_once`, which
+  allocates unexpired lots by FEFO, snapshots lot prices and costs, and writes
+  the invoice, payment, stock balances, and movements atomically.
+- `/workspace/sales` and `/workspace/invoices/:saleId` display durable cloud
+  invoice snapshots. Additional receipts are recorded with
+  `record_cloud_sale_payment_once`, which enforces idempotency and prevents
+  payment beyond the remaining balance.
+- `/workspace/purchasing` creates company-scoped suppliers and purchase orders.
+  Orders do not change stock; partial or full receipts go through
+  `receive_cloud_purchase_once` and create distinct lots plus append-only
+  movement history.
 - The legacy ERP routes remain backed by the existing local ERP context and
   browser storage. They are not authenticated company data.

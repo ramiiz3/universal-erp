@@ -1,5 +1,14 @@
 import { useState } from "react"
-import { Building2, Boxes, ClipboardList, Package, Warehouse } from "lucide-react"
+import {
+  Building2,
+  Boxes,
+  ClipboardList,
+  Package,
+  ReceiptText,
+  ShoppingBag,
+  ShoppingCart,
+  Warehouse,
+} from "lucide-react"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth/AuthProvider"
 import { useTheme } from "../context/ThemeContext"
@@ -10,6 +19,9 @@ const navigation = [
   { to: "/workspace/warehouses", label: "Warehouses", icon: Warehouse },
   { to: "/workspace/inventory", label: "Inventory lots", icon: Boxes },
   { to: "/workspace/movements", label: "Stock movements", icon: ClipboardList },
+  { to: "/workspace/pos", label: "Cloud POS", icon: ShoppingCart },
+  { to: "/workspace/purchasing", label: "Purchasing", icon: ShoppingBag },
+  { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },
 ]
 
 export default function WorkspaceShell() {
@@ -92,11 +104,11 @@ export default function WorkspaceShell() {
             </div>
           </div>
           <p className="mx-auto mt-2 max-w-7xl text-xs text-slate-500 dark:text-slate-400">
-            Active company: <strong className="font-semibold">{activeCompany.companyName}</strong> · Cloud inventory, protected by company and branch RLS
+            Active company: <strong className="font-semibold">{activeCompany.companyName}</strong> · Cloud workspace, protected by company and branch RLS
           </p>
         </header>
         <div className="mx-auto grid max-w-7xl gap-5 p-4 md:grid-cols-[210px_minmax(0,1fr)] md:p-6">
-          <nav aria-label="Company inventory" className="flex gap-2 overflow-x-auto md:block md:space-y-1">
+          <nav aria-label="Company workspace" className="flex gap-2 overflow-x-auto md:block md:space-y-1">
             {navigation.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
