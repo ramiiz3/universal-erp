@@ -17,3 +17,8 @@ Use the local Native Runtime for development and security tests. See
 [`../../docs/supabase-development.md`](../../docs/supabase-development.md) for
 startup, migration, and verification commands. Do not apply these migrations to
 production as part of local development.
+
+
+## Hosted production deployment
+
+When the Supabase GitHub integration is enabled with this repository, set its working directory to `.` and enable **Deploy to production** for `main`. Each subsequent push or merge to `main` triggers deployment of pending migrations in this directory. The integration applies only migrations not already recorded in the hosted project's migration history; it does not reset the database or re-run applied migrations. Verify the migration step in Supabase deployment logs before configuring the live frontend.
