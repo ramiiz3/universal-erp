@@ -78,6 +78,10 @@ export default function AI() {
       (preset ?? input).trim()
 
     if (!message || loading) return
+    if (activeCompanyLoading) {
+      setError("Your company workspace is still loading. Please retry in a moment.")
+      return
+    }
 
     setError("")
 
@@ -118,6 +122,7 @@ export default function AI() {
           body: {
             message,
             companyId: activeCompanyId || null,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
             snapshot: activeCompanyId ? {} : snapshot,
             history,
           },
@@ -372,12 +377,12 @@ export default function AI() {
               </p>
 
               <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {settings.businessName}
+                {activeCompany?.companyName || settings.businessName}
               </p>
 
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {settings.emirate},{" "}
-                {settings.country}
+                {activeCompany?.address || settings.emirate},{" "}
+                {activeCompany?.country || settings.country}
               </p>
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
