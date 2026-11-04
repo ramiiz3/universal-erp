@@ -8,16 +8,13 @@ import {
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { getERPSettings } from "../lib/erpSettings"
+import { supabase } from "../lib/supabase"
 
 type ChatMessage = {
   id: string
   role: "user" | "assistant"
   text: string
 }
-
-const AI_SERVER =
-  import.meta.env.VITE_AI_SERVER_URL ||
-  "http://localhost:8787"
 
 export default function AI() {
   const {
@@ -48,9 +45,6 @@ export default function AI() {
 
   const [error, setError] =
     useState("")
-
-  const [previousInteractionId, setPreviousInteractionId] =
-    useState<string | null>(null)
 
   const snapshot = useMemo(
     () => ({
@@ -94,36 +88,52 @@ export default function AI() {
     setLoading(true)
 
     try {
-      const response = await fetch(
-        `${AI_SERVER}/api/ai`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            message,
-            snapshot,
-            previousInteractionId,
-          }),
-        },
-      )
-
-      const data =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "AI request failed.",
-        )
+      if (!supabase) {
+        throw new Error("The hosted Supabase connection is not configured. Check the Render Supabase URL and publishable key.")
       }
 
-      if (data.interactionId) {
-        setPreviousInteractionId(
-          data.interactionId,
-        )
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession()
+
+      if (sessionError) {
+        throw new Error(`Could not verify your sign-in session. ${sessionError.message}`)
+      }
+      if (!sessionData.session) {
+        throw new Error("Sign in to your company workspace before using Zaki AI.")
+      }
+
+      const history = messages
+        .filter((item) => item.id !== "welcome")
+        .slice(-8)
+        .map(({ role, text }) => ({ role, text }))
+
+      const { data, error: functionError } =
+        await supabase.functions.invoke("zaki-ai", {
+          body: {
+            message,
+            snapshot,
+            history,
+          },
+        })
+
+      if (functionError) {
+        let detail = functionError.message
+        const context = (functionError as unknown as { context?: unknown }).context
+        if (context instanceof Response) {
+          try {
+            const responseBody = await context.clone().json() as { error?: unknown }
+            if (typeof responseBody.error === "string") {
+              detail = responseBody.error
+            }
+          } catch {
+            // Keep the Supabase function error message when no JSON body is available.
+          }
+        }
+        throw new Error(detail || "Zaki AI request failed.")
+      }
+
+      if (typeof data?.reply !== "string" || !data.reply.trim()) {
+        throw new Error("Zaki AI returned an empty response. Please try again.")
       }
 
       setMessages((current) => [
@@ -131,16 +141,14 @@ export default function AI() {
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          text:
-            data.reply ||
-            "I completed the request.",
+          text: data.reply,
         },
       ])
     } catch (requestError) {
       const message =
         requestError instanceof Error
           ? requestError.message
-          : "Unable to reach Zaki AI."
+          : "Unable to complete the Zaki AI request."
 
       setError(message)
 
@@ -150,7 +158,7 @@ export default function AI() {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
           text:
-            "I couldn't connect to the AI service. The AI server needs to be running and configured.",
+            "I couldn't complete that request. See the error above, correct the configuration if needed, and try again.",
         },
       ])
     } finally {
