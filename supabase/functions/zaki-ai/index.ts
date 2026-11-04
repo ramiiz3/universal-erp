@@ -1,3 +1,5 @@
+import { createClient } from "npm:@supabase/supabase-js@2"
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -35,11 +37,41 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "Method not allowed." }, 405)
   }
 
-  // The Supabase gateway validates the JWT because verify_jwt is enabled.
-  // Requiring the bearer header here also prevents accidental public invocation.
+  // JWT verification is performed against Supabase Auth here because the
+  // project uses publishable API keys and may issue asymmetric user tokens.
   const authorization = request.headers.get("Authorization") ?? ""
   if (!authorization.startsWith("Bearer ")) {
     return jsonResponse({ error: "Sign in to your company workspace before using Zaki AI." }, 401)
+  }
+
+  const accessToken = authorization.slice("Bearer ".length).trim()
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")
+  const publishableKeysJson = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")
+  let publishableKey = Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+
+  if (publishableKeysJson) {
+    try {
+      const publishableKeys = JSON.parse(publishableKeysJson) as Record<string, string>
+      publishableKey = publishableKeys.default ?? publishableKey
+    } catch {
+      return jsonResponse({ error: "Supabase authentication configuration is invalid." }, 503)
+    }
+  }
+
+  if (!supabaseUrl || !publishableKey || !accessToken) {
+    return jsonResponse({ error: "Supabase authentication is not configured for Zaki AI." }, 503)
+  }
+
+  const authClient = createClient(supabaseUrl, publishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  })
+  const { data: userData, error: userError } = await authClient.auth.getUser(accessToken)
+  if (userError || !userData.user) {
+    return jsonResponse({ error: "Your sign-in session is invalid or expired. Sign in again and retry." }, 401)
   }
 
   const apiKey = Deno.env.get("GEMINI_API_KEY")
