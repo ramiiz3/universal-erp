@@ -209,7 +209,6 @@ async function fetchCompanyRows(
       query = query.order(orderColumn, { ascending: orderColumn === "name" })
     }
 
-    const result = await query.limit(limit)
     if (result.error) {
       return {
         ...emptySet(),
@@ -243,6 +242,7 @@ async function fetchChildRows(
   parentColumn: string,
   parentIds: string[],
   limit: number,
+  dateRange?: { start: string; end: string; label: string } | null,
 ): Promise<RecordSet> {
   if (!parentIds.length) return emptySet()
   try {
@@ -251,7 +251,10 @@ async function fetchChildRows(
       .select(columns, { count: "exact" })
       .eq("company_id", companyId)
       .in(parentColumn, parentIds)
-      .limit(limit)
+    if (dateRange) {
+      query = query.gte("created_at", dateRange.start).lt("created_at", dateRange.end)
+    }
+    const result = await query.limit(limit)
 
     if (result.error) {
       return {
@@ -451,15 +454,17 @@ async function loadCloudBusinessData(
       "name",
       supplierHint ? { column: "name", value: supplierHint } : undefined,
     ))
-    tasks.push(add(
-      "purchases",
-      "cloud_purchases",
-      "id, purchase_number, branch_id, warehouse_id, supplier_id, supplier_invoice_reference, status, subtotal, discount_total, vat_total, total, currency, created_at",
-      200,
-      "created_at",
-      undefined,
-      dateRange,
-    ))
+    if (!supplierHint) {
+      tasks.push(add(
+        "purchases",
+        "cloud_purchases",
+        "id, purchase_number, branch_id, warehouse_id, supplier_id, supplier_invoice_reference, status, subtotal, discount_total, vat_total, total, currency, created_at",
+        200,
+        "created_at",
+        undefined,
+        dateRange,
+      ))
+    }
   }
 
   if (wantsBranches || broadQuestion) {
@@ -506,6 +511,22 @@ async function loadCloudBusinessData(
       saleIds,
       700,
     )
+  }
+
+  if (wantsPurchases && supplierHint) {
+    const matchedSuppliers = cloud.suppliers as RecordSet | undefined
+    cloud.purchases = matchedSuppliers?.records.length
+      ? await fetchChildRows(
+        db,
+        companyId,
+        "cloud_purchases",
+        "id, purchase_number, branch_id, warehouse_id, supplier_id, supplier_invoice_reference, status, subtotal, discount_total, vat_total, total, currency, created_at",
+        "supplier_id",
+        matchedSuppliers.records.map((row) => String(row.id)),
+        200,
+        dateRange,
+      )
+      : emptySet()
   }
 
   const purchases = cloud.purchases as RecordSet | undefined
