@@ -85,7 +85,12 @@ async function callOpenRouter(apiKey: string, systemInstruction: string, history
         "X-Title": "UniversalERP Zaki AI",
       },
       body: JSON.stringify({
-        model: Deno.env.get("OPENROUTER_MODEL") || "openrouter/free",
+        model: (() => {
+          const configured = Deno.env.get("OPENROUTER_MODEL") || "openrouter/free"
+          return configured === "openrouter/free" || configured.endsWith(":free")
+            ? configured
+            : "openrouter/free"
+        })(),
         messages: [
           { role: "system", content: systemInstruction },
           ...history,
@@ -199,7 +204,7 @@ Deno.serve(async (request) => {
   if (!allBranches) branchQuery = branchQuery.in("id", branchIds)
   const branchResult = await branchQuery
 
-  const emptyResult = { data: [], error: null }
+  const emptyResult: { data: any[]; error: any } = { data: [], error: null }
   let productsResult = emptyResult
   let lotsResult = emptyResult
   let movementsResult = emptyResult
@@ -371,9 +376,7 @@ Deno.serve(async (request) => {
       const status = Number((error as { status?: number }).status ?? 0)
       primaryError = error instanceof Error ? error.message.slice(0, 240) : "Gemini request failed"
       console.warn("Zaki AI primary provider unavailable", { status, model: geminiModel })
-      if (status && !isRetryableProviderFailure(status) && status !== 400 && status !== 404) {
-        return jsonResponse({ error: "Gemini request failed. The free fallback will be attempted only for temporary availability or model errors." }, 502)
-      }
+      // Any primary-provider failure may use the explicitly configured free fallback.
     }
   }
 
