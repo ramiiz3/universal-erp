@@ -322,7 +322,11 @@ Deno.serve(async (request) => {
     contactDetailsIncluded: includeContacts,
   })
 
-  const contextJson = JSON.stringify(context)
+  const contextJson = JSON.stringify({
+    ...context,
+    dataRetrievedAt: now,
+    timestampNote: "Database timestamps are returned as stored. The company schema does not currently store a business timezone.",
+  })
   if (contextJson.length > 90_000) {
     return jsonResponse({ error: "The matching ERP data is too large for one request. Ask about a narrower date range, product, invoice, or supplier." }, 413)
   }
