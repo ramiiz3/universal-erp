@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
-  Building2,\n  Bot,
+  Building2,
+  Bot,
   Boxes,
   ClipboardList,
   Package,
@@ -21,7 +22,8 @@ const navigation = [
   { to: "/workspace/movements", label: "Stock movements", icon: ClipboardList },
   { to: "/workspace/pos", label: "Cloud POS", icon: ShoppingCart },
   { to: "/workspace/purchasing", label: "Purchasing", icon: ShoppingBag },
-  { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },\n  { to: "/workspace/ai", label: "Zaki AI", icon: Bot },
+  { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },
+  { to: "/workspace/ai", label: "Zaki AI", icon: Bot },
 ]
 
 export default function WorkspaceShell() {
