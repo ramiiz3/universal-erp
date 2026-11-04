@@ -41,3 +41,6 @@ enable_confirmations = false
 
 [functions.send-invoice]
 verify_jwt = true
+
+[functions.zaki-ai]
+verify_jwt = false
