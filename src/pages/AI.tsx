@@ -9,6 +9,7 @@ import {
 import { useERP } from "../context/ERPContext"
 import { getERPSettings } from "../lib/erpSettings"
 import { supabase } from "../lib/supabase"
+import { useAuth } from "../auth/AuthProvider"
 
 type ChatMessage = {
   id: string
@@ -17,6 +18,8 @@ type ChatMessage = {
 }
 
 export default function AI() {
+  const { activeCompany, activeCompanyLoading } = useAuth()
+  const activeCompanyId = activeCompany?.companyId ?? ""
   const {
     products,
     inventoryLots,
@@ -44,6 +47,9 @@ export default function AI() {
     useState(false)
 
   const [error, setError] =
+    useState("")
+
+  const [providerStatus, setProviderStatus] =
     useState("")
 
   const snapshot = useMemo(
@@ -111,7 +117,8 @@ export default function AI() {
         await supabase.functions.invoke("zaki-ai", {
           body: {
             message,
-            snapshot,
+            companyId: activeCompanyId || null,
+            snapshot: activeCompanyId ? {} : snapshot,
             history,
           },
         })
@@ -135,6 +142,11 @@ export default function AI() {
       if (typeof data?.reply !== "string" || !data.reply.trim()) {
         throw new Error("Zaki AI returned an empty response. Please try again.")
       }
+
+      const provider = typeof data.provider === "string" ? data.provider : "AI provider"
+      const model = typeof data.model === "string" ? ` · ${data.model}` : ""
+      const sources = Array.isArray(data.sources) ? data.sources.filter((value: unknown) => typeof value === "string") : []
+      setProviderStatus(`${provider}${model}${sources.length ? ` · ${sources.join(", ")}` : ""}`)
 
       setMessages((current) => [
         ...current,
@@ -181,14 +193,14 @@ export default function AI() {
               </h1>
 
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Intelligent UniversalERP assistant
+                {activeCompany?.companyName ? `Live ERP assistant · ${activeCompany.companyName}` : "Legacy ERP assistant"}
               </p>
             </div>
           </div>
 
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            ERP Agent
+            {activeCompanyLoading ? "Checking company…" : activeCompany?.companyName ? "Live company data" : "Legacy local data"}
           </div>
         </div>
 
@@ -315,6 +327,7 @@ export default function AI() {
                 <p className="mt-2 text-center text-[11px] text-slate-400">
                   Enter to send • Shift+Enter for a new line
                 </p>
+                {providerStatus && <p className="mt-1 text-center text-[10px] text-slate-400">Answered by {providerStatus}</p>}
               </div>
             </div>
           </div>
@@ -355,7 +368,7 @@ export default function AI() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-[#111a15]">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Zaki Pharmacy
+                {activeCompany?.companyName || "Legacy ERP workspace"}
               </p>
 
               <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -369,7 +382,7 @@ export default function AI() {
 
               <div className="mt-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
                 <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  Zaki AI reads the current ERP data sent from your application. External actions such as sending an invoice will require an explicit confirmation step.
+                  {activeCompany?.companyName ? "Zaki AI searches live records in this company using your signed-in permissions. Your legacy local records are not mixed into this answer." : "Zaki AI reads the legacy ERP data stored in this browser. Select a cloud company workspace to search live company records."} External actions such as changing records or sending invoices are not available in this read-only assistant.
                 </p>
               </div>
             </div>
