@@ -585,6 +585,105 @@ function extractGeminiText(result: Record<string, unknown>) {
   }).join("\n").trim()
 }
 
+function geminiRetryDelay(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after")
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    const requestedDelay = Number.isFinite(seconds)
+      ? seconds * 1_000
+      : Date.parse(retryAfter) - Date.now()
+    if (Number.isFinite(requestedDelay) && requestedDelay > 0) {
+      return Math.min(5_000, Math.max(500, requestedDelay))
+    }
+  }
+  return Math.min(4_000, 700 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250))
+}
+
+function isRetryableGeminiFailure(status: number, detail: string) {
+  if (status === 429 && /daily quota|per[_ ]day|quota.*reset|requests_per_day|tokens_per_day|limit is 0/i.test(detail)) {
+    return false
+  }
+  return [408, 425, 429, 500, 502, 503, 504].includes(status)
+}
+
+async function callGemini(
+  apiKey: string,
+  model: string,
+  systemInstruction: string,
+  history: Array<Record<string, unknown>>,
+  message: string,
+) {
+  const maxAttempts = 3
+  let lastFailure = "Unknown Gemini error."
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let upstream: Response
+    try {
+      upstream = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" +
+          encodeURIComponent(model) +
+          ":generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          signal: AbortSignal.timeout(25_000),
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [
+              ...history,
+              { role: "user", parts: [{ text: message }] },
+            ],
+            generationConfig: {
+              temperature: 0.25,
+              maxOutputTokens: 1_400,
+            },
+          }),
+        },
+      )
+    } catch (error) {
+      lastFailure = error instanceof Error ? error.message : "Network request to Gemini failed."
+      if (attempt === maxAttempts) break
+      const delay = Math.min(4_000, 700 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250))
+      console.warn("Gemini network request failed; retrying.", { attempt, delay, detail: lastFailure })
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      continue
+    }
+
+    const result = await upstream.json().catch(() => ({})) as Record<string, unknown>
+    if (!upstream.ok) {
+      const upstreamError = result.error && typeof result.error === "object"
+        ? result.error as Record<string, unknown>
+        : {}
+      const detail = typeof upstreamError.message === "string"
+        ? upstreamError.message.slice(0, 500)
+        : "Gemini returned HTTP " + upstream.status + "."
+      lastFailure = "Gemini HTTP " + upstream.status + ": " + detail
+
+      if (!isRetryableGeminiFailure(upstream.status, detail) || attempt === maxAttempts) {
+        throw new Error(lastFailure)
+      }
+
+      const delay = geminiRetryDelay(upstream, attempt)
+      console.warn("Gemini returned a temporary error; retrying.", {
+        attempt,
+        status: upstream.status,
+        delay,
+      })
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      continue
+    }
+
+    const reply = extractGeminiText(result)
+    if (!reply) throw new Error("Gemini returned no text.")
+    return { reply, provider: "Gemini", model }
+  }
+
+  throw new Error("Gemini request failed after " + maxAttempts + " attempts. " + lastFailure)
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
