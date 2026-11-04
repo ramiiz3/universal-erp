@@ -585,121 +585,6 @@ function extractGeminiText(result: Record<string, unknown>) {
   }).join("\n").trim()
 }
 
-function extractOpenRouterText(result: Record<string, unknown>) {
-  const choices = Array.isArray(result.choices) ? result.choices : []
-  const first = choices[0] && typeof choices[0] === "object"
-    ? choices[0] as Record<string, unknown>
-    : {}
-  const message = first.message && typeof first.message === "object"
-    ? first.message as Record<string, unknown>
-    : {}
-  const content = message.content
-  if (typeof content === "string") return content.trim()
-  if (Array.isArray(content)) {
-    return content.flatMap((part) => {
-      if (!part || typeof part !== "object") return []
-      const value = (part as Record<string, unknown>).text
-      return typeof value === "string" && value ? [value] : []
-    }).join("\n").trim()
-  }
-  return ""
-}
-
-async function callGemini(
-  apiKey: string,
-  model: string,
-  systemInstruction: string,
-  history: Array<Record<string, unknown>>,
-  message: string,
-) {
-  const upstream = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/" +
-      encodeURIComponent(model) +
-      ":generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      signal: AbortSignal.timeout(25_000),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [
-          ...history,
-          { role: "user", parts: [{ text: message }] },
-        ],
-        generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: 1_400,
-        },
-      }),
-    },
-  )
-
-  const result = await upstream.json().catch(() => ({})) as Record<string, unknown>
-  if (!upstream.ok) {
-    const upstreamError = result.error && typeof result.error === "object"
-      ? result.error as Record<string, unknown>
-      : {}
-    const detail = typeof upstreamError.message === "string"
-      ? upstreamError.message.slice(0, 500)
-      : "Gemini returned HTTP " + upstream.status + "."
-    throw new Error("Gemini HTTP " + upstream.status + ": " + detail)
-  }
-
-  const reply = extractGeminiText(result)
-  if (!reply) throw new Error("Gemini returned no text.")
-  return { reply, provider: "Gemini", model }
-}
-
-async function callOpenRouter(
-  apiKey: string,
-  model: string,
-  systemInstruction: string,
-  history: Array<Record<string, unknown>>,
-  message: string,
-) {
-  const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + apiKey,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://universalerp.app",
-      "X-Title": "UniversalERP Zaki AI",
-    },
-    signal: AbortSignal.timeout(25_000),
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemInstruction },
-        ...history.map((entry) => ({
-          role: entry.role === "model" ? "assistant" : "user",
-          content: (entry.parts as Array<Record<string, unknown>>)?.[0]?.text ?? "",
-        })),
-        { role: "user", content: message },
-      ],
-      temperature: 0.25,
-      max_tokens: 1_400,
-    }),
-  })
-
-  const result = await upstream.json().catch(() => ({})) as Record<string, unknown>
-  if (!upstream.ok) {
-    const upstreamError = result.error && typeof result.error === "object"
-      ? result.error as Record<string, unknown>
-      : {}
-    const detail = typeof upstreamError.message === "string"
-      ? upstreamError.message.slice(0, 500)
-      : "OpenRouter returned HTTP " + upstream.status + "."
-    throw new Error("OpenRouter HTTP " + upstream.status + ": " + detail)
-  }
-
-  const reply = extractOpenRouterText(result)
-  if (!reply) throw new Error("OpenRouter returned no text.")
-  return { reply, provider: "OpenRouter free fallback", model }
-}
-
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -816,57 +701,21 @@ Deno.serve(async (request) => {
   const systemInstruction = SYSTEM_INSTRUCTION + legacyInstruction + sourceInstruction
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? ""
-  const openRouterKey = Deno.env.get("OPENROUTER_API_KEY") ?? ""
   const geminiModel = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash"
 
-  const configuredOpenRouterModel = Deno.env.get("OPENROUTER_MODEL")?.trim() ?? ""
-  // Keep this fallback strictly free; never silently route ERP data to a paid model.
-  const openRouterModel = configuredOpenRouterModel === "openrouter/free" ||
-      configuredOpenRouterModel.endsWith(":free")
-    ? configuredOpenRouterModel
-    : "openrouter/free"
-
-  let answer: { reply: string; provider: string; model: string } | null = null
-  let geminiFailure = ""
-
-  if (geminiKey) {
-    try {
-      answer = await callGemini(geminiKey, geminiModel, systemInstruction, history, message)
-    } catch (error) {
-      geminiFailure = error instanceof Error ? error.message : "Gemini request failed."
-      console.warn("Zaki AI primary provider failed; trying the free fallback.", geminiFailure)
-    }
-  } else {
-    geminiFailure = "GEMINI_API_KEY is not configured."
-  }
-
-  if (!answer && openRouterKey) {
-    try {
-      answer = await callOpenRouter(
-        openRouterKey,
-        openRouterModel,
-        systemInstruction,
-        history,
-        message,
-      )
-    } catch (error) {
-      const fallbackFailure = error instanceof Error ? error.message : "OpenRouter request failed."
-      console.error("Zaki AI free fallback failed.", fallbackFailure)
-      return jsonResponse({
-        error: "Both AI providers are currently unavailable. Gemini: " +
-          geminiFailure.slice(0, 260) +
-          " OpenRouter free fallback: " +
-          fallbackFailure.slice(0, 260),
-      }, 502)
-    }
-  }
-
-  if (!answer) {
+  if (!geminiKey) {
     return jsonResponse({
-      error: openRouterKey
-        ? "Zaki AI could not reach an available model. " + geminiFailure.slice(0, 500)
-        : "Gemini is unavailable and no free fallback is configured. Add OPENROUTER_API_KEY to Supabase Edge Function Secrets.",
+      error: "Gemini is not configured. Add GEMINI_API_KEY to Supabase Edge Function Secrets.",
     }, 503)
+  }
+
+  let answer: { reply: string; provider: string; model: string }
+  try {
+    answer = await callGemini(geminiKey, geminiModel, systemInstruction, history, message)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Gemini request failed."
+    console.error("Zaki AI Gemini request failed.", detail)
+    return jsonResponse({ error: detail }, 502)
   }
 
   const sourceNames = cloudContext
