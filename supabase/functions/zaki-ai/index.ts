@@ -79,18 +79,39 @@ function findInvoiceHint(message: string) {
 
 function dateParts(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).formatToParts(date)
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-  return { year: Number(values.year), month: Number(values.month), day: Number(values.day) }
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+  }
 }
 
 function zonedMidnight(year: number, month: number, day: number, timeZone: string) {
-  const target = Date.UTC(year, month - 1, day)
+  const target = Date.UTC(year, month - 1, day, 0, 0, 0)
   let guess = target
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const local = dateParts(new Date(guess), timeZone)
-    const represented = Date.UTC(local.year, local.month - 1, local.day)
+    const represented = Date.UTC(
+      local.year,
+      local.month - 1,
+      local.day,
+      local.hour,
+      local.minute,
+      local.second,
+    )
     const adjustment = target - represented
     if (adjustment === 0) break
     guess += adjustment
