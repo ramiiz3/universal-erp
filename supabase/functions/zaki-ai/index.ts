@@ -61,13 +61,20 @@ function findCustomerHint(message: string) {
 }
 
 function findSupplierHint(message: string) {
-  const match = message.match(/\b(?:supplier|vendor)\s+(?:named\s+|called\s+)?([a-z][a-z0-9 .'-]{1,65})/i)
-  return match?.[1]?.replace(/\s+(?:purchase|purchases|order|orders|invoice|invoices).*$/i, "").trim() ?? ""
+  const labelled = message.match(/\b(?:supplier|vendor)\s+(?:named\s+|called\s+)?([a-z][a-z0-9 .'-]{1,65})/i)
+  if (labelled?.[1]) return labelled[1].replace(/\s+(?:purchase|purchases|order|orders|invoice|invoices).*$/i, "").trim()
+  const from = message.match(/\b(?:from|for)\s+([a-z][a-z0-9 .'-]{1,55}?)(?:\s+(?:purchase|purchases|orders|invoices)\b|[?.!]|$)/i)
+  return from?.[1]?.trim() ?? ""
 }
 
 function findProductHint(message: string) {
-  const match = message.match(/\b(?:product|item|medicine)\s+(?:named\s+|called\s+)?([a-z0-9][a-z0-9 .'-]{1,65})/i)
-  return match?.[1]?.replace(/\s+(?:stock|inventory|price|quantity|expiry|expiring).*$/i, "").trim() ?? ""
+  const labelled = message.match(/\b(?:product|item|medicine)\s+(?:named\s+|called\s+)?([a-z0-9][a-z0-9 .'-]{1,65})/i)
+  if (labelled?.[1]) return labelled[1].replace(/\s+(?:stock|inventory|price|quantity|expiry|expiring).*$/i, "").trim()
+  const ofQuery = message.match(/\b(?:stock|inventory|expiry|expiring|price|availability|quantity|batch|details)\s+(?:of|for)\s+(.+?)(?:[?.!]|$)/i)
+  if (ofQuery?.[1]) return ofQuery[1].replace(/\s+(?:in stock|stock|inventory|batch|expiry|expiring|details).*$/i, "").trim()
+  const howMany = message.match(/\b(?:how many|how much|show me|find|search|look up|lookup)\s+(?:the\s+)?(.+?)\s+(?:in stock|stock|inventory|expiry|expiring|batch details)\b/i)
+  if (howMany?.[1]) return howMany[1].trim()
+  return ""
 }
 
 function findInvoiceHint(message: string) {
@@ -391,14 +398,13 @@ async function loadCloudBusinessData(
     productHint ? { column: "name", value: productHint } : undefined,
   ))
 
-  if (wantsInventory || broadQuestion) {
+  if ((wantsInventory || broadQuestion) && !productHint) {
     tasks.push(add(
       "lots",
       "inventory_lots",
       "id, product_id, branch_id, warehouse_id, batch, expiry, quantity, purchase_price, selling_price, total_purchase_value, total_selling_value, created_at",
       350,
       "created_at",
-      productHint ? undefined : undefined,
     ))
   }
 
@@ -474,6 +480,19 @@ async function loadCloudBusinessData(
   }
 
   await Promise.all(tasks)
+
+  const matchedProducts = cloud.products as RecordSet | undefined
+  if (wantsInventory && productHint && matchedProducts?.records.length) {
+    cloud.lots = await fetchChildRows(
+      db,
+      companyId,
+      "inventory_lots",
+      "id, product_id, branch_id, warehouse_id, batch, expiry, quantity, purchase_price, selling_price, total_purchase_value, total_selling_value, created_at",
+      "product_id",
+      matchedProducts.records.map((row) => String(row.id)),
+      350,
+    )
+  }
 
   const sales = cloud.sales as RecordSet | undefined
   if (sales?.records.length) {
