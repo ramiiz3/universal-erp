@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/pages/AI.tsx"
+      - "src/App.tsx"
       - "src/auth/WorkspaceRoutes.tsx"
       - "src/inventory-cloud/WorkspaceShell.tsx"
       - "supabase/functions/zaki-ai/**"
