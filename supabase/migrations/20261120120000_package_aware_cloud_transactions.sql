@@ -614,6 +614,7 @@ declare
   v_packaging_id uuid;
   v_factor numeric;
   v_packaging_price numeric;
+  v_packaging_price_inclusive boolean := false;
   v_packaging_name text;
   v_packaging_unit text;
   v_remaining numeric;
@@ -731,6 +732,7 @@ begin
       raise exception 'Active company product not found' using errcode = 'P0002';
     end if;
     v_packaging_price := null;
+    v_packaging_price_inclusive := false;
     if v_packaging_id is not null then
       select * into v_packaging
       from public.product_packagings
@@ -755,7 +757,8 @@ begin
       from public.units_of_measure as units
       where units.company_id = p_company_id and units.id = v_packaging.unit_id;
 
-      select prices.amount into v_packaging_price
+      select prices.amount, prices.tax_inclusive
+      into v_packaging_price, v_packaging_price_inclusive
       from public.product_prices as prices
       where prices.company_id = p_company_id
         and prices.product_id = v_product.id
@@ -789,16 +792,19 @@ begin
     loop
       exit when v_remaining <= 0;
       v_alloc_qty := least(v_remaining, v_lot.quantity);
+      v_vat_rate := case when v_product.vat_rate > 0
+        then v_product.vat_rate else v_company.tax_rate end;
       if v_factor > 1 and v_packaging_price is not null then
-        v_price := v_packaging_price / v_factor;
+        v_price := case when v_packaging_price_inclusive
+          then v_packaging_price / (1 + v_vat_rate / 100) / v_factor
+          else v_packaging_price / v_factor
+        end;
       else
         v_price := coalesce(v_lot.selling_price, v_product.selling_price);
       end if;
       if v_price < 0 then
         raise exception 'Resolved lot selling price is invalid' using errcode = '22023';
       end if;
-      v_vat_rate := case when v_product.vat_rate > 0
-        then v_product.vat_rate else v_company.tax_rate end;
       v_gross := round(v_alloc_qty * v_price, 2);
       v_allocations := v_allocations || jsonb_build_array(jsonb_build_object(
         'product_id', v_product.id,
