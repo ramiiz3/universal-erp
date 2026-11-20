@@ -105,7 +105,6 @@ export default function ProductCatalogPage() {
   const [unitSymbol, setUnitSymbol] = useState("")
   const [unitDimension, setUnitDimension] = useState("count")
   const [allowFractional, setAllowFractional] = useState(false)
-  const [baseCategoryId, setBaseCategoryId] = useState("")
 
   const [packName, setPackName] = useState("")
   const [packUnitId, setPackUnitId] = useState("")
@@ -437,7 +436,7 @@ export default function ProductCatalogPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
                 <label className="text-xs font-semibold uppercase text-slate-500">Category</label>
-                <select value={categoryForProduct || baseCategoryId} onChange={(event) => { setBaseCategoryId(event.target.value); void setProductCategory(event.target.value) }} disabled={!canManage || saving} className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
+                <select value={categoryForProduct} onChange={(event) => { void setProductCategory(event.target.value) }} disabled={!canManage || saving} className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
                   <option value="">Uncategorized</option>
                   {categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.parent_id ? "— " : ""}{item.name}</option>)}
                 </select>
