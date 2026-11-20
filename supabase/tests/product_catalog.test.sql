@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(17);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -63,6 +63,13 @@ select is((select count(*)::integer from public.product_barcodes), 1, 'legacy pr
 select is((select count(*)::integer from public.product_prices), 2, 'legacy purchase and retail prices are migrated');
 select is((select barcode_value from public.product_barcodes limit 1), '000123', 'barcode leading zeroes are preserved');
 select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');
+select throws_ok(
+  $ update public.products set unit = 'box'
+     where id = '64000000-0000-4000-8000-000000000001' $,
+  '22023',
+  'A product base unit cannot be changed after creation. Create a new product or use a reviewed stock conversion workflow.',
+  'base unit cannot be changed without a reviewed stock conversion'
+);
 select is((select count(*)::integer from public.product_categories where company_id = '62000000-0000-4000-8000-000000000002'), 0, 'company A cannot see company B catalog rows');
 
 select lives_ok(
