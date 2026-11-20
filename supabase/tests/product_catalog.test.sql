@@ -168,10 +168,11 @@ select is(
   'archiving packaging automatically archives its barcodes'
 );
 select is(
-  (select is_active from public.product_prices
-   where packaging_id = (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10')),
-  false,
-  'archiving packaging automatically closes its prices'
+  (select count(*)::integer from public.product_prices
+   where packaging_id = (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10')
+     and is_active),
+  0,
+  'archiving packaging automatically closes all active prices'
 );
 select is(
   (select is_active from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10'),
