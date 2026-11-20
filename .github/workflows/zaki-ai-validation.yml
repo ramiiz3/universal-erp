@@ -54,7 +54,7 @@ jobs:
 
       - name: Stop isolated local Supabase stack
         if: always()
-        run: npx supabase stop --no-backup
+        run: npx supabase stop
 
       - name: Run frontend tests
         run: npm test
