@@ -354,13 +354,6 @@ export default function ProductCatalogPage() {
         .eq("company_id", companyId)
         .eq("id", packaging.id)
       if (updateError) throw updateError
-      const activeCodes = barcodes.filter((item) => item.packaging_id === packaging.id && item.is_active)
-      if (activeCodes.length) {
-        const { error: barcodeError } = await supabase!.from("product_barcodes")
-          .update({ is_active: false, is_primary: false })
-          .in("id", activeCodes.map((item) => item.id))
-        if (barcodeError) throw barcodeError
-      }
     }, "Packaging archived. Historical transactions are retained.")
   }
 
