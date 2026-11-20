@@ -396,6 +396,7 @@ declare
   v_entered_unit_cost numeric;
   v_selling_price numeric;
   v_entered_selling_price numeric;
+  v_allow_fractional boolean := true;
   v_expiry date;
   v_batch text;
   v_previous numeric;
@@ -483,6 +484,21 @@ begin
       raise exception 'Purchase line not found in this purchase' using errcode = 'P0002';
     end if;
     v_quantity := (v_line->>'quantity')::numeric;
+    v_allow_fractional := true;
+    if v_purchase_line.packaging_id is not null then
+      select packagings.allow_fractional_quantity into v_allow_fractional
+      from public.product_packagings as packagings
+      where packagings.id = v_purchase_line.packaging_id
+        and packagings.company_id = p_company_id
+        and packagings.product_id = v_purchase_line.product_id;
+      if not found then
+        raise exception 'Purchase packaging record is unavailable' using errcode = 'P0002';
+      end if;
+      if not v_allow_fractional and v_quantity <> trunc(v_quantity) then
+        raise exception 'This packaging does not allow fractional received quantities'
+          using errcode = '22023';
+      end if;
+    end if;
     if nullif(v_line->>'packaging_id', '') is not null
        and (v_line->>'packaging_id')::uuid is distinct from v_purchase_line.packaging_id then
       raise exception 'Receipt packaging must match the purchase order packaging'
