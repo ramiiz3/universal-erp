@@ -62,7 +62,8 @@ select is((select count(*)::integer from public.product_packagings), 1, 'legacy 
 select is((select count(*)::integer from public.product_barcodes), 1, 'legacy product barcode is migrated');
 select is((select count(*)::integer from public.product_prices), 2, 'legacy purchase and retail prices are migrated');
 select is((select barcode_value from public.product_barcodes limit 1), '000123', 'barcode leading zeroes are preserved');
-select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');select throws_ok(
+select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');
+select throws_ok(
   $test$ update public.product_packagings set is_active = false where is_base $test$,
   '22023',
   'The base packaging cannot be archived.',
@@ -106,13 +107,13 @@ select is(
 );
 
 select lives_ok(
-  $ insert into public.product_barcodes (
+  $test$ insert into public.product_barcodes (
        company_id, product_id, packaging_id, barcode_value, symbology, barcode_kind, created_by
      )
      select '62000000-0000-4000-8000-000000000001',
             '64000000-0000-4000-8000-000000000001',
             id, '0000001234567', 'EAN13', 'manufacturer_gtin', auth.uid()
-     from public.product_packagings where name = 'Strip of 10' $,
+     from public.product_packagings where name = 'Strip of 10' $test$,
   'catalog manager can attach a manufacturer barcode to a packaging level'
 );
 select throws_ok(
