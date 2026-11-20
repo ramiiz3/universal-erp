@@ -54,9 +54,11 @@ The database runner executes each complete pgTAP SQL file on a single
 connection, verifies all planned assertions, and confirms that each test
 transaction rolled back. The authentication/company suite has 39 assertions,
 the inventory tenant suite has 26, the inventory workflow suite has 36, and
-the cloud transaction suite has 62 assertions covering tenant/branch isolation,
+the cloud transaction suite has 68 assertions covering tenant/branch isolation,
 FEFO sales, invoice payments, partial purchase receipts, stock ledger entries,
-and retry idempotency (163 database assertions total). The Storage test creates
+and retry idempotency; the product catalog suite has 17 assertions covering
+company isolation, legacy backfill, packaging conversion, barcode uniqueness and
+base-unit integrity (186 database assertions total). The Storage test creates
 temporary local users and companies, authenticates through local Auth, tests
 private-file upload, cross-company access and deletion through the Storage
 HTTP API, and cleans up its temporary resources. Both scripts are local-only
@@ -89,8 +91,8 @@ grant this privilege.
 - `/auth/login`, `/auth/register`, `/auth/recover`, and `/auth/invite/:token`
   are public authentication and invitation routes.
 - `/workspace` is the authenticated, membership-verified company workspace.
-- `/workspace/products`, `/workspace/warehouses`, `/workspace/inventory`, and
-  `/workspace/movements` use company-scoped Supabase data under RLS and the
+- `/workspace/products`, `/workspace/catalog`, `/workspace/warehouses`,
+  `/workspace/inventory`, and `/workspace/movements` use company-scoped Supabase data under RLS and the
   active company verified by `AuthProvider`.
 - `/workspace/pos` checks out sales through `checkout_cloud_sale_once`, which
   allocates unexpired lots by FEFO, snapshots lot prices and costs, and writes
