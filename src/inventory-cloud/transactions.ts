@@ -196,7 +196,7 @@ export function estimateFefoSale(
     for (const lot of eligible) {
       if (remaining <= 0) break
       const quantity = Math.min(remaining, Number(lot.quantity))
-      const unitPrice = factor > 1 && item.packagePrice !== null && item.packagePrice !== undefined
+      const unitPrice = item.packagePrice !== null && item.packagePrice !== undefined
         ? item.packagePrice / factor
         : lot.selling_price ?? product.selling_price
       const lineGross = roundMoney(quantity * unitPrice)
