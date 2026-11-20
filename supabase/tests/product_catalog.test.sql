@@ -63,14 +63,14 @@ select is((select count(*)::integer from public.product_barcodes), 1, 'legacy pr
 select is((select count(*)::integer from public.product_prices), 2, 'legacy purchase and retail prices are migrated');
 select is((select barcode_value from public.product_barcodes limit 1), '000123', 'barcode leading zeroes are preserved');
 select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');select throws_ok(
-  $ update public.product_packagings set is_active = false where is_base $,
+  $test$ update public.product_packagings set is_active = false where is_base $test$,
   '22023',
   'The base packaging cannot be archived.',
   'the product base packaging cannot be archived'
 );
 select throws_ok(
-  $ update public.products set unit = 'box'
-     where id = '64000000-0000-4000-8000-000000000001' $,
+  $test$ update public.products set unit = 'box'
+     where id = '64000000-0000-4000-8000-000000000001' $test$,
   '22023',
   'A product base unit cannot be changed after creation. Create a new product or use a reviewed stock conversion workflow.',
   'base unit cannot be changed without a reviewed stock conversion'
@@ -104,21 +104,22 @@ select is(
   10::numeric,
   'packaging conversion factor is stored on the product packaging'
 );
-select throws_ok(
-  $ update public.product_packagings set base_quantity = 20 where name = 'Strip of 10' $,
-  '22023',
-  'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.',
-  'a referenced packaging conversion cannot be silently changed'
-);
+
 select lives_ok(
-  $$ insert into public.product_barcodes (
+  $ insert into public.product_barcodes (
        company_id, product_id, packaging_id, barcode_value, symbology, barcode_kind, created_by
      )
      select '62000000-0000-4000-8000-000000000001',
             '64000000-0000-4000-8000-000000000001',
             id, '0000001234567', 'EAN13', 'manufacturer_gtin', auth.uid()
-     from public.product_packagings where name = 'Strip of 10' $$,
+     from public.product_packagings where name = 'Strip of 10' $,
   'catalog manager can attach a manufacturer barcode to a packaging level'
+);
+select throws_ok(
+  $test$ update public.product_packagings set base_quantity = 20 where name = 'Strip of 10' $test$,
+  '22023',
+  'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.',
+  'a referenced packaging conversion cannot be silently changed'
 );
 select is(
   (select barcode_value from public.product_barcodes where barcode_value = '0000001234567'),
@@ -126,13 +127,13 @@ select is(
   'packaging barcode leading zeroes are preserved'
 );
 select lives_ok(
-  $ insert into public.product_prices (
+  $test$ insert into public.product_prices (
        company_id, product_id, packaging_id, price_type, currency_code, amount, created_by
      )
      select '62000000-0000-4000-8000-000000000001',
             '64000000-0000-4000-8000-000000000001',
             id, 'retail', 'AED', 12.50, auth.uid()
-     from public.product_packagings where name = 'Strip of 10' $,
+     from public.product_packagings where name = 'Strip of 10' $test$,
   'catalog manager can set a package-specific retail price'
 );
 select is(
@@ -143,7 +144,7 @@ select is(
   'package-specific price is active before archival'
 );
 select lives_ok(
-  $ update public.product_packagings set is_active = false where name = 'Strip of 10' $,
+  $test$ update public.product_packagings set is_active = false where name = 'Strip of 10' $test$,
   'catalog manager can archive an unused or discontinued packaging level'
 );
 select is(
