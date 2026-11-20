@@ -471,8 +471,12 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $catalog$
 begin
+  if old.is_base and not new.is_active then
+    raise exception using errcode = '22023', message = 'The base packaging cannot be archived.';
+  end if;
+
   if new.unit_id is distinct from old.unit_id
      or new.base_quantity is distinct from old.base_quantity
      or new.is_base is distinct from old.is_base then
@@ -485,20 +489,49 @@ begin
       where prices.company_id = old.company_id
         and prices.packaging_id = old.id
     ) then
-      raise exception using
-        errcode = '22023',
+      raise exception using errcode = '22023',
         message = 'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.';
     end if;
   end if;
   return new;
 end;
-$;
+$catalog$;
 
+create or replace function private.archive_product_packaging_dependents()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $catalog$
+begin
+  if old.is_active and not new.is_active then
+    update public.product_barcodes as barcodes
+    set is_active = false, is_primary = false, updated_at = now()
+    where barcodes.company_id = old.company_id
+      and barcodes.packaging_id = old.id
+      and barcodes.is_active;
+
+    update public.product_prices as prices
+    set is_active = false,
+        valid_to = greatest(prices.valid_from, current_date),
+        updated_at = now()
+    where prices.company_id = old.company_id
+      and prices.packaging_id = old.id
+      and prices.is_active;
+  end if;
+  return new;
+end;
+$catalog$;
 revoke all on function private.protect_product_packaging_conversion() from public, anon, authenticated;
 drop trigger if exists protect_product_packaging_conversion on public.product_packagings;
 create trigger protect_product_packaging_conversion
 before update on public.product_packagings
 for each row execute function private.protect_product_packaging_conversion();
+
+drop trigger if exists archive_product_packaging_dependents on public.product_packagings;
+create trigger archive_product_packaging_dependents
+after update of is_active on public.product_packagings
+for each row execute function private.archive_product_packaging_dependents();
 
 create or replace function private.sync_product_catalog_defaults()
 returns trigger
