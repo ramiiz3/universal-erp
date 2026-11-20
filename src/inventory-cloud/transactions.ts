@@ -3,6 +3,12 @@ import type { CloudInventoryLot, CloudProduct } from "./CloudInventoryContext"
 export type SaleCartItem = {
   productId: string
   quantity: number
+  packagingId?: string | null
+  packagingName?: string
+  packagingUnit?: string
+  conversionFactor?: number
+  packagePrice?: number | null
+  allowFractionalQuantity?: boolean
 }
 
 export type PurchaseCartItem = {
@@ -10,12 +16,19 @@ export type PurchaseCartItem = {
   quantity: number
   unitCost: number
   discountAmount: number
+  packagingId?: string | null
+  packagingName?: string
+  packagingUnit?: string
+  conversionFactor?: number
+  baseUnit?: string
+  allowFractionalQuantity?: boolean
 }
 
 export type PurchaseReceiveItem = {
   purchaseLineId: string
   outstandingQuantity: number
   quantity: number
+  packagingId?: string | null
   unitCost: number | null
   sellingPrice: number | null
   batch: string
@@ -42,14 +55,22 @@ function positiveQuantity(value: number, label: string) {
 export function buildSaleLines(items: SaleCartItem[]) {
   if (!items.length) throw new Error("Add at least one product to the sale.")
   const seen = new Set<string>()
-  return items.map(({ productId, quantity }) => {
+  return items.map(({ productId, quantity, packagingId, conversionFactor, allowFractionalQuantity }) => {
     if (!productId || seen.has(productId)) {
       throw new Error("Each product must appear only once in the sale.")
     }
     seen.add(productId)
+    const safeQuantity = positiveQuantity(quantity, "Sale quantity")
+    if (allowFractionalQuantity === false && safeQuantity !== Math.trunc(safeQuantity)) {
+      throw new Error("This packaging does not allow fractional quantities.")
+    }
+    if (conversionFactor !== undefined && (!Number.isFinite(conversionFactor) || conversionFactor <= 0)) {
+      throw new Error("Packaging conversion must be greater than zero.")
+    }
     return {
       product_id: productId,
-      quantity: positiveQuantity(quantity, "Sale quantity"),
+      quantity: safeQuantity,
+      ...(packagingId ? { packaging_id: packagingId } : {}),
     }
   })
 }
@@ -74,12 +95,18 @@ export function buildSalePayments(
 export function buildPurchaseLines(items: PurchaseCartItem[]) {
   if (!items.length) throw new Error("Add at least one product to the purchase.")
   const seen = new Set<string>()
-  return items.map(({ productId, quantity, unitCost, discountAmount }) => {
+  return items.map(({ productId, quantity, unitCost, discountAmount, packagingId, conversionFactor, allowFractionalQuantity }) => {
     if (!productId || seen.has(productId)) {
       throw new Error("Each product must appear only once in the purchase.")
     }
     seen.add(productId)
     const qty = positiveQuantity(quantity, "Purchase quantity")
+    if (allowFractionalQuantity === false && qty !== Math.trunc(qty)) {
+      throw new Error("This packaging does not allow fractional quantities.")
+    }
+    if (conversionFactor !== undefined && (!Number.isFinite(conversionFactor) || conversionFactor <= 0)) {
+      throw new Error("Packaging conversion must be greater than zero.")
+    }
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       throw new Error("Unit cost must be zero or greater.")
     }
@@ -92,6 +119,7 @@ export function buildPurchaseLines(items: PurchaseCartItem[]) {
       quantity: qty,
       unit_cost: unitCost,
       discount_amount: discount,
+      ...(packagingId ? { packaging_id: packagingId } : {}),
     }
   })
 }
@@ -119,6 +147,7 @@ export function buildPurchaseReceiptLines(items: PurchaseReceiveItem[]) {
     return {
       purchase_line_id: item.purchaseLineId,
       quantity,
+      ...(item.packagingId ? { packaging_id: item.packagingId } : {}),
       unit_cost: item.unitCost,
       selling_price: item.sellingPrice,
       batch: item.batch.trim(),
@@ -150,7 +179,8 @@ export function estimateFefoSale(
   for (const item of items) {
     const product = products.find((candidate) => candidate.id === item.productId && candidate.is_active)
     if (!product || !Number.isFinite(item.quantity) || item.quantity <= 0) continue
-    let remaining = item.quantity
+    const factor = item.conversionFactor ?? 1
+    let remaining = item.quantity * factor
     const eligible = lots
       .filter((lot) => lot.product_id === product.id
         && lot.warehouse_id === warehouseId
@@ -166,7 +196,9 @@ export function estimateFefoSale(
     for (const lot of eligible) {
       if (remaining <= 0) break
       const quantity = Math.min(remaining, Number(lot.quantity))
-      const unitPrice = lot.selling_price ?? product.selling_price
+      const unitPrice = factor > 1 && item.packagePrice !== null && item.packagePrice !== undefined
+        ? item.packagePrice / factor
+        : lot.selling_price ?? product.selling_price
       const lineGross = roundMoney(quantity * unitPrice)
       subtotal += lineGross
       const rate = product.vat_rate > 0 ? product.vat_rate : companyTaxRate
