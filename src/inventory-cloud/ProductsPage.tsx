@@ -253,7 +253,7 @@ export default function ProductsPage() {
               {PRODUCT_FIELDS.map(({ key, label, type }) => (
                 <label key={key} className="text-sm font-medium">
                   {label}
-                  <input required={key === "name" || key === "unit"} type={type ?? "text"} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} max={key === "vatRate" ? "100" : undefined} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                  <input required={key === "name" || key === "unit"} readOnly={Boolean(editing) && key === "unit"} title={editing && key === "unit" ? "Stock base unit is locked after product creation. Use a reviewed stock conversion workflow to change it." : undefined} type={type ?? "text"} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} max={key === "vatRate" ? "100" : undefined} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 </label>
               ))}
               <label className="text-sm font-medium sm:col-span-2">Description
