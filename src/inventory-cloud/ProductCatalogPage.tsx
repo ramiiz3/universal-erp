@@ -323,6 +323,10 @@ export default function ProductCatalogPage() {
     event.preventDefault()
     if (!selectedProduct || !pricePackId || !supabase || !user) return
     const amount = Number(priceAmount)
+    if (priceType === "purchase" && priceInclusive) {
+      setError("Purchase prices are stored before VAT; leave tax-inclusive off for purchase costs.")
+      return
+    }
     if (!Number.isFinite(amount) || amount < 0) {
       setError("Enter a valid price.")
       return
@@ -518,10 +522,10 @@ export default function ProductCatalogPage() {
                 <div className="mt-2 space-y-2">
                   <select required value={pricePackId} onChange={(event) => setPricePackId(event.target.value)} className="h-10 w-full rounded-lg border px-3 text-sm dark:border-slate-700 dark:bg-slate-950"><option value="">Select packaging</option>{packagings.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
                   <div className="grid grid-cols-2 gap-2">
-                    <select value={priceType} onChange={(event) => setPriceType(event.target.value)} className="h-10 rounded-lg border px-2 text-sm dark:border-slate-700 dark:bg-slate-950">{PRICE_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+                    <select value={priceType} onChange={(event) => { setPriceType(event.target.value); if (event.target.value === "purchase") setPriceInclusive(false) }} className="h-10 rounded-lg border px-2 text-sm dark:border-slate-700 dark:bg-slate-950">{PRICE_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
                     <input required type="number" min="0" step="0.01" value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} placeholder={`Price (${activeCompany?.currency || "AED"})`} className="h-10 rounded-lg border px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
                   </div>
-                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={priceInclusive} onChange={(event) => setPriceInclusive(event.target.checked)} /> Price includes VAT</label>
+                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={priceInclusive} disabled={priceType === "purchase"} onChange={(event) => setPriceInclusive(event.target.checked)} /> Price includes VAT</label>
                   <button disabled={!canManage || saving} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Save price</button>
                 </div>
                 <div className="mt-3 space-y-2 text-xs">
