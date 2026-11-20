@@ -8,6 +8,7 @@ import {
   ReceiptText,
   ShoppingBag,
   ShoppingCart,
+  Tags,
   Warehouse,
 } from "lucide-react"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
@@ -17,6 +18,7 @@ import { CloudInventoryProvider } from "./CloudInventoryContext"
 
 const navigation = [
   { to: "/workspace/products", label: "Products", icon: Package },
+  { to: "/workspace/catalog", label: "Catalog setup", icon: Tags },
   { to: "/workspace/warehouses", label: "Warehouses", icon: Warehouse },
   { to: "/workspace/inventory", label: "Inventory lots", icon: Boxes },
   { to: "/workspace/movements", label: "Stock movements", icon: ClipboardList },

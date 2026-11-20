@@ -18,6 +18,7 @@ import type { CompanyMembership } from "./AuthProvider"
 import { useTheme } from "../context/ThemeContext"
 import WorkspaceShell from "../inventory-cloud/WorkspaceShell"
 import ProductsPage from "../inventory-cloud/ProductsPage"
+import ProductCatalogPage from "../inventory-cloud/ProductCatalogPage"
 import WarehousesPage from "../inventory-cloud/WarehousesPage"
 import InventoryPage from "../inventory-cloud/InventoryPage"
 import MovementsPage from "../inventory-cloud/MovementsPage"
@@ -813,6 +814,7 @@ export default function WorkspaceRoutes() {
       <Route element={<InventoryWorkspaceGuard />}>
         <Route element={<WorkspaceShell />}>
           <Route path="products" element={<ProductsPage />} />
+          <Route path="catalog" element={<ProductCatalogPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="movements" element={<MovementsPage />} />

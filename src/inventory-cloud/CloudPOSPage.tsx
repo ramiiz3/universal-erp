@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth/AuthProvider"
@@ -10,6 +10,40 @@ import {
   estimateFefoSale,
   type SaleCartItem,
 } from "./transactions"
+
+type SalesPackaging = {
+  id: string
+  product_id: string
+  unit_id: string
+  name: string
+  base_quantity: number
+  is_base: boolean
+  is_sales_unit: boolean
+  allow_fractional_quantity: boolean
+  is_active: boolean
+}
+type SalesBarcode = {
+  id: string
+  product_id: string
+  packaging_id: string
+  barcode_value: string
+  symbology: string
+  is_active: boolean
+}
+type SalesUnit = { id: string; name: string; symbol: string }
+type SalesPrice = {
+  id: string
+  product_id: string
+  packaging_id: string
+  price_type: string
+  currency_code: string
+  amount: number
+  tax_inclusive: boolean
+  branch_id: string | null
+  valid_from: string
+  valid_to: string | null
+  is_active: boolean
+}
 
 const SALES_ROLES = new Set(["owner", "admin", "manager", "cashier"])
 const FINANCE_ROLES = new Set(["owner", "admin"])
@@ -42,8 +76,15 @@ export default function CloudPOSPage() {
   const [selectedBranchId, setSelectedBranchId] = useState("")
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("")
   const [selectedProductId, setSelectedProductId] = useState("")
+  const [selectedPackagingId, setSelectedPackagingId] = useState("")
   const [productSearch, setProductSearch] = useState("")
   const [quantity, setQuantity] = useState("1")
+  const [catalogPackages, setCatalogPackages] = useState<SalesPackaging[]>([])
+  const [catalogBarcodes, setCatalogBarcodes] = useState<SalesBarcode[]>([])
+  const [catalogUnits, setCatalogUnits] = useState<SalesUnit[]>([])
+  const [catalogPrices, setCatalogPrices] = useState<SalesPrice[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState("")
   const [cart, setCart] = useState<SaleCartItem[]>([])
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
@@ -54,6 +95,39 @@ export default function CloudPOSPage() {
   const [paymentReference, setPaymentReference] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadCatalog() {
+      if (!supabase || !companyId) {
+        setCatalogLoading(false)
+        return
+      }
+      setCatalogLoading(true)
+      setCatalogError("")
+      const [packageResult, barcodeResult, unitResult, priceResult] = await Promise.all([
+        supabase.from("product_packagings").select("*")
+          .eq("company_id", companyId).eq("is_active", true).eq("is_sales_unit", true)
+          .order("sort_order"),
+        supabase.from("product_barcodes").select("*")
+          .eq("company_id", companyId).eq("is_active", true),
+        supabase.from("units_of_measure").select("id,name,symbol")
+          .eq("company_id", companyId).eq("is_active", true),
+        supabase.from("product_prices").select("*")
+          .eq("company_id", companyId).eq("price_type", "retail").eq("is_active", true),
+      ])
+      if (cancelled) return
+      const errors = [packageResult.error, barcodeResult.error, unitResult.error, priceResult.error].filter(Boolean)
+      setCatalogError(errors.map((item) => item?.message).join("; "))
+      setCatalogPackages((packageResult.data ?? []) as SalesPackaging[])
+      setCatalogBarcodes((barcodeResult.data ?? []) as SalesBarcode[])
+      setCatalogUnits((unitResult.data ?? []) as SalesUnit[])
+      setCatalogPrices((priceResult.data ?? []) as SalesPrice[])
+      setCatalogLoading(false)
+    }
+    void loadCatalog()
+    return () => { cancelled = true }
+  }, [companyId])
 
   const preferredBranchId = activeCompany?.branchId
     && accessibleBranches.some((branch) => branch.id === activeCompany.branchId)
@@ -75,6 +149,41 @@ export default function CloudPOSPage() {
     ? selectedWarehouseId
     : preferredWarehouseId
   const activeProducts = products.filter((product) => product.is_active)
+  const selectedProduct = activeProducts.find((product) => product.id === selectedProductId) ?? null
+  const selectedProductPackages = catalogPackages.filter((pack) => pack.product_id === selectedProductId)
+  const selectedPackaging = selectedProductPackages.find((pack) => pack.id === selectedPackagingId)
+    ?? selectedProductPackages.find((pack) => pack.is_base)
+    ?? null
+  function retailPriceFor(productId: string, packagingId: string) {
+    const today = new Date().toISOString().slice(0, 10)
+    const selectedPrice = catalogPrices
+      .filter((price) => price.product_id === productId
+        && price.packaging_id === packagingId
+        && price.currency_code === (activeCompany?.currency || "AED")
+        && price.is_active
+        && price.valid_from <= today
+        && (!price.valid_to || price.valid_to >= today)
+        && (price.branch_id === branchId || price.branch_id === null))
+      .sort((left, right) => Number(Boolean(right.branch_id)) - Number(Boolean(left.branch_id))
+        || right.valid_from.localeCompare(left.valid_from))[0]
+    if (!selectedPrice) return null
+    const product = activeProducts.find((item) => item.id === productId)
+    const taxRate = Number(product?.vat_rate || 0) > 0
+      ? Number(product?.vat_rate)
+      : Number(activeCompany?.taxRate || 0)
+    return selectedPrice.tax_inclusive
+      ? Number(selectedPrice.amount) / (1 + taxRate / 100)
+      : Number(selectedPrice.amount)
+  }
+  function selectProduct(productId: string, packagingId?: string) {
+    const options = catalogPackages.filter((pack) => pack.product_id === productId)
+    const packageChoice = options.find((pack) => pack.id === packagingId)
+      ?? options.find((pack) => pack.is_base)
+      ?? options[0]
+    setSelectedProductId(productId)
+    setSelectedPackagingId(packageChoice?.id ?? "")
+    setPaymentAmountOverride(null)
+  }
   const parsedDiscount = Number(discount || 0)
   const estimate = estimateFefoSale(
     activeProducts,
@@ -86,27 +195,51 @@ export default function CloudPOSPage() {
   )
   const payableEstimate = estimate.total
   const paymentAmount = paymentAmountOverride ?? payableEstimate.toFixed(2)
+  const normalizedSearch = productSearch.trim().toLocaleLowerCase()
   const matchedProducts = activeProducts.filter((product) => {
-    const needle = productSearch.trim().toLocaleLowerCase()
-    return !needle || [product.name, product.sku, product.barcode]
-      .some((value) => value.toLocaleLowerCase().includes(needle))
+    return !normalizedSearch
+      || [product.name, product.sku, product.barcode]
+        .some((value) => value.toLocaleLowerCase().includes(normalizedSearch))
+      || catalogBarcodes.some((barcode) => barcode.product_id === product.id
+        && barcode.barcode_value.toLocaleLowerCase().includes(normalizedSearch))
   }).slice(0, 8)
 
-  function addProduct(productId = selectedProductId) {
+  function addProduct(productId = selectedProductId, packagingId = selectedPackaging?.id) {
     setError("")
     const parsedQuantity = Number(quantity)
-    if (!productId || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      setError("Select a product and enter a quantity greater than zero.")
+    const product = activeProducts.find((item) => item.id === productId)
+    const packaging = catalogPackages.find((item) => item.id === packagingId && item.product_id === productId)
+    if (!product || !packaging || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+      setError("Select a product, its packaging level, and a valid quantity.")
       return
     }
-    setCart((previous) => {
-      const existing = previous.find((item) => item.productId === productId)
-      return existing
-        ? previous.map((item) => item.productId === productId
-          ? { ...item, quantity: item.quantity + parsedQuantity }
-          : item)
-        : [...previous, { productId, quantity: parsedQuantity }]
-    })
+    if (!packaging.allow_fractional_quantity && parsedQuantity !== Math.trunc(parsedQuantity)) {
+      setError("This packaging only allows whole quantities.")
+      return
+    }
+    const unit = catalogUnits.find((item) => item.id === packaging.unit_id)
+    const packagePrice = retailPriceFor(product.id, packaging.id)
+    const existing = cart.find((item) => item.productId === productId)
+    if (existing && existing.packagingId !== packaging.id) {
+      setError("A product can appear once per invoice. Remove its existing cart line before changing its packaging.")
+      return
+    }
+    if (existing) {
+      setCart((previous) => previous.map((item) => item.productId === productId
+        ? { ...item, quantity: item.quantity + parsedQuantity, packagePrice }
+        : item))
+    } else {
+      setCart((previous) => [...previous, {
+        productId,
+        quantity: parsedQuantity,
+        packagingId: packaging.id,
+        packagingName: packaging.name,
+        packagingUnit: unit?.symbol || unit?.name || product.unit,
+        conversionFactor: Number(packaging.base_quantity),
+        packagePrice,
+        allowFractionalQuantity: packaging.allow_fractional_quantity,
+      }])
+    }
     setQuantity("1")
     setPaymentAmountOverride(null)
   }
@@ -170,8 +303,8 @@ export default function CloudPOSPage() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Checkout reserves eligible FEFO lots and records the invoice, payments, stock balance, and movement ledger in one transaction.</p>
         <Link to="/workspace/sales" className="mt-2 inline-block text-sm font-medium text-emerald-700 dark:text-emerald-400">Sales and invoices</Link>
       </header>
-      {(inventoryError || error) && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error || inventoryError}</p>}
-      {loading ? <p className="text-sm text-slate-500">Loading active-company inventory…</p> : (
+      {(inventoryError || catalogError || error) && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error || inventoryError || catalogError}</p>}
+      {loading || catalogLoading ? <p className="text-sm text-slate-500">Loading active-company products and packaging…</p> : (
         <form onSubmit={(event) => void submitSale(event)} className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
           <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -179,6 +312,7 @@ export default function CloudPOSPage() {
                 <select required value={branchId} onChange={(event) => {
                   setSelectedBranchId(event.target.value)
                   setSelectedWarehouseId("")
+                  setCart([])
                   setPaymentAmountOverride(null)
                 }} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950">
                   <option value="">Select branch</option>
@@ -198,31 +332,49 @@ export default function CloudPOSPage() {
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px_auto]">
               <label className="relative text-sm font-medium">Product, SKU, or barcode
                 <input value={productSearch} onChange={(event) => {
-                  setProductSearch(event.target.value)
+                  const value = event.target.value
+                  const needle = value.trim().toLocaleLowerCase()
+                  setProductSearch(value)
+                  const barcode = catalogBarcodes.find((item) => item.barcode_value.trim().toLocaleLowerCase() === needle)
+                  if (barcode) {
+                    selectProduct(barcode.product_id, barcode.packaging_id)
+                    return
+                  }
                   const exact = activeProducts.find((product) =>
-                    [product.name, product.sku, product.barcode].some((value) =>
-                      value.trim().toLocaleLowerCase() === event.target.value.trim().toLocaleLowerCase(),
+                    [product.name, product.sku, product.barcode].some((item) =>
+                      item.trim().toLocaleLowerCase() === needle,
                     ),
                   )
-                  setSelectedProductId(exact?.id ?? "")
+                  if (exact) selectProduct(exact.id)
+                  else setSelectedProductId("")
                 }} onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault()
-                    const match = activeProducts.find((product) => product.id === selectedProductId)
+                    const barcode = catalogBarcodes.find((item) => item.barcode_value.trim().toLocaleLowerCase() === normalizedSearch)
+                    const product = activeProducts.find((item) => item.id === (barcode?.product_id ?? selectedProductId))
                       ?? (matchedProducts.length === 1 ? matchedProducts[0] : undefined)
-                    if (match) addProduct(match.id)
-                    else setError("Select a matching product before adding it.")
+                    if (product) addProduct(product.id, barcode?.packaging_id ?? selectedPackaging?.id)
+                    else setError("Select a matching product or scan a known barcode before adding it.")
                   }
-                }} autoComplete="off" placeholder="Scan barcode or search" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
+                }} autoComplete="off" placeholder="Scan product, box, strip or unit barcode" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
                 {productSearch && matchedProducts.length > 0 && <div role="listbox" className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
                   {matchedProducts.map((product) => <button key={product.id} type="button" role="option" aria-selected={selectedProductId === product.id} onClick={() => {
-                    setSelectedProductId(product.id)
+                    selectProduct(product.id)
                     setProductSearch(product.name)
-                  }} className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{product.name}<span className="block text-xs text-slate-500">SKU {product.sku || "—"} · Barcode {product.barcode || "—"}</span></button>)}
+                  }} className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{product.name}<span className="block text-xs text-slate-500">SKU {product.sku || "—"} · {catalogBarcodes.filter((barcode) => barcode.product_id === product.id).length} package barcode(s)</span></button>)}
                 </div>}
               </label>
+              <label className="text-sm font-medium">Packaging
+                <select value={selectedPackaging?.id ?? ""} onChange={(event) => setSelectedPackagingId(event.target.value)} disabled={!selectedProduct} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950">
+                  <option value="">Select pack</option>
+                  {selectedProductPackages.map((pack) => {
+                    const unit = catalogUnits.find((item) => item.id === pack.unit_id)
+                    return <option key={pack.id} value={pack.id}>{pack.name} · 1 = {Number(pack.base_quantity)} {selectedProduct?.unit} ({unit?.symbol || unit?.name || ""})</option>
+                  })}
+                </select>
+              </label>
               <label className="text-sm font-medium">Quantity
-                <input type="number" min="0.000001" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
+                <input type="number" min="0.000001" step={selectedPackaging?.allow_fractional_quantity ? "any" : "1"} value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
               </label>
               <button type="button" onClick={() => {
                 const match = activeProducts.find((product) => product.id === selectedProductId)
@@ -232,11 +384,11 @@ export default function CloudPOSPage() {
                   return
                 }
                 addProduct(match.id)
-              }} className="self-end rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-emerald-700">Add item</button>
+              }} disabled={!selectedPackaging || catalogLoading} className="self-end rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-emerald-700">Add item</button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-sm">
-                <thead className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800"><tr><th className="py-2">Product</th><th>Qty</th><th>Estimated total</th><th /></tr></thead>
+                <thead className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800"><tr><th className="py-2">Product / packaging</th><th>Qty</th><th>Estimated total</th><th /></tr></thead>
                 <tbody>
                   {cart.map((item) => {
                     const product = activeProducts.find((candidate) => candidate.id === item.productId)
@@ -248,8 +400,8 @@ export default function CloudPOSPage() {
                       activeCompany?.taxRate ?? 0,
                     )
                     return <tr key={item.productId} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="py-3 font-medium">{product?.name ?? "Unavailable product"}<div className="text-xs text-slate-500">{product?.sku}</div></td>
-                      <td>{item.quantity} {product?.unit}</td>
+                      <td className="py-3 font-medium">{product?.name ?? "Unavailable product"}<div className="text-xs text-slate-500">{item.packagingName || product?.unit} · {item.packagingUnit || product?.unit} · {Number(item.conversionFactor ?? 1)} base units per pack · {product?.sku}</div></td>
+                      <td>{item.quantity} {item.packagingName} <span className="block text-xs text-slate-500">{Number(item.quantity * (item.conversionFactor ?? 1))} {product?.unit}</span></td>
                       <td>{itemEstimate.shortProducts.length ? "Stock short" : `${activeCompany?.currency ?? ""} ${itemEstimate.total.toFixed(2)}`}</td>
                       <td className="text-right"><button type="button" onClick={() => {
                         setCart((items) => items.filter((line) => line.productId !== item.productId))

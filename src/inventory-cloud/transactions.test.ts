@@ -59,6 +59,91 @@ describe("cloud transaction validation", () => {
     ])).toThrow(/only once/)
   })
 
+  it("carries package selection into sale and blocks fractional whole-pack sales", () => {
+    expect(buildSaleLines([{
+      productId: product.id,
+      quantity: 2,
+      packagingId: "carton-a",
+      packagingName: "Carton of 10",
+      conversionFactor: 10,
+      allowFractionalQuantity: false,
+    }])).toEqual([{
+      product_id: product.id,
+      quantity: 2,
+      packaging_id: "carton-a",
+    }])
+    expect(() => buildSaleLines([{
+      productId: product.id,
+      quantity: 1.5,
+      packagingId: "carton-a",
+      conversionFactor: 10,
+      allowFractionalQuantity: false,
+    }])).toThrow(/fractional quantities/)
+    expect(() => buildSaleLines([{
+      productId: product.id,
+      quantity: 1,
+      packagingId: "carton-a",
+      conversionFactor: 0,
+    }])).toThrow(/conversion/)
+  })
+
+  it("carries purchase packaging and validates package quantities", () => {
+    expect(buildPurchaseLines([{
+      productId: product.id,
+      quantity: 2,
+      unitCost: 35,
+      discountAmount: 0,
+      packagingId: "carton-a",
+      conversionFactor: 10,
+      baseUnit: "box",
+      allowFractionalQuantity: false,
+    }])).toEqual([{
+      product_id: product.id,
+      quantity: 2,
+      unit_cost: 35,
+      discount_amount: 0,
+      packaging_id: "carton-a",
+    }])
+    expect(() => buildPurchaseLines([{
+      productId: product.id,
+      quantity: 0.5,
+      unitCost: 35,
+      discountAmount: 0,
+      packagingId: "carton-a",
+      allowFractionalQuantity: false,
+    }])).toThrow(/fractional quantities/)
+  })
+
+  it("blocks fractional received quantities for whole-pack receipt lines", () => {
+    expect(() => buildPurchaseReceiptLines([{
+      purchaseLineId: "purchase-line-a",
+      outstandingQuantity: 2,
+      quantity: 0.5,
+      packagingId: "carton-a",
+      conversionFactor: 10,
+      allowFractionalQuantity: false,
+      unitCost: 35,
+      sellingPrice: 90,
+      batch: "CARTON-BATCH",
+      expiry: "2027-01-01",
+    }])).toThrow(/whole received quantities/)
+  })
+
+  it("estimates package sales in base stock units using the package price", () => {
+    const estimate = estimateFefoSale([product], [
+      lot({ id: "first-boxes", quantity: 4, selling_price: 4 }),
+      lot({ id: "second-boxes", quantity: 8, selling_price: 8, expiry: "2027-02-01" }),
+    ], [{
+      productId: product.id,
+      quantity: 1,
+      packagingId: "carton-a",
+      conversionFactor: 10,
+      packagePrice: 90,
+      allowFractionalQuantity: false,
+    }], "warehouse-a", 5, 0, "2026-06-01")
+    expect(estimate).toEqual({ subtotal: 90, vat: 4.5, total: 94.5, shortProducts: [] })
+  })
+
   it("validates purchase prices and line discounts", () => {
     expect(buildPurchaseLines([{
       productId: product.id,
