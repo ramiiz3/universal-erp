@@ -104,7 +104,7 @@ insert into public.product_prices (
    '62000000-0000-4000-8000-000000000001',
    '65000000-0000-4000-8000-000000000001',
    '69000000-0000-4000-8000-000000000002',
-   'retail', 'USD', 90, true, current_date,
+   'retail', 'USD', 105, true, current_date,
    '61000000-0000-4000-8000-000000000001');
 
 insert into public.inventory_lots (
@@ -472,7 +472,7 @@ select lives_ok(
     '{"name":"Package POS Customer"}'::jsonb,
     '[{"product_id":"65000000-0000-4000-8000-000000000001","packaging_id":"69000000-0000-4000-8000-000000000002","quantity":1}]',
     0,
-    '[{"method":"cash","amount":90,"reference":"carton-sale"}]',
+    '[{"method":"cash","amount":105,"reference":"carton-sale"}]',
     '68000000-0000-4000-8000-000000000024'
   ) $,
   'POS sells one carton using its packaging-specific retail price'
@@ -480,7 +480,7 @@ select lives_ok(
 select is(
   (select subtotal || ':' || vat_total || ':' || total
    from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024'),
-  '85.71:4.29:90.00',
+  '100.00:5.00:105.00',
   'POS extracts VAT from the tax-inclusive carton retail price'
 );
 select is(
@@ -500,8 +500,8 @@ select is(
    where sale_id = (select id from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024')
      and packaging_id = '69000000-0000-4000-8000-000000000002'
      and conversion_factor_snapshot = 10
-     and entered_unit_price = 85.714286
-     and unit_price = 8.571429),
+     and entered_unit_price = 100
+     and unit_price = 10),
   (select count(*)::integer from public.cloud_sale_lines
    where sale_id = (select id from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024')),
   'sale lines preserve the carton, price and conversion snapshot per FEFO lot'
