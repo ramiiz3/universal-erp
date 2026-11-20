@@ -140,7 +140,7 @@ create table public.product_packagings (
     references public.products (company_id, id) on delete cascade,
   foreign key (company_id, unit_id)
     references public.units_of_measure (company_id, id),
-  check (not is_base or base_quantity = 1)
+  check ((is_base and base_quantity = 1) or (not is_base and base_quantity > 1))
 );
 
 create unique index product_packagings_one_base_uidx
@@ -388,7 +388,7 @@ using (
 revoke all on public.product_categories, public.units_of_measure,
   public.product_packagings, public.product_barcodes, public.product_prices
 from public, anon, authenticated;
-grant select, insert, update, delete on public.product_categories,
+grant select, insert, update on public.product_categories,
   public.units_of_measure, public.product_packagings, public.product_barcodes,
   public.product_prices to authenticated;
 
@@ -465,6 +465,40 @@ begin
   return new;
 end;
 $$;
+
+create or replace function private.protect_product_packaging_conversion()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $
+begin
+  if new.unit_id is distinct from old.unit_id
+     or new.base_quantity is distinct from old.base_quantity
+     or new.is_base is distinct from old.is_base then
+    if exists (
+      select 1 from public.product_barcodes as barcodes
+      where barcodes.company_id = old.company_id
+        and barcodes.packaging_id = old.id
+    ) or exists (
+      select 1 from public.product_prices as prices
+      where prices.company_id = old.company_id
+        and prices.packaging_id = old.id
+    ) then
+      raise exception using
+        errcode = '22023',
+        message = 'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.';
+    end if;
+  end if;
+  return new;
+end;
+$;
+
+revoke all on function private.protect_product_packaging_conversion() from public, anon, authenticated;
+drop trigger if exists protect_product_packaging_conversion on public.product_packagings;
+create trigger protect_product_packaging_conversion
+before update on public.product_packagings
+for each row execute function private.protect_product_packaging_conversion();
 
 create or replace function private.sync_product_catalog_defaults()
 returns trigger
