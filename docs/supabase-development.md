@@ -58,7 +58,7 @@ the cloud transaction suite has 68 assertions covering tenant/branch isolation,
 FEFO sales, invoice payments, partial purchase receipts, stock ledger entries,
 and retry idempotency; the product catalog suite has 17 assertions covering
 company isolation, legacy backfill, packaging conversion, barcode uniqueness and
-base-unit integrity (186 database assertions total). The Storage test creates
+base-unit integrity (187 database assertions total). The Storage test creates
 temporary local users and companies, authenticates through local Auth, tests
 private-file upload, cross-company access and deletion through the Storage
 HTTP API, and cleans up its temporary resources. Both scripts are local-only
