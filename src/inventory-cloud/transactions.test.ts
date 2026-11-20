@@ -114,6 +114,21 @@ describe("cloud transaction validation", () => {
     }])).toThrow(/fractional quantities/)
   })
 
+  it("blocks fractional received quantities for whole-pack receipt lines", () => {
+    expect(() => buildPurchaseReceiptLines([{
+      purchaseLineId: "purchase-line-a",
+      outstandingQuantity: 2,
+      quantity: 0.5,
+      packagingId: "carton-a",
+      conversionFactor: 10,
+      allowFractionalQuantity: false,
+      unitCost: 35,
+      sellingPrice: 90,
+      batch: "CARTON-BATCH",
+      expiry: "2027-01-01",
+    }])).toThrow(/whole received quantities/)
+  })
+
   it("estimates package sales in base stock units using the package price", () => {
     const estimate = estimateFefoSale([product], [
       lot({ id: "first-boxes", quantity: 4, selling_price: 4 }),
