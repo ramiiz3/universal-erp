@@ -29,6 +29,8 @@ export type PurchaseReceiveItem = {
   outstandingQuantity: number
   quantity: number
   packagingId?: string | null
+  conversionFactor?: number
+  allowFractionalQuantity?: boolean
   unitCost: number | null
   sellingPrice: number | null
   batch: string
@@ -132,6 +134,12 @@ export function buildPurchaseReceiptLines(items: PurchaseReceiveItem[]) {
   if (!received.length) throw new Error("Enter a quantity to receive for at least one line.")
   return received.map((item) => {
     const quantity = positiveQuantity(item.quantity, "Received quantity")
+    if (item.allowFractionalQuantity === false && quantity !== Math.trunc(quantity)) {
+      throw new Error("This packaging only allows whole received quantities.")
+    }
+    if (item.conversionFactor !== undefined && (!Number.isFinite(item.conversionFactor) || item.conversionFactor <= 0)) {
+      throw new Error("Packaging conversion must be greater than zero.")
+    }
     if (quantity > item.outstandingQuantity) {
       throw new Error("Received quantity cannot exceed the purchase line balance.")
     }
