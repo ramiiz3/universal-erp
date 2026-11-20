@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(25);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -62,7 +62,12 @@ select is((select count(*)::integer from public.product_packagings), 1, 'legacy 
 select is((select count(*)::integer from public.product_barcodes), 1, 'legacy product barcode is migrated');
 select is((select count(*)::integer from public.product_prices), 2, 'legacy purchase and retail prices are migrated');
 select is((select barcode_value from public.product_barcodes limit 1), '000123', 'barcode leading zeroes are preserved');
-select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');
+select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');select throws_ok(
+  $ update public.product_packagings set is_active = false where is_base $,
+  '22023',
+  'The base packaging cannot be archived.',
+  'the product base packaging cannot be archived'
+);
 select throws_ok(
   $ update public.products set unit = 'box'
      where id = '64000000-0000-4000-8000-000000000001' $,
@@ -119,6 +124,43 @@ select is(
   (select barcode_value from public.product_barcodes where barcode_value = '0000001234567'),
   '0000001234567',
   'packaging barcode leading zeroes are preserved'
+);
+select lives_ok(
+  $ insert into public.product_prices (
+       company_id, product_id, packaging_id, price_type, currency_code, amount, created_by
+     )
+     select '62000000-0000-4000-8000-000000000001',
+            '64000000-0000-4000-8000-000000000001',
+            id, 'retail', 'AED', 12.50, auth.uid()
+     from public.product_packagings where name = 'Strip of 10' $,
+  'catalog manager can set a package-specific retail price'
+);
+select is(
+  (select count(*)::integer from public.product_prices
+   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')
+     and is_active),
+  1,
+  'package-specific price is active before archival'
+);
+select lives_ok(
+  $ update public.product_packagings set is_active = false where name = 'Strip of 10' $,
+  'catalog manager can archive an unused or discontinued packaging level'
+);
+select is(
+  (select is_active from public.product_barcodes where barcode_value = '0000001234567'),
+  false,
+  'archiving packaging automatically archives its barcodes'
+);
+select is(
+  (select is_active from public.product_prices
+   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')),
+  false,
+  'archiving packaging automatically closes its prices'
+);
+select is(
+  (select is_active from public.product_packagings where name = 'Strip of 10'),
+  false,
+  'archived packaging remains in history'
 );
 select throws_ok(
   $$ insert into public.product_barcodes (
