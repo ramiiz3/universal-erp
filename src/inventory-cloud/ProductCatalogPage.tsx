@@ -108,7 +108,7 @@ export default function ProductCatalogPage() {
 
   const [packName, setPackName] = useState("")
   const [packUnitId, setPackUnitId] = useState("")
-  const [packFactor, setPackFactor] = useState("1")
+  const [packFactor, setPackFactor] = useState("10")
   const [packPurchase, setPackPurchase] = useState(true)
   const [packSales, setPackSales] = useState(true)
   const [barcodePackId, setBarcodePackId] = useState("")
@@ -245,8 +245,8 @@ export default function ProductCatalogPage() {
     event.preventDefault()
     if (!selectedProduct || !packUnitId || !supabase || !user) return
     const factor = Number(packFactor)
-    if (!Number.isFinite(factor) || factor <= 0) {
-      setError("Packaging conversion must be greater than zero.")
+    if (!Number.isFinite(factor) || factor <= 1) {
+      setError("Packaging conversion must be greater than one base unit.")
       return
     }
     const selectedUnit = units.find((item) => item.id === packUnitId)
@@ -269,7 +269,7 @@ export default function ProductCatalogPage() {
       })
       if (insertError) throw insertError
       setPackName("")
-      setPackFactor("1")
+      setPackFactor("10")
       setPackUnitId("")
     }, "Packaging level added.")
   }
@@ -456,7 +456,7 @@ export default function ProductCatalogPage() {
                   <option value="">Unit type</option>
                   {units.filter((unit) => unit.is_active).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                 </select>
-                <input required type="number" min="0.000001" step="any" value={packFactor} onChange={(event) => setPackFactor(event.target.value)} placeholder="Base units per pack" className="h-10 rounded-lg border px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                <input required type="number" min="1.000001" step="any" value={packFactor} onChange={(event) => setPackFactor(event.target.value)} placeholder="Base units per pack" className="h-10 rounded-lg border px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packPurchase} onChange={(event) => setPackPurchase(event.target.checked)} /> Purchase unit</label>
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packSales} onChange={(event) => setPackSales(event.target.checked)} /> Sales unit</label>
                 <button disabled={!canManage || saving} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-5">Add packaging</button>
