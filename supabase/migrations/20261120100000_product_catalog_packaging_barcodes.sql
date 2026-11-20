@@ -622,6 +622,98 @@ after insert or update of barcode, purchase_price, selling_price, base_unit_id
 on public.products
 for each row execute function private.sync_product_catalog_defaults();
 
+create or replace function public.set_product_price(
+  p_company_id uuid,
+  p_product_id uuid,
+  p_packaging_id uuid,
+  p_price_type text,
+  p_currency_code text,
+  p_amount numeric,
+  p_tax_inclusive boolean default false,
+  p_branch_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $price$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_packaging public.product_packagings%rowtype;
+  v_price_id uuid;
+begin
+  if v_user_id is null then
+    raise exception using errcode = '28000', message = 'Authentication required.';
+  end if;
+
+  if p_price_type not in ('purchase', 'retail', 'wholesale', 'minimum_selling', 'other')
+     or p_currency_code !~ '^[A-Z]{3}
+  'Tenant-scoped product category hierarchy. Legacy products.category is retained during compatibility transition.';
+comment on table public.units_of_measure is
+  'Tenant-scoped unit labels. Physical dimensions/conversions are explicit; legacy labels are backfilled as custom pending review.';
+comment on table public.product_packagings is
+  'Product-specific trade units. base_quantity is the direct quantity in the product stock base unit.';
+comment on table public.product_barcodes is
+  'Multiple scannable barcode values per product packaging level. Values are stored as text to preserve leading zeros.';
+comment on table public.product_prices is
+  'Effective-dated prices for one packaging unit, with optional branch-specific overrides.';
+
+     or p_amount is null or p_amount < 0 then
+    raise exception using errcode = '22023', message = 'Price type, currency or amount is invalid.';
+  end if;
+
+  if p_branch_id is null then
+    if not private.has_company_permission(p_company_id, 'manage_inventory') then
+      raise exception using errcode = '42501', message = 'Not authorized to manage company catalog prices.';
+    end if;
+  elsif not private.has_company_permission(p_company_id, 'manage_inventory', p_branch_id) then
+    raise exception using errcode = '42501', message = 'Not authorized to manage prices for this branch.';
+  end if;
+
+  select packagings.* into v_packaging
+  from public.product_packagings as packagings
+  where packagings.company_id = p_company_id
+    and packagings.product_id = p_product_id
+    and packagings.id = p_packaging_id
+    and packagings.is_active
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Active product packaging was not found.';
+  end if;
+
+  update public.product_prices as prices
+  set is_active = false,
+      valid_to = greatest(prices.valid_from, current_date),
+      updated_at = now()
+  where prices.company_id = p_company_id
+    and prices.product_id = p_product_id
+    and prices.packaging_id = p_packaging_id
+    and prices.price_type = p_price_type
+    and prices.currency_code = p_currency_code
+    and prices.branch_id is not distinct from p_branch_id
+    and prices.is_active;
+
+  insert into public.product_prices (
+    company_id, product_id, packaging_id, branch_id,
+    price_type, currency_code, amount, tax_inclusive,
+    valid_from, is_active, created_by
+  ) values (
+    p_company_id, p_product_id, p_packaging_id, p_branch_id,
+    p_price_type, p_currency_code, p_amount, coalesce(p_tax_inclusive, false),
+    current_date, true, v_user_id
+  )
+  returning id into v_price_id;
+
+  return v_price_id;
+end;
+$price$;
+
+revoke all on function public.set_product_price(uuid, uuid, uuid, text, text, numeric, boolean, uuid)
+  from public, anon;
+grant execute on function public.set_product_price(uuid, uuid, uuid, text, text, numeric, boolean, uuid)
+  to authenticated;
+
 comment on table public.product_categories is
   'Tenant-scoped product category hierarchy. Legacy products.category is retained during compatibility transition.';
 comment on table public.units_of_measure is
