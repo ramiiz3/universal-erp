@@ -30,7 +30,7 @@ on:
       - ".github/workflows/zaki-ai-validation.yml"
 
 jobs:
-  # Validate cloud catalog, database migrations and existing ERP workflows.
+  # Validate package-aware catalog, purchasing, and POS workflows.
   validate:
     name: Frontend tests, build, and Edge Function type check
     runs-on: ubuntu-latest
