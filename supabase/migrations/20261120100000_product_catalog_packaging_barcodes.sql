@@ -408,11 +408,14 @@ declare
   v_unit_id uuid;
   v_code text;
 begin
+  if tg_op = 'INSERT' then
+    v_category_id := null;
+  else
+    v_category_id := case when new.category is distinct from old.category then null else new.category_id end;
+  end if;
+
   if nullif(btrim(new.category), '') is not null
-     and (
-       tg_op = 'INSERT'
-       or new.category is distinct from old.category
-     ) then
+     and (tg_op = 'INSERT' or v_category_id is null) then
     select categories.id into v_category_id
     from public.product_categories as categories
     where categories.company_id = new.company_id
