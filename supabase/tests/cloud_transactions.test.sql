@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(92);
+select plan(93);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -104,7 +104,7 @@ insert into public.product_prices (
    '62000000-0000-4000-8000-000000000001',
    '65000000-0000-4000-8000-000000000001',
    '69000000-0000-4000-8000-000000000002',
-   'retail', 'USD', 90, false, current_date,
+   'retail', 'USD', 90, true, current_date,
    '61000000-0000-4000-8000-000000000001');
 
 insert into public.inventory_lots (
@@ -407,6 +407,22 @@ select is(
   'partially_received',
   'partial carton receipt leaves the remaining carton outstanding'
 );
+select throws_ok(
+  $ select public.receive_cloud_purchase_once(
+    '62000000-0000-4000-8000-000000000001',
+    (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000020'),
+    jsonb_build_array(jsonb_build_object(
+      'purchase_line_id', (select id from public.cloud_purchase_lines
+        where purchase_id = (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000020')),
+      'packaging_id', '69000000-0000-4000-8000-000000000002',
+      'quantity', 0.5, 'unit_cost', 35, 'selling_price', 90,
+      'batch', 'CARTON-RECEIPT-FRACTION', 'expiry', '2103-02-01'
+    )),
+    '68000000-0000-4000-8000-000000000026'
+  ) $,
+  '22023', null,
+  'receipt rejects fractional quantity for whole-carton packaging'
+);
 
 select lives_ok(
   $ select public.receive_cloud_purchase_once(
@@ -456,7 +472,7 @@ select lives_ok(
     '{"name":"Package POS Customer"}'::jsonb,
     '[{"product_id":"65000000-0000-4000-8000-000000000001","packaging_id":"69000000-0000-4000-8000-000000000002","quantity":1}]',
     0,
-    '[{"method":"cash","amount":94.5,"reference":"carton-sale"}]',
+    '[{"method":"cash","amount":90,"reference":"carton-sale"}]',
     '68000000-0000-4000-8000-000000000024'
   ) $,
   'POS sells one carton using its packaging-specific retail price'
@@ -464,8 +480,8 @@ select lives_ok(
 select is(
   (select subtotal || ':' || vat_total || ':' || total
    from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024'),
-  '90.00:4.50:94.50',
-  'POS calculates carton price and VAT from the package-specific retail price'
+  '85.71:4.29:90.00',
+  'POS extracts VAT from the tax-inclusive carton retail price'
 );
 select is(
   (select sum(quantity) from public.cloud_sale_lines
@@ -484,8 +500,8 @@ select is(
    where sale_id = (select id from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024')
      and packaging_id = '69000000-0000-4000-8000-000000000002'
      and conversion_factor_snapshot = 10
-     and entered_unit_price = 90
-     and unit_price = 9),
+     and entered_unit_price = 85.714286
+     and unit_price = 8.571429),
   (select count(*)::integer from public.cloud_sale_lines
    where sale_id = (select id from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000024')),
   'sale lines preserve the carton, price and conversion snapshot per FEFO lot'
