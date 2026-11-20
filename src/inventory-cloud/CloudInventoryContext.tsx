@@ -19,6 +19,9 @@ export type CloudProduct = {
   barcode: string
   description: string
   category: string
+  category_id?: string | null
+  base_unit_id?: string | null
+  product_type?: "stock" | "non_stock" | "service"
   manufacturer: string | null
   unit: string
   purchase_price: number
