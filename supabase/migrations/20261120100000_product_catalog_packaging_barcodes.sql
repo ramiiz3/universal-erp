@@ -392,7 +392,7 @@ grant select, insert, update, delete on public.product_categories,
   public.units_of_measure, public.product_packagings, public.product_barcodes,
   public.product_prices to authenticated;
 
-grant update (category_id, base_unit_id, product_type)
+grant update (category_id, product_type)
 on public.products to authenticated;
 
 -- Maintain compatibility with the existing product form and direct inserts.
@@ -411,6 +411,11 @@ begin
   if tg_op = 'INSERT' then
     v_category_id := null;
   else
+    if new.unit is distinct from old.unit then
+      raise exception using
+        errcode = '22023',
+        message = 'A product base unit cannot be changed after creation. Create a new product or use a reviewed stock conversion workflow.';
+    end if;
     v_category_id := case when new.category is distinct from old.category then null else new.category_id end;
   end if;
 
@@ -541,7 +546,7 @@ revoke all on function private.sync_product_catalog_defaults() from public, anon
 
 drop trigger if exists prepare_product_catalog_defaults on public.products;
 create trigger prepare_product_catalog_defaults
-before insert or update of category on public.products
+before insert or update of category, unit on public.products
 for each row execute function private.prepare_product_catalog_defaults();
 
 drop trigger if exists sync_product_catalog_defaults on public.products;
