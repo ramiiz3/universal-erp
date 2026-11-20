@@ -328,28 +328,17 @@ export default function ProductCatalogPage() {
       return
     }
     await perform(async () => {
-      const oldPrices = prices.filter((item) =>
-        item.packaging_id === pricePackId && item.price_type === priceType &&
-        item.currency_code === (activeCompany?.currency || "AED") && item.is_active,
-      )
-      if (oldPrices.length) {
-        const { error: closeError } = await supabase!.from("product_prices")
-          .update({ is_active: false, valid_to: new Date().toISOString().slice(0, 10) })
-          .in("id", oldPrices.map((item) => item.id))
-        if (closeError) throw closeError
-      }
-      const { error: insertError } = await supabase!.from("product_prices").insert({
-        company_id: companyId,
-        product_id: selectedProduct.id,
-        packaging_id: pricePackId,
-        price_type: priceType,
-        currency_code: activeCompany?.currency || "AED",
-        amount,
-        tax_inclusive: priceInclusive,
-        valid_from: new Date().toISOString().slice(0, 10),
-        created_by: user!.id,
+      const { error: priceError } = await supabase!.rpc("set_product_price", {
+        p_company_id: companyId,
+        p_product_id: selectedProduct.id,
+        p_packaging_id: pricePackId,
+        p_price_type: priceType,
+        p_currency_code: activeCompany?.currency || "AED",
+        p_amount: amount,
+        p_tax_inclusive: priceInclusive,
+        p_branch_id: null,
       })
-      if (insertError) throw insertError
+      if (priceError) throw priceError
       setPriceAmount("")
     }, "Packaging price saved.")
   }
