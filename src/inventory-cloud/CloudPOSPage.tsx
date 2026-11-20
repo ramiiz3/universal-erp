@@ -219,27 +219,27 @@ export default function CloudPOSPage() {
     }
     const unit = catalogUnits.find((item) => item.id === packaging.unit_id)
     const packagePrice = retailPriceFor(product.id, packaging.id)
-    setCart((previous) => {
-      const existing = previous.find((item) => item.productId === productId)
-      if (existing && existing.packagingId !== packaging.id) {
-        setError("A product can appear once per invoice. Remove its existing cart line before changing its packaging.")
-        return previous
-      }
-      return existing
-        ? previous.map((item) => item.productId === productId
-          ? { ...item, quantity: item.quantity + parsedQuantity, packagePrice }
-          : item)
-        : [...previous, {
-          productId,
-          quantity: parsedQuantity,
-          packagingId: packaging.id,
-          packagingName: packaging.name,
-          packagingUnit: unit?.symbol || unit?.name || product.unit,
-          conversionFactor: Number(packaging.base_quantity),
-          packagePrice,
-          allowFractionalQuantity: packaging.allow_fractional_quantity,
-        }]
-    })
+    const existing = cart.find((item) => item.productId === productId)
+    if (existing && existing.packagingId !== packaging.id) {
+      setError("A product can appear once per invoice. Remove its existing cart line before changing its packaging.")
+      return
+    }
+    if (existing) {
+      setCart((previous) => previous.map((item) => item.productId === productId
+        ? { ...item, quantity: item.quantity + parsedQuantity, packagePrice }
+        : item))
+    } else {
+      setCart((previous) => [...previous, {
+        productId,
+        quantity: parsedQuantity,
+        packagingId: packaging.id,
+        packagingName: packaging.name,
+        packagingUnit: unit?.symbol || unit?.name || product.unit,
+        conversionFactor: Number(packaging.base_quantity),
+        packagePrice,
+        allowFractionalQuantity: packaging.allow_fractional_quantity,
+      }])
+    }
     setQuantity("1")
     setPaymentAmountOverride(null)
   }
