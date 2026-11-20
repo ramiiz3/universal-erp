@@ -1,3 +1,4 @@
+-- Tenant-scoped catalog, product conversion, barcode and price-history tests.
 begin;
 
 create extension if not exists pgtap with schema extensions;
