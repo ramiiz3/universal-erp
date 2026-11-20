@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type { FormEvent } from "react"
 import { useAuth } from "../auth/AuthProvider"
 import { supabase } from "../lib/supabase"
 import { useCloudInventory, type CloudProduct } from "./CloudInventoryContext"
@@ -189,7 +190,7 @@ export default function ProductCatalogPage() {
     }
   }
 
-  async function addCategory(event: React.FormEvent<HTMLFormElement>) {
+  async function addCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = categoryName.trim()
     if (!name || !supabase || !user) return
@@ -207,7 +208,7 @@ export default function ProductCatalogPage() {
     }, "Category added.")
   }
 
-  async function addUnit(event: React.FormEvent<HTMLFormElement>) {
+  async function addUnit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = unitName.trim()
     if (!name || !supabase || !user) return
@@ -241,7 +242,7 @@ export default function ProductCatalogPage() {
     }, "Product category updated.")
   }
 
-  async function addPackaging(event: React.FormEvent<HTMLFormElement>) {
+  async function addPackaging(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedProduct || !packUnitId || !supabase || !user) return
     const factor = Number(packFactor)
@@ -274,7 +275,7 @@ export default function ProductCatalogPage() {
     }, "Packaging level added.")
   }
 
-  async function addBarcode(event: React.FormEvent<HTMLFormElement>) {
+  async function addBarcode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedProduct || !barcodePackId || !supabase || !user) return
     const value = barcodeValue.trim() || internalBarcode()
@@ -295,7 +296,7 @@ export default function ProductCatalogPage() {
     }, "Barcode saved.")
   }
 
-  async function addPrice(event: React.FormEvent<HTMLFormElement>) {
+  async function addPrice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedProduct || !pricePackId || !supabase || !user) return
     const amount = Number(priceAmount)
