@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(25);
+select plan(27);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -128,14 +128,22 @@ select is(
   'packaging barcode leading zeroes are preserved'
 );
 select lives_ok(
-  $test$ insert into public.product_prices (
-       company_id, product_id, packaging_id, price_type, currency_code, amount, created_by
-     )
-     select '62000000-0000-4000-8000-000000000001',
-            '64000000-0000-4000-8000-000000000001',
-            id, 'retail', 'AED', 12.50, auth.uid()
-     from public.product_packagings where name = 'Strip of 10' $test$,
-  'catalog manager can set a package-specific retail price'
+  $ select public.set_product_price(
+       '62000000-0000-4000-8000-000000000001',
+       '64000000-0000-4000-8000-000000000001',
+       (select id from public.product_packagings where name = 'Strip of 10'),
+       'retail', 'AED', 12.50, false, null
+     ) $,
+  'catalog manager can set a package-specific retail price atomically'
+);
+select lives_ok(
+  $ select public.set_product_price(
+       '62000000-0000-4000-8000-000000000001',
+       '64000000-0000-4000-8000-000000000001',
+       (select id from public.product_packagings where name = 'Strip of 10'),
+       'retail', 'AED', 13.75, true, null
+     ) $,
+  'catalog manager can revise a package-specific retail price atomically'
 );
 select is(
   (select count(*)::integer from public.product_prices
@@ -143,6 +151,12 @@ select is(
      and is_active),
   1,
   'package-specific price is active before archival'
+);
+select is(
+  (select count(*)::integer from public.product_prices
+   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')),
+  2,
+  'price revisions retain the previous price as history'
 );
 select lives_ok(
   $test$ update public.product_packagings set is_active = false where name = 'Strip of 10' $test$,
