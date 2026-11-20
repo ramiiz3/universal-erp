@@ -31,6 +31,13 @@ type CloudSaleLine = {
   expiry: string | null
   quantity: number
   unit_price: number
+  packaging_id: string | null
+  entered_quantity: number
+  entered_unit_price: number
+  packaging_name_snapshot: string
+  packaging_unit_snapshot: string
+  conversion_factor_snapshot: number
+  base_unit_snapshot: string
   unit_cost: number
   discount_amount: number
   vat_rate: number
@@ -156,8 +163,8 @@ export default function CloudInvoicePage() {
     }
     const rows = lines.map((line) => `<tr>
       <td>${escapeHtml(line.product_name)}${line.sku ? `<small>${escapeHtml(line.sku)}</small>` : ""}${line.batch ? `<small>Batch: ${escapeHtml(line.batch)}</small>` : ""}</td>
-      <td>${Number(line.quantity)} ${escapeHtml(line.unit)}</td>
-      <td>${escapeHtml(sale.currency)} ${Number(line.unit_price).toFixed(2)}</td>
+      <td>${Number(line.entered_quantity ?? line.quantity)} ${escapeHtml(line.packaging_name_snapshot || line.unit)}${Number(line.conversion_factor_snapshot || 1) > 1 ? `<small>${Number(line.quantity)} ${escapeHtml(line.base_unit_snapshot || line.unit)} in base stock units</small>` : ""}</td>
+      <td>${escapeHtml(sale.currency)} ${Number(line.entered_unit_price ?? line.unit_price).toFixed(2)}</td>
       <td>${escapeHtml(sale.currency)} ${Number(line.discount_amount).toFixed(2)}</td>
       <td>${Number(line.vat_rate).toFixed(2)}%</td>
       <td>${escapeHtml(sale.currency)} ${Number(line.vat_amount).toFixed(2)}</td>
@@ -231,7 +238,7 @@ export default function CloudInvoicePage() {
             <thead className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800"><tr><th className="py-2">Product / lot</th><th>Qty</th><th>Unit price</th><th>Discount</th><th>VAT</th><th>VAT amount</th><th>Total</th></tr></thead>
             <tbody>{lines.map((line) => <tr key={line.id} className="border-b border-slate-100 dark:border-slate-800">
               <td className="py-3 font-medium">{line.product_name}<span className="block text-xs text-slate-500">{line.sku}{line.batch ? ` · Batch ${line.batch}` : ""}{line.expiry ? ` · Exp ${line.expiry}` : ""}</span></td>
-              <td>{line.quantity} {line.unit}</td><td>{sale.currency} {Number(line.unit_price).toFixed(2)}</td><td>{sale.currency} {Number(line.discount_amount).toFixed(2)}</td><td>{Number(line.vat_rate).toFixed(2)}%</td><td>{sale.currency} {Number(line.vat_amount).toFixed(2)}</td><td className="font-semibold">{sale.currency} {Number(line.line_total).toFixed(2)}</td>
+              <td>{Number(line.entered_quantity ?? line.quantity)} {line.packaging_name_snapshot || line.unit}{Number(line.conversion_factor_snapshot || 1) > 1 && <span className="block text-xs text-slate-500">{Number(line.quantity)} {line.base_unit_snapshot || line.unit} in base stock units</span>}</td><td>{sale.currency} {Number(line.entered_unit_price ?? line.unit_price).toFixed(2)}</td><td>{sale.currency} {Number(line.discount_amount).toFixed(2)}</td><td>{Number(line.vat_rate).toFixed(2)}%</td><td>{sale.currency} {Number(line.vat_amount).toFixed(2)}</td><td className="font-semibold">{sale.currency} {Number(line.line_total).toFixed(2)}</td>
             </tr>)}</tbody>
           </table>
         </div>
