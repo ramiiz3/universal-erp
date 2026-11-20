@@ -1,3 +1,4 @@
+-- Tenant-scoped catalog, product conversion, barcode and price-history tests.
 begin;
 
 create extension if not exists pgtap with schema extensions;
@@ -128,21 +129,21 @@ select is(
   'packaging barcode leading zeroes are preserved'
 );
 select lives_ok(
-  $ select public.set_product_price(
+  $test$ select public.set_product_price(
        '62000000-0000-4000-8000-000000000001',
        '64000000-0000-4000-8000-000000000001',
        (select id from public.product_packagings where name = 'Strip of 10'),
        'retail', 'AED', 12.50, false, null
-     ) $,
+     ) $test$,
   'catalog manager can set a package-specific retail price atomically'
 );
 select lives_ok(
-  $ select public.set_product_price(
+  $test$ select public.set_product_price(
        '62000000-0000-4000-8000-000000000001',
        '64000000-0000-4000-8000-000000000001',
        (select id from public.product_packagings where name = 'Strip of 10'),
        'retail', 'AED', 13.75, true, null
-     ) $,
+     ) $test$,
   'catalog manager can revise a package-specific retail price atomically'
 );
 select is(
