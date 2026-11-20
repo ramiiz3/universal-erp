@@ -370,6 +370,8 @@ export default function CloudPurchasingPage() {
             / Number(line.conversion_factor_snapshot || 1),
           quantity: Number(draft.quantity || 0),
           packagingId: line.packaging_id,
+          conversionFactor: Number(line.conversion_factor_snapshot || 1),
+          allowFractionalQuantity: packagings.find((pack) => pack.id === line.packaging_id)?.allow_fractional_quantity ?? true,
           unitCost: draft.unitCost.trim() ? Number(draft.unitCost) : null,
           sellingPrice: draft.sellingPrice.trim() ? Number(draft.sellingPrice) : null,
           batch: draft.batch,
@@ -442,7 +444,7 @@ export default function CloudPurchasingPage() {
             <label className="text-sm sm:col-span-2">Supplier<select required value={supplierId} onChange={(event) => setSelectedSupplierId(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950"><option value="">Select supplier</option>{suppliers.filter((supplier) => supplier.is_active).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
             <label className="text-sm sm:col-span-2">Supplier invoice reference<input value={supplierInvoiceReference} onChange={(event) => setSupplierInvoiceReference(event.target.value)} maxLength={200} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" /></label>
           </div>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_100px_110px_100px_auto]">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_90px_110px_100px_auto]">
             <label className="text-xs font-medium">Product<select value={selectedProductId} onChange={(event) => {
               const product = products.find((candidate) => candidate.id === event.target.value)
               const options = packagings.filter((pack) => pack.product_id === event.target.value && pack.is_active && pack.is_purchase_unit)
@@ -521,7 +523,7 @@ export default function CloudPurchasingPage() {
                     <span>Ordered {line.entered_quantity} {line.packaging_name_snapshot || line.unit} · Received {receivedEntered.toFixed(3)} · Remaining {outstanding.toFixed(3)} · Cost {selectedPurchase.currency} {Number(line.entered_unit_cost ?? Number(line.unit_cost) * factor).toFixed(2)} per {line.packaging_name_snapshot || line.unit} · Base stock: {line.quantity_ordered} {line.unit} · VAT {Number(line.vat_rate).toFixed(2)}% ({selectedPurchase.currency} {Number(line.vat_amount).toFixed(2)}) · Line total {selectedPurchase.currency} {Number(line.line_total).toFixed(2)}</span>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                    <label className="text-xs">Receive quantity<input type="number" min="0" max={outstanding} step="any" value={draft.quantity} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, quantity: event.target.value } }))} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
+                    <label className="text-xs">Receive quantity<input type="number" min="0" max={outstanding} step={packagings.find((pack) => pack.id === line.packaging_id)?.allow_fractional_quantity ? "any" : "1"} value={draft.quantity} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, quantity: event.target.value } }))} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                     <label className="text-xs">Unit cost<input type="number" min="0" step="any" value={draft.unitCost} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, unitCost: event.target.value } }))} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                     <label className="text-xs">Lot selling price<input type="number" min="0" step="any" value={draft.sellingPrice} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, sellingPrice: event.target.value } }))} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
                     <label className="text-xs">Batch<input value={draft.batch} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, batch: event.target.value } }))} maxLength={200} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
