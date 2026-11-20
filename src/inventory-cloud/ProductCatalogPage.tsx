@@ -230,6 +230,28 @@ export default function ProductCatalogPage() {
     }, "Unit added.")
   }
 
+  async function toggleCategory(category: Category) {
+    if (!supabase) return
+    await perform(async () => {
+      const { error: updateError } = await supabase!.from("product_categories")
+        .update({ is_active: !category.is_active })
+        .eq("company_id", companyId)
+        .eq("id", category.id)
+      if (updateError) throw updateError
+    }, category.is_active ? "Category archived." : "Category reactivated.")
+  }
+
+  async function toggleUnit(unit: Unit) {
+    if (!supabase) return
+    await perform(async () => {
+      const { error: updateError } = await supabase!.from("units_of_measure")
+        .update({ is_active: !unit.is_active })
+        .eq("company_id", companyId)
+        .eq("id", unit.id)
+      if (updateError) throw updateError
+    }, unit.is_active ? "Unit archived." : "Unit reactivated.")
+  }
+
   async function setProductCategory(categoryId: string) {
     if (!selectedProduct || !supabase) return
     await perform(async () => {
@@ -388,9 +410,9 @@ export default function ProductCatalogPage() {
           </form>
           <div className="mt-3 max-h-56 space-y-2 overflow-auto text-sm">
             {categories.map((item) => (
-              <div key={item.id} className="flex justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
-                <span>{item.parent_id ? "↳ " : ""}{item.name}</span>
-                <span className="text-xs text-slate-500">{item.is_active ? "Active" : "Archived"}</span>
+              <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800">
+                <span>{item.parent_id ? "↳ " : ""}{item.name} <span className="text-xs text-slate-500">{item.is_active ? "Active" : "Archived"}</span></span>
+                {canManage && <button type="button" disabled={saving} onClick={() => void toggleCategory(item)} className="shrink-0 text-xs font-medium text-emerald-800 disabled:opacity-50 dark:text-emerald-300">{item.is_active ? "Archive" : "Restore"}</button>}
               </div>
             ))}
             {!categories.length && <p className="text-slate-500">No categories created yet.</p>}
@@ -409,7 +431,12 @@ export default function ProductCatalogPage() {
             <button disabled={!canManage || saving} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">Add unit</button>
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
-            {units.map((unit) => <span key={unit.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs dark:bg-slate-800">{unit.name} · {unit.dimension}</span>)}
+            {units.map((unit) => (
+              <span key={unit.id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs dark:bg-slate-800">
+                {unit.name} · {unit.dimension}{!unit.is_active ? " · Archived" : ""}
+                {canManage && <button type="button" disabled={saving || unit.is_system} onClick={() => void toggleUnit(unit)} className="font-semibold text-emerald-800 disabled:opacity-40 dark:text-emerald-300">{unit.is_active ? "Archive" : "Restore"}</button>}
+              </span>
+            ))}
           </div>
         </section>
       </div>
@@ -432,7 +459,7 @@ export default function ProductCatalogPage() {
                 <label className="text-xs font-semibold uppercase text-slate-500">Category</label>
                 <select value={categoryForProduct} onChange={(event) => { void setProductCategory(event.target.value) }} disabled={!canManage || saving} className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
                   <option value="">Uncategorized</option>
-                  {categories.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.parent_id ? "— " : ""}{item.name}</option>)}
+                  {categories.filter((item) => item.is_active || item.id === categoryForProduct).map((item) => <option key={item.id} value={item.id}>{item.parent_id ? "— " : ""}{item.name}{item.is_active ? "" : " (Archived)"}</option>)}
                 </select>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
