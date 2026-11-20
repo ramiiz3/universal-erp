@@ -64,7 +64,7 @@ select is((select count(*)::integer from public.product_prices), 2, 'legacy purc
 select is((select barcode_value from public.product_barcodes limit 1), '000123', 'barcode leading zeroes are preserved');
 select is((select base_quantity from public.product_packagings limit 1), 1::numeric, 'legacy packaging has a factor of one');
 select throws_ok(
-  $test$ update public.product_packagings set is_active = false where is_base $test$,
+  $test$ update public.product_packagings set is_active = false where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and is_base $test$,
   '22023',
   'The base packaging cannot be archived.',
   'the product base packaging cannot be archived'
@@ -101,7 +101,7 @@ select lives_ok(
   'catalog manager can add a product-specific packaging conversion'
 );
 select is(
-  (select base_quantity from public.product_packagings where name = 'Strip of 10'),
+  (select base_quantity from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10'),
   10::numeric,
   'packaging conversion factor is stored on the product packaging'
 );
@@ -113,11 +113,11 @@ select lives_ok(
      select '62000000-0000-4000-8000-000000000001',
             '64000000-0000-4000-8000-000000000001',
             id, '0000001234567', 'EAN13', 'manufacturer_gtin', auth.uid()
-     from public.product_packagings where name = 'Strip of 10' $test$,
+     from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10' $test$,
   'catalog manager can attach a manufacturer barcode to a packaging level'
 );
 select throws_ok(
-  $test$ update public.product_packagings set base_quantity = 20 where name = 'Strip of 10' $test$,
+  $test$ update public.product_packagings set base_quantity = 20 where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10' $test$,
   '22023',
   'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.',
   'a referenced packaging conversion cannot be silently changed'
@@ -131,7 +131,7 @@ select lives_ok(
   $test$ select public.set_product_price(
        '62000000-0000-4000-8000-000000000001',
        '64000000-0000-4000-8000-000000000001',
-       (select id from public.product_packagings where name = 'Strip of 10'),
+       (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10'),
        'retail', 'AED', 12.50, false, null
      ) $test$,
   'catalog manager can set a package-specific retail price atomically'
@@ -140,26 +140,26 @@ select lives_ok(
   $test$ select public.set_product_price(
        '62000000-0000-4000-8000-000000000001',
        '64000000-0000-4000-8000-000000000001',
-       (select id from public.product_packagings where name = 'Strip of 10'),
+       (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10'),
        'retail', 'AED', 13.75, true, null
      ) $test$,
   'catalog manager can revise a package-specific retail price atomically'
 );
 select is(
   (select count(*)::integer from public.product_prices
-   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')
+   where packaging_id = (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10')
      and is_active),
   1,
   'package-specific price is active before archival'
 );
 select is(
   (select count(*)::integer from public.product_prices
-   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')),
+   where packaging_id = (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10')),
   2,
   'price revisions retain the previous price as history'
 );
 select lives_ok(
-  $test$ update public.product_packagings set is_active = false where name = 'Strip of 10' $test$,
+  $test$ update public.product_packagings set is_active = false where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10' $test$,
   'catalog manager can archive an unused or discontinued packaging level'
 );
 select is(
@@ -169,12 +169,12 @@ select is(
 );
 select is(
   (select is_active from public.product_prices
-   where packaging_id = (select id from public.product_packagings where name = 'Strip of 10')),
+   where packaging_id = (select id from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10')),
   false,
   'archiving packaging automatically closes its prices'
 );
 select is(
-  (select is_active from public.product_packagings where name = 'Strip of 10'),
+  (select is_active from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and name = 'Strip of 10'),
   false,
   'archived packaging remains in history'
 );
@@ -185,7 +185,7 @@ select throws_ok(
      select '62000000-0000-4000-8000-000000000001',
             '64000000-0000-4000-8000-000000000001',
             id, '000123', 'OTHER', 'other', auth.uid()
-     from public.product_packagings where is_base $$,
+     from public.product_packagings where company_id = '62000000-0000-4000-8000-000000000001' and product_id = '64000000-0000-4000-8000-000000000001' and is_base $$,
   '23505', null,
   'a barcode value cannot be duplicated within one company'
 );
