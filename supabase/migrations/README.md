@@ -12,7 +12,7 @@ correction.
 | `20261104000300_company_inventory_workflows.sql` | Adds product descriptions and archive state, atomic stock receipt and adjustment balance snapshots, and a branch-authorized default-warehouse RPC. |
 | `20261104000400_idempotent_inventory_operations.sql` | Adds request identifiers and retry-safe, permission-checked stock receipt and adjustment RPCs. |
 | `20261104121100_company_member_directory.sql` | Adds a company- and branch-authorized member-directory RPC that returns profile names, account emails, roles, and membership status without relying on an invalid profile relationship. |
-| `20261120100000_product_catalog_packaging_barcodes.sql` | Adds tenant-scoped product categories, units, packaging conversions, multiple barcodes, packaging prices, legacy backfills, compatibility triggers and RLS. |
+| `20261120110000_product_catalog_packaging_barcodes.sql` | Adds tenant-scoped product categories, units, packaging conversions, multiple barcodes, packaging prices, legacy backfills, compatibility triggers and RLS. |
 
 Use the local Native Runtime for development and security tests. See
 [`../../docs/supabase-development.md`](../../docs/supabase-development.md) for
