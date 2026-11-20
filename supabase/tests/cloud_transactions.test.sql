@@ -162,7 +162,7 @@ select lives_ok(
     'SUPPLIER-INV-1',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","quantity":1.5,"unit_cost":2,"discount_amount":0.1}]',
     '68000000-0000-4000-8000-000000000001'
-  ) $$,
+  ) $test$3$,
   'authorized manager creates a cloud purchase order'
 );
 select set_config(
@@ -196,7 +196,7 @@ select lives_ok(
     'SUPPLIER-INV-BRANCH-2',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","quantity":1,"unit_cost":2}]',
     '68000000-0000-4000-8000-000000000019'
-  ) $$,
+  ) $test$3$,
   'manager on a second branch can create a purchase order'
 );
 select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000001', true);
@@ -218,7 +218,7 @@ select throws_ok(
     'SUPPLIER-INV-1',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","quantity":1.25,"unit_cost":2,"discount_amount":0.1}]',
     '68000000-0000-4000-8000-000000000001'
-  ) $$,
+  ) $test$3$,
   '22023', null, 'purchase request ID cannot be reused with changed values'
 );
 select throws_ok(
@@ -230,7 +230,7 @@ select throws_ok(
     '',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","quantity":1,"unit_cost":2}]',
     '68000000-0000-4000-8000-000000000002'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'branch manager cannot create a purchase in an unassigned branch'
 );
 select throws_ok(
@@ -242,7 +242,7 @@ select throws_ok(
     '',
     '[{"product_id":"65000000-0000-4000-8000-000000000002","quantity":1,"unit_cost":1}]',
     '68000000-0000-4000-8000-000000000003'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'company manager cannot create a purchase for another company'
 );
 select is((select count(*)::integer from public.cloud_suppliers where company_id = '62000000-0000-4000-8000-000000000002'), 0, 'company manager cannot read another company supplier');
@@ -257,7 +257,7 @@ select lives_ok(
       'batch', 'CLOUD-PO-FIRST', 'expiry', '2101-01-01'
     )),
     '68000000-0000-4000-8000-000000000004'
-  ) $$,
+  ) $test$3$,
   'authorized manager receives part of a purchase into a new lot'
 );
 select is(
@@ -296,7 +296,7 @@ select throws_ok(
       'batch', 'TOO-MUCH', 'expiry', '2101-01-01'
     )),
     '68000000-0000-4000-8000-000000000005'
-  ) $$,
+  ) $test$3$,
   '22023', null, 'over-receiving a purchase line is rejected'
 );
 select lives_ok(
@@ -309,7 +309,7 @@ select lives_ok(
       'batch', 'CLOUD-PO-SECOND', 'expiry', '2102-01-01'
     )),
     '68000000-0000-4000-8000-000000000006'
-  ) $$,
+  ) $test$3$,
   'subsequent partial receipt completes the purchase'
 );
 select is((select status from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000001'), 'received', 'purchase status changes when ordered quantities are fully received');
@@ -317,7 +317,7 @@ select is((select count(*)::integer from public.inventory_lots where batch in ('
 select is((select sum(quantity) from public.inventory_lots where batch in ('CLOUD-PO-FIRST', 'CLOUD-PO-SECOND')), 1.5::numeric, 'fractional received quantities are preserved across lots');
 
 select lives_ok(
-  $ select public.create_cloud_purchase(
+  $test$2public.create_cloud_purchase(
     '62000000-0000-4000-8000-000000000001',
     '63000000-0000-4000-8000-000000000001',
     '64000000-0000-4000-8000-000000000001',
@@ -325,7 +325,7 @@ select lives_ok(
     'CARTON-PO-1',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","packaging_id":"69000000-0000-4000-8000-000000000002","quantity":2,"unit_cost":35,"discount_amount":0}]',
     '68000000-0000-4000-8000-000000000020'
-  ) $,
+  ) $test$3
   'manager creates a purchase using carton packaging'
 );
 select is(
@@ -355,7 +355,7 @@ select is(
   'purchase line preserves package and base unit labels'
 );
 select throws_ok(
-  $ select public.create_cloud_purchase(
+  $test$2public.create_cloud_purchase(
     '62000000-0000-4000-8000-000000000001',
     '63000000-0000-4000-8000-000000000001',
     '64000000-0000-4000-8000-000000000001',
@@ -363,12 +363,12 @@ select throws_ok(
     'CARTON-FRACTIONAL',
     '[{"product_id":"65000000-0000-4000-8000-000000000001","packaging_id":"69000000-0000-4000-8000-000000000002","quantity":1.5,"unit_cost":35}]',
     '68000000-0000-4000-8000-000000000021'
-  ) $,
+  ) $test$3
   '22023', null, 'purchase rejects fractional quantity for whole-carton packaging'
 );
 
 select lives_ok(
-  $ select public.receive_cloud_purchase_once(
+  $test$2public.receive_cloud_purchase_once(
     '62000000-0000-4000-8000-000000000001',
     (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000020'),
     jsonb_build_array(jsonb_build_object(
@@ -379,7 +379,7 @@ select lives_ok(
       'batch', 'CARTON-RECEIPT-1', 'expiry', '2103-01-01'
     )),
     '68000000-0000-4000-8000-000000000022'
-  ) $,
+  ) $test$3
   'manager receives one carton against the purchase order'
 );
 select is(
@@ -408,7 +408,7 @@ select is(
   'partial carton receipt leaves the remaining carton outstanding'
 );
 select throws_ok(
-  $ select public.receive_cloud_purchase_once(
+  $test$2public.receive_cloud_purchase_once(
     '62000000-0000-4000-8000-000000000001',
     (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000020'),
     jsonb_build_array(jsonb_build_object(
@@ -419,13 +419,13 @@ select throws_ok(
       'batch', 'CARTON-RECEIPT-FRACTION', 'expiry', '2103-02-01'
     )),
     '68000000-0000-4000-8000-000000000026'
-  ) $,
+  ) $test$3
   '22023', null,
   'receipt rejects fractional quantity for whole-carton packaging'
 );
 
 select lives_ok(
-  $ select public.receive_cloud_purchase_once(
+  $test$2public.receive_cloud_purchase_once(
     '62000000-0000-4000-8000-000000000001',
     (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000020'),
     jsonb_build_array(jsonb_build_object(
@@ -436,7 +436,7 @@ select lives_ok(
       'batch', 'CARTON-RECEIPT-2', 'expiry', '2104-01-01'
     )),
     '68000000-0000-4000-8000-000000000023'
-  ) $,
+  ) $test$3
   'manager receives the second carton and completes the purchase'
 );
 select is(
@@ -458,14 +458,14 @@ select is(
   'purchase status closes after the converted base quantity is fully received'
 );
 select throws_ok(
-  $ update public.product_packagings set base_quantity = 20
+  $test$2public.product_packagings set base_quantity = 20
      where id = '69000000-0000-4000-8000-000000000002' $,
   '22023', null,
   'used purchase packaging conversion cannot be changed'
 );
 
 select lives_ok(
-  $ select public.checkout_cloud_sale_once(
+  $test$2public.checkout_cloud_sale_once(
     '62000000-0000-4000-8000-000000000001',
     '63000000-0000-4000-8000-000000000001',
     '64000000-0000-4000-8000-000000000001',
@@ -474,7 +474,7 @@ select lives_ok(
     0,
     '[{"method":"cash","amount":105,"reference":"carton-sale"}]',
     '68000000-0000-4000-8000-000000000024'
-  ) $,
+  ) $test$3
   'POS sells one carton using its packaging-specific retail price'
 );
 select is(
@@ -514,7 +514,7 @@ select is(
   'sale movement ledger records ten base boxes as a negative quantity'
 );
 select throws_ok(
-  $ select public.checkout_cloud_sale_once(
+  $test$2public.checkout_cloud_sale_once(
     '62000000-0000-4000-8000-000000000001',
     '63000000-0000-4000-8000-000000000001',
     '64000000-0000-4000-8000-000000000001',
@@ -523,7 +523,7 @@ select throws_ok(
     0,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000025'
-  ) $,
+  ) $test$3
   '22023', null, 'POS rejects fractional carton sales when packaging requires whole units'
 );
 select is(
@@ -545,7 +545,7 @@ select throws_ok(
       'quantity', 0.1
     )),
     '68000000-0000-4000-8000-000000000007'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'cashier cannot receive purchasing stock'
 );
 select throws_ok(
@@ -558,7 +558,7 @@ select throws_ok(
     0.01,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000008'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'cashier cannot apply a finance-controlled discount'
 );
 select throws_ok(
@@ -571,7 +571,7 @@ select throws_ok(
     0,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000009'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'cashier cannot create a sale in an unassigned branch'
 );
 
@@ -587,7 +587,7 @@ select lives_ok(
     0.5,
     '[{"method":"cash","amount":6,"reference":"cash-ref"}]',
     '68000000-0000-4000-8000-000000000010'
-  ) $$,
+  ) $test$3$,
   'authorized checkout commits invoice, FEFO stock, movements, and payment'
 );
 select set_config(
@@ -605,7 +605,7 @@ select lives_ok(
     current_setting('test.cloud_sale_id')::uuid,
     'card', 2, 'later-payment',
     '68000000-0000-4000-8000-000000000014'
-  ) $$,
+  ) $test$3$,
   'authorized owner records a follow-up payment'
 );
 select is(
@@ -626,7 +626,7 @@ select throws_ok(
     current_setting('test.cloud_sale_id')::uuid,
     'cash', 5, '',
     '68000000-0000-4000-8000-000000000016'
-  ) $$,
+  ) $test$3$,
   '23514', null, 'payment cannot exceed the remaining invoice balance'
 );
 select is((select invoice_number from public.cloud_sales where request_id = '68000000-0000-4000-8000-000000000010'), 'CA-00000001', 'invoice number uses the company sequence and prefix');
@@ -660,7 +660,7 @@ select throws_ok(
     0,
     '[{"method":"cash","amount":6,"reference":"cash-ref"}]',
     '68000000-0000-4000-8000-000000000010'
-  ) $$,
+  ) $test$3$,
   '22023', null, 'sale request ID cannot be reused with changed values'
 );
 select throws_ok(
@@ -673,7 +673,7 @@ select throws_ok(
     0,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000011'
-  ) $$,
+  ) $test$3$,
   '23514', null, 'checkout rejects stock shortages'
 );
 select is((select count(*)::integer from public.cloud_sales where company_id = '62000000-0000-4000-8000-000000000001'), 1, 'failed checkout does not persist a partial invoice');
@@ -687,7 +687,7 @@ select lives_ok(
     0.02,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000018'
-  ) $$,
+  ) $test$3$,
   'small discount succeeds across four equal FEFO lot allocations'
 );
 select is(
@@ -711,7 +711,7 @@ select throws_ok(
     0,
     '[]'::jsonb,
     '68000000-0000-4000-8000-000000000012'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'company owner cannot create a sale for another tenant'
 );
 
@@ -724,7 +724,7 @@ select lives_ok(
     current_setting('test.cloud_sale_id')::uuid,
     'cash', 4.07, 'close-out',
     '68000000-0000-4000-8000-000000000015'
-  ) $$,
+  ) $test$3$,
   'cashier with branch sales permission collects the remaining balance'
 );
 select is((select payment_status from public.cloud_sales where id = current_setting('test.cloud_sale_id')::uuid), 'paid', 'final payment closes the invoice balance');
@@ -742,7 +742,7 @@ select throws_ok(
     current_setting('test.cloud_sale_id')::uuid,
     'cash', 0.01, '',
     '68000000-0000-4000-8000-000000000017'
-  ) $$,
+  ) $test$3$,
   '42501', null, 'branch-restricted manager cannot collect a payment for another branch'
 );
 select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000005', true);
@@ -762,7 +762,7 @@ select throws_ok(
        (select id from public.cloud_purchases where request_id = '68000000-0000-4000-8000-000000000001'),
        '65000000-0000-4000-8000-000000000002',
        'Cross-tenant line', 1, 1, 0, 0, 0, 1
-     ) $$,
+     ) $test$3$,
   '23503', null, 'composite foreign key prevents cross-company purchase lines'
 );
 
