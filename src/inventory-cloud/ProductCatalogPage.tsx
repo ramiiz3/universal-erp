@@ -21,6 +21,7 @@ type Unit = {
   dimension: string
   allow_fractional: boolean
   decimal_places: number
+  is_system: boolean
   is_active: boolean
 }
 type Packaging = {
