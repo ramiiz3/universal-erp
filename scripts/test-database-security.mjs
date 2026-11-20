@@ -12,7 +12,7 @@ const suites = [
   { file: "supabase/tests/inventory_tenant_rls.test.sql", assertions: 26 },
   { file: "supabase/tests/inventory_workflows.test.sql", assertions: 36 },
   { file: "supabase/tests/cloud_transactions.test.sql", assertions: 68 },
-  { file: "supabase/tests/product_catalog.test.sql", assertions: 17 },
+  { file: "supabase/tests/product_catalog.test.sql", assertions: 18 },
 ]
 
 function tapValues(results) {
