@@ -300,65 +300,89 @@ alter table public.product_prices enable row level security;
 create policy "Company members can view product categories"
 on public.product_categories for select to authenticated
 using (private.is_company_member(company_id));
-create policy "Inventory managers can manage product categories"
-on public.product_categories for all to authenticated
+create policy "Inventory managers can insert product categories"
+on public.product_categories for insert to authenticated
+with check (created_by = (select auth.uid()) and private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can update product categories"
+on public.product_categories for update to authenticated
 using (private.has_company_permission(company_id, 'manage_inventory'))
-with check (
-  created_by = (select auth.uid())
-  and private.has_company_permission(company_id, 'manage_inventory')
-);
+with check (private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can delete product categories"
+on public.product_categories for delete to authenticated
+using (private.has_company_permission(company_id, 'manage_inventory'));
 
 create policy "Company members can view units of measure"
 on public.units_of_measure for select to authenticated
 using (private.is_company_member(company_id));
-create policy "Inventory managers can manage units of measure"
-on public.units_of_measure for all to authenticated
+create policy "Inventory managers can insert units of measure"
+on public.units_of_measure for insert to authenticated
+with check (created_by = (select auth.uid()) and private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can update units of measure"
+on public.units_of_measure for update to authenticated
 using (private.has_company_permission(company_id, 'manage_inventory'))
-with check (
-  created_by = (select auth.uid())
-  and private.has_company_permission(company_id, 'manage_inventory')
-);
+with check (private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can delete units of measure"
+on public.units_of_measure for delete to authenticated
+using (private.has_company_permission(company_id, 'manage_inventory'));
 
 create policy "Company members can view product packagings"
 on public.product_packagings for select to authenticated
 using (private.is_company_member(company_id));
-create policy "Inventory managers can manage product packagings"
-on public.product_packagings for all to authenticated
+create policy "Inventory managers can insert product packagings"
+on public.product_packagings for insert to authenticated
+with check (created_by = (select auth.uid()) and private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can update product packagings"
+on public.product_packagings for update to authenticated
 using (private.has_company_permission(company_id, 'manage_inventory'))
-with check (
-  created_by = (select auth.uid())
-  and private.has_company_permission(company_id, 'manage_inventory')
-);
+with check (private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can delete product packagings"
+on public.product_packagings for delete to authenticated
+using (private.has_company_permission(company_id, 'manage_inventory'));
 
 create policy "Company members can view product barcodes"
 on public.product_barcodes for select to authenticated
 using (private.is_company_member(company_id));
-create policy "Inventory managers can manage product barcodes"
-on public.product_barcodes for all to authenticated
+create policy "Inventory managers can insert product barcodes"
+on public.product_barcodes for insert to authenticated
+with check (created_by = (select auth.uid()) and private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can update product barcodes"
+on public.product_barcodes for update to authenticated
 using (private.has_company_permission(company_id, 'manage_inventory'))
-with check (
-  created_by = (select auth.uid())
-  and private.has_company_permission(company_id, 'manage_inventory')
-);
+with check (private.has_company_permission(company_id, 'manage_inventory'));
+create policy "Inventory managers can delete product barcodes"
+on public.product_barcodes for delete to authenticated
+using (private.has_company_permission(company_id, 'manage_inventory'));
 
 create policy "Company members can view product prices"
 on public.product_prices for select to authenticated
 using (
-  branch_id is null and private.is_company_member(company_id)
+  (branch_id is null and private.is_company_member(company_id))
   or private.has_company_permission(company_id, 'view_company', branch_id)
 );
-create policy "Inventory managers can manage product prices"
-on public.product_prices for all to authenticated
-using (
-  branch_id is null and private.has_company_permission(company_id, 'manage_inventory')
-  or private.has_company_permission(company_id, 'manage_inventory', branch_id)
-)
+create policy "Inventory managers can insert product prices"
+on public.product_prices for insert to authenticated
 with check (
   created_by = (select auth.uid())
   and (
-    branch_id is null and private.has_company_permission(company_id, 'manage_inventory')
+    (branch_id is null and private.has_company_permission(company_id, 'manage_inventory'))
     or private.has_company_permission(company_id, 'manage_inventory', branch_id)
   )
+);
+create policy "Inventory managers can update product prices"
+on public.product_prices for update to authenticated
+using (
+  (branch_id is null and private.has_company_permission(company_id, 'manage_inventory'))
+  or private.has_company_permission(company_id, 'manage_inventory', branch_id)
+)
+with check (
+  (branch_id is null and private.has_company_permission(company_id, 'manage_inventory'))
+  or private.has_company_permission(company_id, 'manage_inventory', branch_id)
+);
+create policy "Inventory managers can delete product prices"
+on public.product_prices for delete to authenticated
+using (
+  (branch_id is null and private.has_company_permission(company_id, 'manage_inventory'))
+  or private.has_company_permission(company_id, 'manage_inventory', branch_id)
 );
 
 revoke all on public.product_categories, public.units_of_measure,
