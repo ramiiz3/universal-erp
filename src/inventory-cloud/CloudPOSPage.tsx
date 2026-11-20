@@ -38,6 +38,7 @@ type SalesPrice = {
   price_type: string
   currency_code: string
   amount: number
+  tax_inclusive: boolean
   branch_id: string | null
   valid_from: string
   valid_to: string | null
@@ -165,7 +166,14 @@ export default function CloudPOSPage() {
         && (price.branch_id === branchId || price.branch_id === null))
       .sort((left, right) => Number(Boolean(right.branch_id)) - Number(Boolean(left.branch_id))
         || right.valid_from.localeCompare(left.valid_from))[0]
-    return selectedPrice ? Number(selectedPrice.amount) : null
+    if (!selectedPrice) return null
+    const product = activeProducts.find((item) => item.id === productId)
+    const taxRate = Number(product?.vat_rate || 0) > 0
+      ? Number(product?.vat_rate)
+      : Number(activeCompany?.taxRate || 0)
+    return selectedPrice.tax_inclusive
+      ? Number(selectedPrice.amount) / (1 + taxRate / 100)
+      : Number(selectedPrice.amount)
   }
   function selectProduct(productId: string, packagingId?: string) {
     const options = catalogPackages.filter((pack) => pack.product_id === productId)
