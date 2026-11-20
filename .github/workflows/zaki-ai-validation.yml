@@ -7,7 +7,7 @@ on:
       - "src/pages/AI.tsx"
       - "src/App.tsx"
       - "src/auth/WorkspaceRoutes.tsx"
-      - "src/inventory-cloud/WorkspaceShell.tsx"
+      - "src/inventory-cloud/**"
       - "supabase/functions/zaki-ai/**"
       - "supabase/migrations/**"
       - "supabase/tests/**"
