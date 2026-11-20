@@ -8,6 +8,7 @@ import {
   ReceiptText,
   ShoppingBag,
   ShoppingCart,
+  Tags,
   Warehouse,
 } from "lucide-react"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
