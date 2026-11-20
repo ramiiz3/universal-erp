@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(18);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -98,6 +98,12 @@ select is(
   (select base_quantity from public.product_packagings where name = 'Strip of 10'),
   10::numeric,
   'packaging conversion factor is stored on the product packaging'
+);
+select throws_ok(
+  $ update public.product_packagings set base_quantity = 20 where name = 'Strip of 10' $,
+  '22023',
+  'Packaging conversion is already referenced by a barcode or price. Archive it and create a new packaging level instead.',
+  'a referenced packaging conversion cannot be silently changed'
 );
 select lives_ok(
   $$ insert into public.product_barcodes (
