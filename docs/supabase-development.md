@@ -54,11 +54,11 @@ The database runner executes each complete pgTAP SQL file on a single
 connection, verifies all planned assertions, and confirms that each test
 transaction rolled back. The authentication/company suite has 39 assertions,
 the inventory tenant suite has 26, the inventory workflow suite has 36, and
-the cloud transaction suite has 68 assertions covering tenant/branch isolation,
+the cloud transaction suite has 92 assertions covering tenant/branch isolation,
 FEFO sales, invoice payments, partial purchase receipts, stock ledger entries,
 and retry idempotency; the product catalog suite has 17 assertions covering
 company isolation, legacy backfill, packaging conversion, barcode uniqueness and
-base-unit integrity (196 database assertions total). The Storage test creates
+base-unit integrity (220 database assertions total). The Storage test creates
 temporary local users and companies, authenticates through local Auth, tests
 private-file upload, cross-company access and deletion through the Storage
 HTTP API, and cleans up its temporary resources. Both scripts are local-only
