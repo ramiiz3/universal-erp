@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth/AuthProvider"
@@ -153,7 +153,6 @@ export default function CloudPOSPage() {
   const selectedPackaging = selectedProductPackages.find((pack) => pack.id === selectedPackagingId)
     ?? selectedProductPackages.find((pack) => pack.is_base)
     ?? null
-  const selectedPackagingUnit = catalogUnits.find((unit) => unit.id === selectedPackaging?.unit_id)
   function retailPriceFor(productId: string, packagingId: string) {
     const today = new Date().toISOString().slice(0, 10)
     const selectedPrice = catalogPrices
@@ -189,9 +188,6 @@ export default function CloudPOSPage() {
   const payableEstimate = estimate.total
   const paymentAmount = paymentAmountOverride ?? payableEstimate.toFixed(2)
   const normalizedSearch = productSearch.trim().toLocaleLowerCase()
-  const exactScannedBarcode = catalogBarcodes.find((barcode) =>
-    barcode.barcode_value.trim().toLocaleLowerCase() === normalizedSearch,
-  )
   const matchedProducts = activeProducts.filter((product) => {
     return !normalizedSearch
       || [product.name, product.sku, product.barcode]
