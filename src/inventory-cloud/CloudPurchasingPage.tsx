@@ -33,6 +33,30 @@ type CloudPurchase = {
   created_at: string
 }
 
+type PurchasePackaging = {
+  id: string
+  product_id: string
+  unit_id: string
+  name: string
+  base_quantity: number
+  is_base: boolean
+  is_purchase_unit: boolean
+  allow_fractional_quantity: boolean
+  is_active: boolean
+}
+type CatalogUnit = { id: string; name: string; symbol: string }
+type CatalogPrice = {
+  id: string
+  product_id: string
+  packaging_id: string
+  price_type: string
+  currency_code: string
+  amount: number
+  branch_id: string | null
+  valid_from: string
+  valid_to: string | null
+  is_active: boolean
+}
 type PurchaseLine = {
   id: string
   product_id: string
@@ -46,6 +70,13 @@ type PurchaseLine = {
   vat_rate: number
   vat_amount: number
   line_total: number
+  packaging_id: string | null
+  entered_quantity: number
+  entered_unit_cost: number
+  packaging_name_snapshot: string
+  packaging_unit_snapshot: string
+  conversion_factor_snapshot: number
+  base_unit_snapshot: string
 }
 
 type ReceiveDraft = {
@@ -89,6 +120,9 @@ export default function CloudPurchasingPage() {
   const [purchases, setPurchases] = useState<CloudPurchase[]>([])
   const [selectedPurchaseId, setSelectedPurchaseId] = useState("")
   const [purchaseLines, setPurchaseLines] = useState<PurchaseLine[]>([])
+  const [packagings, setPackagings] = useState<PurchasePackaging[]>([])
+  const [catalogUnits, setCatalogUnits] = useState<CatalogUnit[]>([])
+  const [catalogPrices, setCatalogPrices] = useState<CatalogPrice[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBranchOverride, setSelectedBranchOverride] = useState("")
   const [selectedWarehouseOverride, setSelectedWarehouseOverride] = useState("")
@@ -100,6 +134,7 @@ export default function CloudPurchasingPage() {
   const [supplierTaxNumber, setSupplierTaxNumber] = useState("")
   const [supplierInvoiceReference, setSupplierInvoiceReference] = useState("")
   const [selectedProductId, setSelectedProductId] = useState("")
+  const [selectedPackagingId, setSelectedPackagingId] = useState("")
   const [quantity, setQuantity] = useState("1")
   const [unitCost, setUnitCost] = useState("")
   const [lineDiscount, setLineDiscount] = useState("0")
@@ -127,19 +162,40 @@ export default function CloudPurchasingPage() {
     ? selectedSupplierId
     : suppliers.find((supplier) => supplier.is_active)?.id ?? ""
   const selectedPurchase = purchases.find((purchase) => purchase.id === selectedPurchaseId) ?? null
+  const selectedProduct = products.find((product) => product.id === selectedProductId && product.is_active) ?? null
+  const purchasePackagingChoices = packagings.filter((pack) => pack.product_id === selectedProductId && pack.is_active && pack.is_purchase_unit)
+  const selectedPackaging = purchasePackagingChoices.find((pack) => pack.id === selectedPackagingId) ?? purchasePackagingChoices.find((pack) => pack.is_base) ?? null
+  const selectedPackagingUnit = catalogUnits.find((unit) => unit.id === selectedPackaging?.unit_id)
+  function getPackagePurchasePrice(productId: string, packagingId: string, factor: number) {
+    const today = new Date().toISOString().slice(0, 10)
+    const price = catalogPrices
+      .filter((item) => item.product_id === productId && item.packaging_id === packagingId
+        && item.price_type === "purchase" && item.currency_code === (activeCompany?.currency || "AED")
+        && item.is_active && item.valid_from <= today && (!item.valid_to || item.valid_to >= today)
+        && (item.branch_id === selectedBranchId || item.branch_id === null))
+      .sort((a, b) => Number(Boolean(b.branch_id)) - Number(Boolean(a.branch_id))
+        || b.valid_from.localeCompare(a.valid_from))[0]
+    return price ? Number(price.amount) : null
+  }
   const refreshLists = useCallback(async () => {
     const requestId = ++fetchVersion.current
     if (!supabase || !companyId) {
       return
     }
-    const [supplierResult, purchaseResult] = await Promise.all([
+    const [supplierResult, purchaseResult, packagingResult, unitResult, priceResult] = await Promise.all([
       supabase.from("cloud_suppliers").select("*").eq("company_id", companyId).order("name"),
       supabase.from("cloud_purchases").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(100),
+      supabase.from("product_packagings").select("*").eq("company_id", companyId).eq("is_active", true).eq("is_purchase_unit", true).order("sort_order"),
+      supabase.from("units_of_measure").select("id,name,symbol").eq("company_id", companyId),
+      supabase.from("product_prices").select("*").eq("company_id", companyId).eq("price_type", "purchase").eq("is_active", true),
     ])
     if (requestId !== fetchVersion.current) return
-    setError([supplierResult.error?.message, purchaseResult.error?.message].filter(Boolean).join("; "))
+    setError([supplierResult.error?.message, purchaseResult.error?.message, packagingResult.error?.message, unitResult.error?.message, priceResult.error?.message].filter(Boolean).join("; "))
     setSuppliers((supplierResult.data ?? []) as CloudSupplier[])
     setPurchases((purchaseResult.data ?? []) as CloudPurchase[])
+    setPackagings((packagingResult.data ?? []) as PurchasePackaging[])
+    setCatalogUnits((unitResult.data ?? []) as CatalogUnit[])
+    setCatalogPrices((priceResult.data ?? []) as CatalogPrice[])
     setLoading(false)
   }, [companyId])
 
@@ -167,11 +223,16 @@ export default function CloudPurchasingPage() {
     if (requestId !== purchaseLinesVersion.current) return
     const lines = (data ?? []) as PurchaseLine[]
     setPurchaseLines(lines)
-    setReceiveDrafts(Object.fromEntries(lines.map((line) => [line.id, {
-      ...EMPTY_DRAFT,
-      quantity: String(Math.max(0, Number(line.quantity_ordered) - Number(line.quantity_received))),
-      unitCost: String(line.unit_cost),
-    }])))
+    setReceiveDrafts(Object.fromEntries(lines.map((line) => {
+      const factor = Number(line.conversion_factor_snapshot || 1)
+      const remainingBase = Math.max(0, Number(line.quantity_ordered) - Number(line.quantity_received))
+      const remainingEntered = remainingBase / factor
+      return [line.id, {
+        ...EMPTY_DRAFT,
+        quantity: String(remainingEntered),
+        unitCost: String(line.entered_unit_cost ?? Number(line.unit_cost) * factor),
+      }]
+    })))
   }, [companyId])
 
   async function createSupplier(event: FormEvent<HTMLFormElement>) {
@@ -222,16 +283,32 @@ export default function CloudPurchasingPage() {
       return
     }
     try {
-      const line = {
+      const packaging = purchasePackagingChoices.find((item) => item.id === selectedPackagingId)
+      ?? purchasePackagingChoices.find((item) => item.is_base)
+      ?? purchasePackagingChoices[0]
+    if (!packaging) {
+      setError("Set up at least one purchase packaging unit for this product in Catalog setup.")
+      return
+    }
+    const unit = catalogUnits.find((item) => item.id === packaging.unit_id)
+    const line = {
         productId: product.id,
         quantity: Number(quantity),
         unitCost: Number(unitCost),
         discountAmount: Number(lineDiscount || 0),
+        packagingId: packaging.id,
+        packagingName: packaging.name,
+        packagingUnit: unit?.symbol || unit?.name || product.unit,
+        conversionFactor: Number(packaging.base_quantity),
+        baseUnit: product.unit,
+        allowFractionalQuantity: packaging.allow_fractional_quantity,
       }
       buildPurchaseLines([line])
       setCart((previous) => [...previous, line])
       setQuantity("1")
-      setUnitCost(String(product.purchase_price))
+      setUnitCost(String(getPackagePurchasePrice(product.id, packaging.id, Number(packaging.base_quantity))
+        ?? Number(product.purchase_price) * Number(packaging.base_quantity)))
+      setSelectedProductId("")
       setLineDiscount("0")
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -289,8 +366,10 @@ export default function CloudPurchasingPage() {
         const draft = receiveDrafts[line.id] ?? EMPTY_DRAFT
         return {
           purchaseLineId: line.id,
-          outstandingQuantity: Number(line.quantity_ordered) - Number(line.quantity_received),
+          outstandingQuantity: (Number(line.quantity_ordered) - Number(line.quantity_received))
+            / Number(line.conversion_factor_snapshot || 1),
           quantity: Number(draft.quantity || 0),
+          packagingId: line.packaging_id,
           unitCost: draft.unitCost.trim() ? Number(draft.unitCost) : null,
           sellingPrice: draft.sellingPrice.trim() ? Number(draft.sellingPrice) : null,
           batch: draft.batch,
@@ -366,9 +445,25 @@ export default function CloudPurchasingPage() {
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_100px_110px_100px_auto]">
             <label className="text-xs font-medium">Product<select value={selectedProductId} onChange={(event) => {
               const product = products.find((candidate) => candidate.id === event.target.value)
+              const options = packagings.filter((pack) => pack.product_id === event.target.value && pack.is_active && pack.is_purchase_unit)
+              const packaging = options.find((pack) => pack.is_base) ?? options[0]
               setSelectedProductId(event.target.value)
-              setUnitCost(product ? String(product.purchase_price) : "")
+              setSelectedPackagingId(packaging?.id ?? "")
+              const packagePrice = product && packaging ? catalogPrices.find((item) =>
+                item.product_id === product.id && item.packaging_id === packaging.id
+                && item.price_type === "purchase" && item.currency_code === (activeCompany?.currency || "AED")
+                && item.is_active && item.branch_id === null
+              )?.amount : null
+              setUnitCost(product ? String(packagePrice ?? Number(product.purchase_price) * Number(packaging?.base_quantity ?? 1)) : "")
             }} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"><option value="">Select product</option>{products.filter((product) => product.is_active).map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>
+            <label className="text-xs font-medium">Purchase packaging<select value={selectedPackaging?.id ?? ""} onChange={(event) => {
+              const packaging = purchasePackagingChoices.find((item) => item.id === event.target.value)
+              setSelectedPackagingId(event.target.value)
+              if (selectedProduct && packaging) {
+                const packagePrice = getPackagePurchasePrice(selectedProduct.id, packaging.id, Number(packaging.base_quantity))
+                setUnitCost(String(packagePrice ?? Number(selectedProduct.purchase_price) * Number(packaging.base_quantity)))
+              }
+            }} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"><option value="">Select packaging</option>{purchasePackagingChoices.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} · {pack.base_quantity} {selectedProduct?.unit}</option>)}</select></label>
             <label className="text-xs font-medium">Quantity<input type="number" min="0.000001" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
             <label className="text-xs font-medium">Unit cost<input type="number" min="0" step="any" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
             <label className="text-xs font-medium">Discount<input type="number" min="0" step="0.01" value={lineDiscount} onChange={(event) => setLineDiscount(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
@@ -378,7 +473,7 @@ export default function CloudPurchasingPage() {
             {cart.map((line) => {
               const product = products.find((candidate) => candidate.id === line.productId)
               return <li key={line.productId} className="flex items-center justify-between gap-2 py-2">
-                <span>{product?.name} · {line.quantity} {product?.unit} × {line.unitCost.toFixed(2)}</span>
+                <span>{product?.name} · {line.quantity} {line.packagingName || product?.unit} × {line.unitCost.toFixed(2)} ({line.quantity * (line.conversionFactor ?? 1)} {product?.unit})</span>
                 <button type="button" onClick={() => setCart((previous) => previous.filter((item) => item.productId !== line.productId))} className="text-red-700">Remove</button>
               </li>
             })}
@@ -416,11 +511,14 @@ export default function CloudPurchasingPage() {
             <form onSubmit={(event) => void receivePurchase(event)} className="mt-4 space-y-3">
               {purchaseLines.map((line) => {
                 const draft = receiveDrafts[line.id] ?? EMPTY_DRAFT
-                const outstanding = Number(line.quantity_ordered) - Number(line.quantity_received)
+                const factor = Number(line.conversion_factor_snapshot || 1)
+                const outstandingBase = Number(line.quantity_ordered) - Number(line.quantity_received)
+                const outstanding = outstandingBase / factor
+                const receivedEntered = Number(line.quantity_received) / factor
                 return <div key={line.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                   <div className="mb-2 flex flex-wrap justify-between gap-2 text-sm">
                     <span className="font-medium">{line.product_name} · {line.sku || "No SKU"}</span>
-                    <span>Ordered {line.quantity_ordered} · Received {line.quantity_received} · Remaining {outstanding} · Cost {selectedPurchase.currency} {Number(line.unit_cost).toFixed(2)} · VAT {Number(line.vat_rate).toFixed(2)}% ({selectedPurchase.currency} {Number(line.vat_amount).toFixed(2)}) · Line total {selectedPurchase.currency} {Number(line.line_total).toFixed(2)}</span>
+                    <span>Ordered {line.entered_quantity} {line.packaging_name_snapshot || line.unit} · Received {receivedEntered.toFixed(3)} · Remaining {outstanding.toFixed(3)} · Cost {selectedPurchase.currency} {Number(line.entered_unit_cost ?? Number(line.unit_cost) * factor).toFixed(2)} per {line.packaging_name_snapshot || line.unit} · Base stock: {line.quantity_ordered} {line.unit} · VAT {Number(line.vat_rate).toFixed(2)}% ({selectedPurchase.currency} {Number(line.vat_amount).toFixed(2)}) · Line total {selectedPurchase.currency} {Number(line.line_total).toFixed(2)}</span>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                     <label className="text-xs">Receive quantity<input type="number" min="0" max={outstanding} step="any" value={draft.quantity} onChange={(event) => setReceiveDrafts((previous) => ({ ...previous, [line.id]: { ...draft, quantity: event.target.value } }))} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950" /></label>
