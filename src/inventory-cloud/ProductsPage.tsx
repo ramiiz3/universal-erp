@@ -141,7 +141,7 @@ export default function ProductsPage() {
       })
       const firstSheet = workbook.SheetNames[0]
       if (!firstSheet) throw new Error("The selected workbook has no worksheets.")
-      const rows = XLSX.utils.sheet_to_json<unknown[][]>(
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(
         workbook.Sheets[firstSheet],
         { header: 1, raw: false, defval: "", blankrows: false },
       )
