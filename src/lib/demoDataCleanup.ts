@@ -117,11 +117,6 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
     && record.name === expected.name
     && record.sku === expected.sku
     && record.barcode === expected.barcode
-    && record.category === expected.category
-    && Number(record.purchasePrice) === expected.purchasePrice
-    && Number(record.sellingPrice) === expected.sellingPrice
-    && Number(record.minimumStock) === expected.minimumStock
-    && Number(record.vatRate) === expected.vatRate
     && record.unit === expected.unit
 
   if (!exactIdentity) return false
@@ -164,7 +159,6 @@ function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
     && record.productId === expected.productId
     && record.batch === expected.batch
     && record.expiry === expected.expiry
-    && Number(record.quantity) === expected.quantity
     && Number(record.purchasePrice) === expected.purchasePrice
     && (!record.warehouseId || record.warehouseId === "WH-MAIN")
     && isEmptyValue(record.locationId)
