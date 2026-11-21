@@ -174,7 +174,10 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
       const batch = String(value(row, "batch") ?? "").trim()
       const expiry = expiryValue(value(row, "expiry"))
       const stockQuantity = numberValue(value(row, "stockQuantity"), "Opening stock quantity", rowNumber)
-      const lotPurchasePrice = numberValue(value(row, "lotPurchasePrice"), "Lot purchase price", rowNumber) || purchasePrice
+      const rawLotPurchasePrice = String(value(row, "lotPurchasePrice") ?? "").trim()
+      const lotPurchasePrice = rawLotPurchasePrice
+        ? numberValue(rawLotPurchasePrice, "Lot purchase price", rowNumber)
+        : purchasePrice
       const rawLotSellingPrice = String(value(row, "lotSellingPrice") ?? "").trim()
       const lotSellingPrice = rawLotSellingPrice
         ? numberValue(rawLotSellingPrice, "Lot selling price", rowNumber)
