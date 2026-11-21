@@ -306,7 +306,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     const warehouse = warehouses.find((item) => {
       const record = asRecord(item)
       if (!record || !matchesOnlyKnownFields(record, [
-        "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt",
+        "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt", "updatedAt",
       ])) return false
       return record.id === expectedWarehouse.id
         && record.name === expectedWarehouse.name
@@ -317,6 +317,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
         && record.phone === expectedWarehouse.phone
         && record.active === expectedWarehouse.active
         && record.createdAt === expectedWarehouse.createdAt
+        && isEmptyValue(record.updatedAt)
     })
     if (!warehouse) continue
     const hasBusinessReferences = isReferencedOutside(
