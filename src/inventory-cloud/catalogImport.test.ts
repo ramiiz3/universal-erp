@@ -4,8 +4,8 @@ import { previewCloudCatalogImport } from "./catalogImport"
 describe("cloud company catalog import preview", () => {
   it("reads product catalog rows without requiring opening stock", () => {
     const result = previewCloudCatalogImport([
-      ["Product Name", "SKU", "Category", "Unit", "Purchase Price", "Selling Price", "VAT"],
-      ["Product A", "A-1", "General", "Box", "3.50", "5", "5"],
+      ["Product Name", "SKU", "Category", "Unit", "Purchase Price", "Selling Price", "VAT", "Minimum Stock"],
+      ["Product A", "A-1", "General", "Box", "3.50", "5", "5", "1.5"],
     ])
     expect(result.issues).toEqual([])
     expect(result.productCount).toBe(1)
@@ -15,6 +15,7 @@ describe("cloud company catalog import preview", () => {
       unit: "Box",
       purchasePrice: 3.5,
       sellingPrice: 5,
+      minimumStock: 1.5,
       stockQuantity: 0,
       expiry: null,
     })
@@ -44,6 +45,16 @@ describe("cloud company catalog import preview", () => {
     expect(result.rows[0]?.name).toBe("Medicine A")
     expect(result.rows[0]?.expiry).toBe("2027-06-15")
     expect(result.rows[0]?.stockQuantity).toBe(2)
+  })
+
+  it("preserves an explicit zero batch cost instead of defaulting it to product cost", () => {
+    const result = previewCloudCatalogImport([
+      ["Product Name", "Purchase Price", "Batch", "Qty", "Lot Purchase Price"],
+      ["Product A", "8", "FREE-GOODS", "2", "0"],
+    ])
+    expect(result.issues).toEqual([])
+    expect(result.rows[0]?.purchasePrice).toBe(8)
+    expect(result.rows[0]?.lotPurchasePrice).toBe(0)
   })
 
   it("reports invalid numeric, tax and expiry values", () => {
