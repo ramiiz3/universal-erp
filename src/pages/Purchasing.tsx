@@ -11,7 +11,6 @@ import {
   X,
 } from "lucide-react"
 import { useERP, type Purchase } from "../context/ERPContext"
-import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 
 type PurchaseLine = {
   id: string
@@ -20,14 +19,14 @@ type PurchaseLine = {
   barcode: string
   quantity: number
   purchasePrice: number
+  packageId?: string
+  packageName?: string
+  purchaseUnit?: string
+  baseUnit?: string
+  conversionFactor?: number
+  baseQuantity?: number
   batch: string
   expiry: string
-}
-
-type SupplierOption = {
-  id: string
-  name: string
-  status: "Active" | "Inactive"
 }
 
 function formatCurrency(value: number) {
@@ -47,21 +46,17 @@ function formatDate(value: string) {
 export default function Purchasing() {
   const navigate = useNavigate()
 
-  const {
-    products,
-    purchases,
-    createPurchase,
-  } = useERP()
+  const { products, purchases, createPurchase, warehouses, storageLocations, suppliers } = useERP()
 
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState("")
-  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
-  const [supplierName, setSupplierName] = useState("")
+  const [supplierId, setSupplierId] = useState("")
   const [supplierInvoice, setSupplierInvoice] = useState("")
   const [barcode, setBarcode] = useState("")
   const [selectedProductId, setSelectedProductId] = useState("")
   const [quantity, setQuantity] = useState("")
   const [purchasePrice, setPurchasePrice] = useState("")
+  const [selectedPackageId, setSelectedPackageId] = useState("")
   const [batch, setBatch] = useState("")
   const [expiry, setExpiry] = useState("")
   const [lines, setLines] = useState<PurchaseLine[]>([])
@@ -69,29 +64,20 @@ export default function Purchasing() {
   const [successNumber, setSuccessNumber] = useState("")
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
 
-  useMemo(() => {
-    try {
-      const raw =
-        localStorage.getItem(
-          ERP_SUPPLIERS_STORAGE_KEY,
-        )
+  const [warehouseId, setWarehouseId] = useState(
+    () =>
+      warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
+      warehouses.find((item) => item.active)?.id ??
+      "",
+  )
+  const [locationId, setLocationId] = useState("")
+  const activeWarehouses = warehouses.filter((item) => item.active)
+  const availableLocations = storageLocations.filter(
+    (item) => item.active && item.warehouseId === warehouseId,
+  )
 
-      if (!raw) {
-        setSuppliers([])
-        return
-      }
 
-      const parsed = JSON.parse(raw)
 
-      setSuppliers(
-        Array.isArray(parsed)
-          ? parsed
-          : [],
-      )
-    } catch {
-      setSuppliers([])
-    }
-  }, [showForm])
 
   const filteredPurchases = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -131,7 +117,7 @@ export default function Purchasing() {
   )
 
   function resetForm() {
-    setSupplierName("")
+    setSupplierId("")
     setSupplierInvoice("")
     setBarcode("")
     setSelectedProductId("")
@@ -140,6 +126,7 @@ export default function Purchasing() {
     setBatch("")
     setExpiry("")
     setLines([])
+    setSelectedPackageId("")
     setError("")
   }
 
@@ -150,6 +137,7 @@ export default function Purchasing() {
 
   function selectProduct(productId: string) {
     setSelectedProductId(productId)
+    setSelectedPackageId("")
 
     const product = products.find(
       (item) => item.id === productId,
@@ -162,14 +150,46 @@ export default function Purchasing() {
     }
   }
 
+
+  function selectPackage(packageId: string) {
+    setSelectedPackageId(packageId)
+
+    const product = products.find(
+      (item) => item.id === selectedProductId,
+    )
+
+    if (!product) return
+
+    const selectedPackage = product.packagings?.find(
+      (item) => item.id === packageId,
+    )
+
+    if (!selectedPackage) {
+      setPurchasePrice(product.purchasePrice.toFixed(2))
+      return
+    }
+
+    const factor = selectedPackage.conversionFactor
+    const defaultPackagePrice =
+      selectedPackage.purchasePrice ??
+      product.purchasePrice * factor
+
+    setPurchasePrice(defaultPackagePrice.toFixed(2))
+  }
+
   function handleBarcode() {
     const code = barcode.trim().toLowerCase()
 
     if (!code) return
 
-    const product = products.find(
-      (item) =>
-        item.barcode.trim().toLowerCase() === code,
+    const product = products.find((item) =>
+      item.barcode.trim().toLowerCase() === code ||
+      (item.alternateBarcodes || []).some(
+        (value) => value.trim().toLowerCase() === code,
+      ) ||
+      (item.packagings || []).some(
+        (packaging) => packaging.barcode?.trim().toLowerCase() === code,
+      ),
     )
 
     if (!product) {
@@ -181,6 +201,15 @@ export default function Purchasing() {
 
     setError("")
     selectProduct(product.id)
+
+    const matchedPackage = product.packagings?.find(
+      (item) => item.barcode?.trim().toLowerCase() === code,
+    )
+
+    if (matchedPackage) {
+      selectPackage(matchedPackage.id)
+    }
+
     setBarcode("")
   }
 
@@ -204,8 +233,37 @@ export default function Purchasing() {
     const qty = Number(quantity)
     const price = Number(purchasePrice)
 
-    if (!Number.isInteger(qty) || qty <= 0) {
-      setError("Quantity must be a whole number greater than zero.")
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setError("Quantity must be greater than zero.")
+      return
+    }
+
+    const selectedPackage = product.packagings?.find(
+      (item) => item.id === selectedPackageId,
+    )
+
+    if (selectedPackageId && !selectedPackage) {
+      setError("The selected package is no longer available for this product.")
+      return
+    }
+
+    if (selectedPackage && !selectedPackage.purchaseEnabled) {
+      setError("This package is not enabled for purchasing.")
+      return
+    }
+
+    const conversionFactor =
+      selectedPackage?.conversionFactor ?? 1
+
+    if (!Number.isFinite(conversionFactor) || conversionFactor <= 0) {
+      setError("The package conversion factor is invalid.")
+      return
+    }
+
+    const baseQuantity = qty * conversionFactor
+
+    if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) {
+      setError("The converted base-unit quantity is invalid.")
       return
     }
 
@@ -231,6 +289,12 @@ export default function Purchasing() {
       barcode: product.barcode,
       quantity: qty,
       purchasePrice: price,
+      packageId: selectedPackage?.id,
+      packageName: selectedPackage?.name,
+      purchaseUnit: selectedPackage?.unit ?? product.unit,
+      baseUnit: product.unit,
+      conversionFactor,
+      baseQuantity,
       batch: batch.trim().toUpperCase(),
       expiry,
     }
@@ -267,8 +331,11 @@ export default function Purchasing() {
     event.preventDefault()
     setError("")
 
-    if (!supplierName.trim()) {
-      setError("Supplier name is required.")
+    const selectedSupplier = suppliers.find(
+      (supplier) => supplier.id === supplierId && supplier.status === "Active",
+    )
+    if (!selectedSupplier) {
+      setError("Select an active supplier.")
       return
     }
 
@@ -279,12 +346,16 @@ export default function Purchasing() {
 
     try {
       const purchase = createPurchase({
-        supplierName,
+        supplierId: selectedSupplier.id,
+        supplierName: selectedSupplier.name,
         supplierInvoice,
+        warehouseId,
+        locationId: locationId || null,
         items: lines.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
           purchasePrice: line.purchasePrice,
+          packageId: line.packageId,
           batch: line.batch,
           expiry: line.expiry,
         })),
@@ -568,9 +639,9 @@ export default function Purchasing() {
                     </div>
 
                     <select
-                      value={supplierName}
+                      value={supplierId}
                       onChange={(event) =>
-                        setSupplierName(
+                        setSupplierId(
                           event.target.value,
                         )
                       }
@@ -594,7 +665,7 @@ export default function Purchasing() {
                         .map((supplier) => (
                           <option
                             key={supplier.id}
-                            value={supplier.name}
+                            value={supplier.id}
                           >
                             {supplier.name}
                           </option>
@@ -625,6 +696,41 @@ export default function Purchasing() {
                       placeholder="Optional supplier invoice number"
                       className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Receiving Warehouse
+                    </label>
+                    <select
+                      value={warehouseId}
+                      onChange={(event) => {
+                        setWarehouseId(event.target.value)
+                        setLocationId("")
+                      }}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm"
+                    >
+                      {activeWarehouses.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Storage Location (Optional)
+                    </label>
+                    <select
+                      value={locationId}
+                      onChange={(event) => setLocationId(event.target.value)}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm"
+                    >
+                      <option value="">Not specified</option>
+                      {availableLocations.map((item) => (
+                        <option key={item.id} value={item.id}>{item.code} — {item.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -673,10 +779,31 @@ export default function Purchasing() {
                       ))}
                     </select>
 
+                    <select
+                      value={selectedPackageId}
+                      disabled={!selectedProductId}
+                      onChange={(event) => selectPackage(event.target.value)}
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        Base unit ({products.find((item) => item.id === selectedProductId)?.unit || "unit"})
+                      </option>
+
+                      {products
+                        .find((item) => item.id === selectedProductId)
+                        ?.packagings
+                        ?.filter((item) => item.purchaseEnabled)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} — 1 {item.unit} = {item.conversionFactor} base units
+                          </option>
+                        ))}
+                    </select>
+
                     <input
                       type="number"
-                      min="1"
-                      step="1"
+                      min="0.001"
+                      step="any"
                       value={quantity}
                       onChange={(event) =>
                         setQuantity(event.target.value)
@@ -714,6 +841,18 @@ export default function Purchasing() {
                       }
                       className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
+
+                    {selectedProductId && (
+                      <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 sm:col-span-2">
+                        Stock will be received as{" "}
+                        {(Number(quantity) || 0) *
+                          (products.find((item) => item.id === selectedProductId)
+                            ?.packagings?.find((item) => item.id === selectedPackageId)
+                            ?.conversionFactor || 1)}{" "}
+                        {products.find((item) => item.id === selectedProductId)?.unit || "base units"}.
+                        Package price: {purchasePrice || "0.00"}.
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -781,7 +920,12 @@ export default function Purchasing() {
                             </td>
 
                             <td className="px-4 py-3 text-right text-sm font-medium text-slate-700">
-                              {line.quantity}
+                              {line.quantity} {line.purchaseUnit || ""}
+                              {line.packageName && (
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {line.packageName}: {line.baseQuantity} {line.baseUnit}
+                                </div>
+                              )}
                             </td>
 
                             <td className="px-4 py-3 text-right text-sm text-slate-700">

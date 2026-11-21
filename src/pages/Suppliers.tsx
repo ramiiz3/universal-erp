@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Building2,
   Edit3,
@@ -9,19 +9,7 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import { useERP } from "../context/ERPContext"
-import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
-
-type Supplier = {
-  id: string
-  name: string
-  contactPerson: string
-  phone: string
-  email: string
-  address: string
-  taxNumber: string
-  status: "Active" | "Inactive"
-}
+import { useERP, type Supplier } from "../context/ERPContext"
 
 type SupplierForm = Omit<Supplier, "id">
 
@@ -35,37 +23,18 @@ const emptyForm: SupplierForm = {
   status: "Active",
 }
 
-function loadSuppliers(): Supplier[] {
-  try {
-    const raw = localStorage.getItem(ERP_SUPPLIERS_STORAGE_KEY)
-
-    if (!raw) return []
-
-    const parsed = JSON.parse(raw)
-
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveSuppliers(suppliers: Supplier[]) {
-  localStorage.setItem(
-    ERP_SUPPLIERS_STORAGE_KEY,
-    JSON.stringify(suppliers),
-  )
-}
-
 function formatCurrency(value: number) {
   return `AED ${value.toFixed(2)}`
 }
 
 export default function Suppliers() {
-  const { purchases } = useERP()
-
-  const [suppliers, setSuppliers] = useState<Supplier[]>(
-    loadSuppliers,
-  )
+  const {
+    suppliers,
+    purchases,
+    createSupplier,
+    updateSupplier,
+    deleteSupplier,
+  } = useERP()
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
@@ -76,10 +45,6 @@ export default function Suppliers() {
     emptyForm,
   )
   const [error, setError] = useState("")
-
-  useEffect(() => {
-    saveSuppliers(suppliers)
-  }, [suppliers])
 
   const supplierStats = useMemo(() => {
     const map = new Map<
@@ -92,25 +57,23 @@ export default function Suppliers() {
     >()
 
     for (const supplier of suppliers) {
-      map.set(supplier.name.trim().toLowerCase(), {
+      const stats = {
         purchases: 0,
         totalPurchased: 0,
-        lastPurchase: null,
-      })
+        lastPurchase: null as string | null,
+      }
+      map.set(supplier.id, stats)
+      map.set(supplier.name.trim().toLowerCase(), stats)
     }
 
     for (const purchase of purchases) {
-      const key = purchase.supplierName
-        .trim()
-        .toLowerCase()
-
+      const key = purchase.supplierId ??
+        purchase.supplierName.trim().toLowerCase()
       const current = map.get(key)
-
       if (!current) continue
 
       current.purchases += 1
       current.totalPurchased += purchase.total
-
       if (
         !current.lastPurchase ||
         new Date(purchase.createdAt).getTime() >
@@ -172,9 +135,7 @@ export default function Suppliers() {
 
   function getStats(supplier: Supplier) {
     return (
-      supplierStats.get(
-        supplier.name.trim().toLowerCase(),
-      ) ?? {
+      supplierStats.get(supplier.id) ?? {
         purchases: 0,
         totalPurchased: 0,
         lastPurchase: null,
@@ -210,82 +171,29 @@ export default function Suppliers() {
     event.preventDefault()
     setError("")
 
-    const name = form.name.trim()
+    try {
+      if (editingSupplier) {
+        updateSupplier(editingSupplier.id, form)
+      } else {
+        createSupplier(form)
+      }
 
-    if (!name) {
-      setError("Supplier name is required.")
-      return
-    }
-
-    if (!form.phone.trim()) {
-      setError("Phone number is required.")
-      return
-    }
-
-    const duplicate = suppliers.find(
-      (supplier) =>
-        supplier.name.trim().toLowerCase() ===
-          name.toLowerCase() &&
-        supplier.id !== editingSupplier?.id,
-    )
-
-    if (duplicate) {
+      setShowForm(false)
+      setEditingSupplier(null)
+      setForm(emptyForm)
+    } catch (submitError) {
       setError(
-        "A supplier with this name already exists.",
+        submitError instanceof Error
+          ? submitError.message
+          : "Could not save supplier.",
       )
-      return
     }
-
-    if (editingSupplier) {
-      setSuppliers((current) =>
-        current.map((supplier) =>
-          supplier.id ===
-          editingSupplier.id
-            ? {
-                id: editingSupplier.id,
-                ...form,
-                name,
-                phone: form.phone.trim(),
-                email:
-                  form.email.trim(),
-                contactPerson:
-                  form.contactPerson.trim(),
-                address:
-                  form.address.trim(),
-                taxNumber:
-                  form.taxNumber.trim(),
-              }
-            : supplier,
-        ),
-      )
-    } else {
-      setSuppliers((current) => [
-        ...current,
-        {
-          id: `SUP-${Date.now()}`,
-          ...form,
-          name,
-          phone: form.phone.trim(),
-          email: form.email.trim(),
-          contactPerson:
-            form.contactPerson.trim(),
-          address: form.address.trim(),
-          taxNumber:
-            form.taxNumber.trim(),
-        },
-      ])
-    }
-
-    setShowForm(false)
-    setEditingSupplier(null)
-    setForm(emptyForm)
   }
 
   function handleDelete(
     supplier: Supplier,
   ) {
     const stats = getStats(supplier)
-
     if (stats.purchases > 0) {
       window.alert(
         "This supplier has purchase history and cannot be deleted. Mark it Inactive instead.",
@@ -293,17 +201,18 @@ export default function Suppliers() {
       return
     }
 
-    const confirmed = window.confirm(
-      `Delete ${supplier.name}?`,
-    )
-
+    const confirmed = window.confirm(`Delete ${supplier.name}?`)
     if (!confirmed) return
 
-    setSuppliers((current) =>
-      current.filter(
-        (item) => item.id !== supplier.id,
-      ),
-    )
+    try {
+      deleteSupplier(supplier.id)
+    } catch (deleteError) {
+      window.alert(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not delete supplier.",
+      )
+    }
   }
 
   function formatDate(

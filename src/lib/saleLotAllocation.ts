@@ -4,6 +4,9 @@ export type LotSaleRequest = {
   product: Product
   quantity: number
   unitPrice?: number
+  unitPriceOverride?: boolean
+
+  warehouseId?: string
 }
 
 export type LotSaleAllocation = {
@@ -15,6 +18,9 @@ export type LotSaleAllocation = {
   expiry: string
   unitCost: number
   totalCost: number
+
+  warehouseId?: string
+  locationId?: string | null
 }
 
 export type LotSaleAllocationResult = {
@@ -25,6 +31,65 @@ export type LotSaleAllocationResult = {
     productName: string
     quantity: number
   }[]
+}
+
+function expiryEndDay(value: string): number | null {
+  const trimmed = value?.trim?.() ?? ""
+  if (!trimmed) return null
+
+  const yearMonth = /^(\d{4})-(\d{2})$/.exec(trimmed)
+  const monthYear = /^(\d{1,2})\/(\d{4})$/.exec(trimmed)
+  if (yearMonth || monthYear) {
+    const year = Number(yearMonth ? yearMonth[1] : monthYear![2])
+    const month = Number(yearMonth ? yearMonth[2] : monthYear![1])
+    if (year < 1 || month < 1 || month > 12) return null
+    const lastDay = new Date(year, month, 0)
+    return Math.floor(Date.UTC(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate()) / 86_400_000)
+  }
+
+  const exactDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+  if (exactDate) {
+    const year = Number(exactDate[1])
+    const month = Number(exactDate[2])
+    const day = Number(exactDate[3])
+    const parsed = new Date(year, month - 1, day)
+    if (
+      month < 1 || month > 12 || day < 1 ||
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
+  }
+
+  const dayMonthYear = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed)
+  if (dayMonthYear) {
+    const day = Number(dayMonthYear[1])
+    const month = Number(dayMonthYear[2])
+    const year = Number(dayMonthYear[3])
+    const parsed = new Date(year, month - 1, day)
+    if (
+      month < 1 || month > 12 || day < 1 ||
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
+  }
+
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return null
+  return Math.floor(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / 86_400_000)
+}
+
+function isExpiredAsOf(value: string, asOfDate: Date): boolean {
+  const expiryDay = expiryEndDay(value)
+  if (expiryDay === null) return false
+  const todayDay = Math.floor(
+    Date.UTC(asOfDate.getFullYear(), asOfDate.getMonth(), asOfDate.getDate()) /
+      86_400_000,
+  )
+  return expiryDay < todayDay
 }
 
 export function calculateLotSaleTotals(
@@ -54,6 +119,7 @@ export function calculateLotSaleTotals(
 export function allocateSaleLots(
   requests: LotSaleRequest[],
   inventoryLots: InventoryLot[],
+  asOfDate: Date = new Date(),
 ): LotSaleAllocationResult {
   const updatedLots = inventoryLots.map((lot) => ({ ...lot }))
   const lines: LotSaleAllocation[] = []
@@ -63,13 +129,18 @@ export function allocateSaleLots(
     let remaining = request.quantity
     const lots = updatedLots
       .map((lot, index) => ({ lot, index }))
-      .filter(({ lot }) => lot.productId === request.product.id && lot.quantity > 0)
+      .filter(({ lot }) =>
+        lot.productId === request.product.id &&
+        lot.quantity > 0 &&
+        (!request.warehouseId || lot.warehouseId === request.warehouseId) &&
+        !isExpiredAsOf(lot.expiry, asOfDate)
+      )
       .sort((left, right) => {
-        const leftExpiry = Date.parse(left.lot.expiry)
-        const rightExpiry = Date.parse(right.lot.expiry)
-        const leftValid = Number.isFinite(leftExpiry)
-        const rightValid = Number.isFinite(rightExpiry)
-        if (leftValid && rightValid && leftExpiry !== rightExpiry) return leftExpiry - rightExpiry
+        const leftExpiry = expiryEndDay(left.lot.expiry)
+        const rightExpiry = expiryEndDay(right.lot.expiry)
+        const leftValid = leftExpiry !== null
+        const rightValid = rightExpiry !== null
+        if (leftValid && rightValid && leftExpiry !== rightExpiry) return leftExpiry! - rightExpiry!
         if (leftValid !== rightValid) return leftValid ? -1 : 1
         return left.index - right.index
       })
@@ -85,8 +156,12 @@ export function allocateSaleLots(
       lines.push({
         product: request.product,
         quantity,
-        unitPrice: lot.sellingPrice ?? request.unitPrice ?? request.product.sellingPrice,
+        unitPrice: request.unitPriceOverride
+          ? request.unitPrice ?? lot.sellingPrice ?? request.product.sellingPrice
+          : lot.sellingPrice ?? request.unitPrice ?? request.product.sellingPrice,
         lotId: lot.id,
+        warehouseId: lot.warehouseId,
+        locationId: lot.locationId ?? null,
         batch: lot.batch,
         expiry: lot.expiry,
         unitCost,

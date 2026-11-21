@@ -13,6 +13,7 @@ import {
   ScanBarcode,
   Settings as SettingsIcon,
   ShoppingCart,
+  ClipboardList,
   Sparkles,
   Sun,
   UserRound,
@@ -25,6 +26,9 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  CreditCard,
+  Calculator,
+  RotateCcw,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { useTheme } from "../context/ThemeContext"
@@ -34,61 +38,62 @@ import {
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
 } from "../lib/erpStorageKeys"
 
-const menuItems = [
+const navigationGroups = [
   {
-    label: "Dashboard",
-    path: "/dashboard",
-    icon: LayoutDashboard,
+    label: "Overview",
+    items: [
+      { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    ],
   },
   {
-    label: "POS",
-    path: "/pos",
-    icon: ScanBarcode,
+    label: "Sales & Customer Management",
+    items: [
+      { label: "Point of Sale", path: "/pos", icon: ScanBarcode },
+      { label: "Sales", path: "/sales", icon: ShoppingCart },
+      { label: "Customer Payments", path: "/customer-payments", icon: CreditCard },
+      { label: "Payment Reconciliation", path: "/payment-reconciliation", icon: CreditCard },
+      { label: "Sales Returns", path: "/sales-returns", icon: RotateCcw },
+      { label: "Invoices", path: "/invoices", icon: FileText },
+      { label: "Customers", path: "/customers", icon: Users },
+    ],
   },
   {
-    label: "Sales",
-    path: "/sales",
-    icon: ShoppingCart,
+    label: "Procurement",
+    items: [
+      { label: "Purchasing", path: "/purchasing", icon: Boxes },
+      { label: "Requisitions & Orders", path: "/procurement-workflow", icon: ClipboardList },
+      { label: "Suppliers", path: "/suppliers", icon: Building2 },
+      { label: "Supplier Invoices", path: "/supplier-invoices", icon: ClipboardList },
+    ],
   },
   {
-    label: "Invoices",
-    path: "/invoices",
-    icon: FileText,
+    label: "Accounting",
+    items: [
+      { label: "Chart of Accounts", path: "/chart-of-accounts", icon: Calculator },
+    ],
   },
   {
-    label: "Customers",
-    path: "/customers",
-    icon: Users,
+    label: "Inventory & Operations",
+    items: [
+      { label: "Products", path: "/products", icon: Boxes },
+      { label: "Categories", path: "/categories", icon: Boxes },
+      { label: "Units & Packaging", path: "/units", icon: Boxes },
+      { label: "Inventory", path: "/inventory", icon: Warehouse },
+      { label: "Expiry & Reorder Alerts", path: "/inventory-alerts", icon: Bell },
+      { label: "Stock Valuation", path: "/stock-valuation", icon: CircleDollarSign },
+      { label: "Warehouses & Locations", path: "/warehouses", icon: Warehouse },
+      { label: "Stock Movement Ledger", path: "/stock-ledger", icon: Boxes },
+      { label: "Stock Counts", path: "/stock-counts", icon: Warehouse },
+      { label: "Stock Transfers", path: "/stock-transfers", icon: Warehouse },
+    ],
   },
   {
-    label: "Inventory",
-    path: "/inventory",
-    icon: Warehouse,
-  },
-  {
-    label: "Purchasing",
-    path: "/purchasing",
-    icon: Boxes,
-  },
-  {
-    label: "Suppliers",
-    path: "/suppliers",
-    icon: Building2,
-  },
-  {
-    label: "Reports",
-    path: "/reports",
-    icon: CircleDollarSign,
-  },
-  {
-    label: "AI Assistant",
-    path: "/ai",
-    icon: Bot,
-  },
-  {
-    label: "Settings",
-    path: "/settings",
-    icon: SettingsIcon,
+    label: "Management & Insights",
+    items: [
+      { label: "Reports & Analytics", path: "/reports", icon: CircleDollarSign },
+      { label: "AI Assistant", path: "/ai", icon: Bot },
+      { label: "Settings", path: "/settings", icon: SettingsIcon },
+    ],
   },
 ]
 
@@ -153,8 +158,8 @@ function loadReadNotifications(): string[] {
 export default function AppLayout() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { user: cloudUser, configured: cloudAuthConfigured, signOut } = useAuth()
   const darkMode = theme === "dark"
+  const { user: cloudUser, configured: cloudAuthConfigured, signOut } = useAuth()
 
   const {
     products,
@@ -360,39 +365,47 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#0b120e] dark:text-slate-100">
       <div className="flex min-h-screen">
-        <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-[#101813] lg:flex lg:flex-col">
+        <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 self-start border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-[#101813] lg:flex lg:flex-col">
           <div className="flex h-20 items-center border-b border-slate-200 px-5 dark:border-slate-800">
-            <img
-              src={darkMode ? "/brand/zaki-logo-white.png" : "/brand/zaki-logo.png"}
-              alt="Zaki Pharmacy"
-              className="max-h-12 w-auto max-w-[190px] object-contain"
-            />
+            <div className="flex items-center gap-3">
+              <span className="rounded-xl bg-emerald-600 p-3 text-white">
+                <Building2 size={23} />
+              </span>
+              <div>
+                <p className="text-base font-bold tracking-tight text-slate-900 dark:text-white">Universal ERP</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Business management platform</p>
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">
-            <nav className="space-y-1">
-              {menuItems.map(
-                ({
-                  label,
-                  path,
-                  icon: Icon,
-                }) => (
-                  <NavLink
-                    key={path}
-                    to={path}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
-                        isActive
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-                      }`
-                    }
-                  >
-                    <Icon className="h-[18px] w-[18px]" />
-                    {label}
-                  </NavLink>
-                ),
-              )}
+            <nav aria-label="ERP modules" className="space-y-5">
+              {navigationGroups.map((group) => (
+                <section key={group.label}>
+                  <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    {group.label}
+                  </p>
+                  <div className="space-y-1">
+                    {group.items.map(({ label, path, icon: Icon }) => (
+                      <NavLink
+                        key={path}
+                        to={path}
+                        end={path === "/dashboard"}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${
+                            isActive
+                              ? "bg-emerald-600 text-white shadow-sm"
+                              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                          }`
+                        }
+                      >
+                        <Icon className="h-[18px] w-[18px]" />
+                        {label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </nav>
           </div>
 
@@ -400,18 +413,18 @@ export default function AppLayout() {
             <div className="rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-950/40">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                 <Sparkles size={16} />
-                UniversalERP
+                Universal ERP
               </div>
 
               <p className="text-xs leading-5 text-emerald-700/80 dark:text-emerald-300/70">
-                Legacy local ERP workspace
+                Integrated business management workspace
               </p>
               <NavLink
                 to="/workspace"
                 className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-emerald-800 hover:underline dark:text-emerald-300"
               >
                 <Building2 size={14} />
-                {cloudUser ? "Open company workspace" : "Sign in / Open company workspace"}
+                {cloudUser ? "Open cloud workspace" : "Sign in to cloud workspace"}
               </NavLink>
             </div>
           </div>
@@ -420,19 +433,20 @@ export default function AppLayout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-[#101813]/95">
             <div className="flex min-w-0 items-center gap-3">
-              <img
-                src={darkMode ? "/brand/zaki-logo-white.png" : "/brand/zaki-logo.png"}
-                alt="Zaki Pharmacy"
-                className="max-h-10 w-auto max-w-[180px] object-contain lg:hidden"
-              />
+              <div className="flex items-center gap-2 lg:hidden">
+                <span className="rounded-lg bg-emerald-600 p-2 text-white">
+                  <Building2 size={18} />
+                </span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white">Universal ERP</span>
+              </div>
 
               <div className="hidden border-l border-slate-200 pl-4 dark:border-slate-700 lg:block">
                 <h1 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  UniversalERP · Legacy local workspace
+                  Universal ERP
                 </h1>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Pharmacy Management System
+                  Business Management Platform
                 </p>
               </div>
             </div>
@@ -696,7 +710,7 @@ export default function AppLayout() {
                               className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                             >
                               <Building2 className="h-4 w-4" />
-                              Open company workspace
+                              Open cloud workspace
                             </button>
                             <button
                               type="button"

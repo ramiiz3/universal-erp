@@ -337,6 +337,22 @@ export default function Sales() {
                   <p className="mt-1 font-medium text-slate-900">
                     {selectedSale.paymentMethod}
                   </p>
+                  {selectedSale.paymentMethod === "Cash" && (
+                    <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-xs">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Cash tendered</span>
+                        <span className="font-semibold text-slate-800">
+                          AED {(selectedSale.cashTendered ?? selectedSale.total).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Change due</span>
+                        <span className="font-semibold text-slate-800">
+                          AED {(selectedSale.changeDue ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

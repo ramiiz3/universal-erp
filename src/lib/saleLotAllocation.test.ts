@@ -23,7 +23,7 @@ const lots: InventoryLot[] = [
     id: "lot-earlier",
     productId: product.id,
     batch: "EARLY",
-    expiry: "2026-01-01",
+    expiry: "2027-01-01",
     quantity: 2,
     purchasePrice: 5,
     sellingPrice: 10,
@@ -32,7 +32,7 @@ const lots: InventoryLot[] = [
     id: "lot-later",
     productId: product.id,
     batch: "LATE",
-    expiry: "2027-01-01",
+    expiry: "2028-01-01",
     quantity: 5,
     purchasePrice: 8,
     sellingPrice: 20,
@@ -133,4 +133,82 @@ describe("sale lot allocation", () => {
       total: 54.9,
     })
   })
+
+  it("allocates package sales across FEFO batches using the selected package price", () => {
+    const packageLots: InventoryLot[] = [
+      { ...lots[0], quantity: 19, sellingPrice: 9 },
+      { ...lots[1], quantity: 10, sellingPrice: 19 },
+    ]
+
+    // One carton contains 12 pieces.
+    // Two cartons at AED 120 each = 24 pieces at AED 10 per piece.
+    const result = allocateSaleLots(
+      [{
+        product,
+        quantity: 24,
+        unitPrice: 10,
+        unitPriceOverride: true,
+      }],
+      packageLots,
+    )
+
+    expect(result.unallocated).toEqual([])
+    expect(result.lines.map((line) => ({
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+    }))).toEqual([
+      { quantity: 19, unitPrice: 10 },
+      { quantity: 5, unitPrice: 10 },
+    ])
+
+    expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([0, 5])
+
+    const baseQuantity = result.lines.reduce(
+      (sum, line) => sum + line.quantity,
+      0,
+    )
+    const costOfGoodsSold = result.lines.reduce(
+      (sum, line) => sum + line.totalCost,
+      0,
+    )
+
+    expect(baseQuantity).toBe(24)
+    expect(costOfGoodsSold).toBe(135)
+
+    const totals = calculateLotSaleTotals(result.lines, 20)
+    expect(totals.subtotal).toBe(240)
+    expect(totals.discount).toBe(20)
+    expect(totals.vat).toBeCloseTo(11)
+    expect(totals.total).toBeCloseTo(231)
+  })
+
+
+  it("never allocates expired batches and treats month-only expiry as valid through month end", () => {
+    const expired = {
+      ...lots[0],
+      id: "expired-lot",
+      batch: "EXPIRED",
+      expiry: "2026-01-31",
+      quantity: 4,
+    }
+    const monthValid = {
+      ...lots[1],
+      id: "month-valid-lot",
+      batch: "MONTH-VALID",
+      expiry: "2026-02",
+      quantity: 3,
+    }
+
+    const result = allocateSaleLots(
+      [{ product, quantity: 2 }],
+      [expired, monthValid],
+      new Date("2026-02-01T12:00:00"),
+    )
+
+    expect(result.unallocated).toEqual([])
+    expect(result.lines.map((line) => line.lotId)).toEqual(["month-valid-lot"])
+    expect(result.updatedLots.find((lot) => lot.id === "expired-lot")?.quantity).toBe(4)
+    expect(result.updatedLots.find((lot) => lot.id === "month-valid-lot")?.quantity).toBe(1)
+  })
+
 })

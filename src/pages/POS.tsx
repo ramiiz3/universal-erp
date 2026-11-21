@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { BrowserMultiFormatReader } from "@zxing/browser"
 import { useERP, type PaymentMethod, type Product } from "../context/ERPContext"
+import { reservePendingThermalPrintWindow, closePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
 import { getERPSettings } from "../lib/erpSettings"
 import {
   allocateSaleLots,
@@ -28,19 +29,20 @@ type CartItem = {
   product: Product
   quantity: number
   unitPrice: number
+  packageId?: string
+  sellingUnit: string
+  conversionFactor: number
 }
+
+type SelectedProductPackaging =
+  NonNullable<Product["packagings"]>[number]
 
 export default function POS() {
   const navigate = useNavigate()
-  const {
-    products,
-    inventoryLots,
-    customers,
-    getProductStock,
-    completeSale,
-  } = useERP()
+  const { products, inventoryLots, customers, warehouses, getProductStock, completeSale } = useERP()
 
   const erpSettings = getERPSettings()
+  const activeWarehouses = warehouses.filter((item) => item.active)
 
   const enabledPaymentOptions: {
     method: PaymentMethod
@@ -88,6 +90,10 @@ export default function POS() {
   const [search, setSearch] = useState("")
   const [barcode, setBarcode] = useState("")
   const [cart, setCart] = useState<CartItem[]>([])
+  const [warehouseId, setWarehouseId] = useState(
+    () => warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
+      warehouses.find((item) => item.active)?.id ?? "",
+  )
   const [customerId, setCustomerId] = useState("")
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>(() => {
@@ -99,6 +105,7 @@ export default function POS() {
       return "Bank Transfer"
     })
   const [discount, setDiscount] = useState("")
+  const [cashTendered, setCashTendered] = useState("")
   const [error, setError] = useState("")
   const [successInvoice, setSuccessInvoice] = useState("")
   const [cameraOpen, setCameraOpen] = useState(false)
@@ -175,12 +182,14 @@ export default function POS() {
       allocateSaleLots(
         cart.map((item) => ({
           product: item.product,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          warehouseId,
+          quantity: item.quantity * item.conversionFactor,
+          unitPrice: item.unitPrice / item.conversionFactor,
+          unitPriceOverride: Boolean(item.packageId),
         })),
         inventoryLots,
       ),
-    [cart, inventoryLots],
+    [cart, inventoryLots, warehouseId],
   )
   const lotPricedLines = saleAllocationPreview.lines
 
@@ -197,9 +206,17 @@ export default function POS() {
 
     setError("")
 
-    const product = products.find(
-      (item) =>
-        item.barcode.trim().toLowerCase() === cleanCode.toLowerCase(),
+    const normalizedCode = cleanCode.toLowerCase()
+
+    const product = products.find((item) =>
+      item.barcode.trim().toLowerCase() === normalizedCode ||
+      (item.alternateBarcodes || []).some(
+        (value) => value.trim().toLowerCase() === normalizedCode,
+      ) ||
+      (item.packagings || []).some(
+        (packaging) =>
+          packaging.barcode?.trim().toLowerCase() === normalizedCode,
+      ),
     )
 
     if (!product) {
@@ -207,60 +224,147 @@ export default function POS() {
       return
     }
 
-    addToCart(product)
+    const matchedPackage = product.packagings?.find(
+      (packaging) =>
+        packaging.barcode?.trim().toLowerCase() === normalizedCode,
+    )
+
+    addToCart(product, matchedPackage)
     setBarcode("")
     requestAnimationFrame(() => barcodeInputRef.current?.focus())
   }
 
-  function addToCart(product: Product) {
+  function addToCart(
+    product: Product,
+    selectedPackage?: SelectedProductPackaging,
+  ) {
     setError("")
 
-    const stock = getProductStock(product.id)
-
-    if (stock <= 0) {
-      setError(`${product.name} is out of stock.`)
+    if (selectedPackage && !selectedPackage.salesEnabled) {
+      setError(`${selectedPackage.name} is not enabled for sales.`)
       return
     }
+
+    const stock = getProductStock(product.id, warehouseId)
+    const factor = selectedPackage?.conversionFactor ?? 1
+    const packageId = selectedPackage?.id
+
+    if (!Number.isFinite(factor) || factor <= 0) {
+      setError("Invalid product package conversion.")
+      return
+    }
+
+    if (stock <= 0 || factor > stock) {
+      setError(`${product.name} does not have enough stock for this package.`)
+      return
+    }
+
+    const packagePrice =
+      selectedPackage?.sellingPrice ??
+      product.sellingPrice * factor
 
     setCart((current) => {
       const existing = current.find(
         (item) => item.productId === product.id,
       )
 
-      if (!existing) {
-        return [
-          ...current,
-          {
-            productId: product.id,
-            product,
-            quantity: 1,
-            unitPrice: product.sellingPrice,
-          },
-        ]
-      }
-
-      if (existing.quantity >= stock) {
+      if (existing && existing.packageId !== packageId) {
         setError(
-          `${product.name} only has ${stock} unit${
-            stock === 1 ? "" : "s"
-          } available.`,
+          `${product.name} is already in the cart with another unit. Change its package using the cart selector.`,
         )
         return current
       }
 
-      return current.map((item) =>
-        item.productId === product.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item,
-      )
+      if (existing) {
+        if ((existing.quantity + 1) * factor > stock) {
+          setError(
+            `${product.name} has insufficient base-unit stock for another ${selectedPackage?.name ?? product.unit}.`,
+          )
+          return current
+        }
+
+        return current.map((item) =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        )
+      }
+
+      return [
+        ...current,
+        {
+          productId: product.id,
+          product,
+          quantity: 1,
+          unitPrice: packagePrice,
+          packageId,
+          sellingUnit: selectedPackage?.unit ?? product.unit,
+          conversionFactor: factor,
+        },
+      ]
     })
+  }
+
+  function changeCartPackage(productId: string, packageId: string) {
+    const item = cart.find((line) => line.productId === productId)
+    const product = products.find((line) => line.id === productId)
+
+    if (!item || !product) return
+
+    const selectedPackage = packageId
+      ? product.packagings?.find((packaging) => packaging.id === packageId)
+      : undefined
+
+    if (packageId && !selectedPackage) {
+      setError("The selected package is no longer available.")
+      return
+    }
+
+    if (selectedPackage && !selectedPackage.salesEnabled) {
+      setError("This package is not enabled for sales.")
+      return
+    }
+
+    const factor = selectedPackage?.conversionFactor ?? 1
+    const stock = getProductStock(productId, warehouseId)
+
+    if (!Number.isFinite(factor) || factor <= 0) {
+      setError("Invalid product package conversion.")
+      return
+    }
+
+    if (item.quantity * factor > stock) {
+      setError(
+        `This cart quantity requires ${item.quantity * factor} ${product.unit}, but only ${stock} are available.`,
+      )
+      return
+    }
+
+    const packagePrice =
+      selectedPackage?.sellingPrice ??
+      product.sellingPrice * factor
+
+    setError("")
+    setCart((current) =>
+      current.map((line) =>
+        line.productId === productId
+          ? {
+              ...line,
+              packageId: selectedPackage?.id,
+              sellingUnit: selectedPackage?.unit ?? product.unit,
+              conversionFactor: factor,
+              unitPrice: packagePrice,
+            }
+          : line,
+      ),
+    )
   }
 
   function updateQuantity(productId: string, nextQuantity: number) {
     const product = products.find((item) => item.id === productId)
     if (!product) return
 
-    const stock = getProductStock(productId)
+    const stock = getProductStock(productId, warehouseId)
 
     if (nextQuantity <= 0) {
       setCart((current) =>
@@ -269,11 +373,12 @@ export default function POS() {
       return
     }
 
-    if (nextQuantity > stock) {
+    const cartItem = cart.find((item) => item.productId === productId)
+    const factor = cartItem?.conversionFactor ?? 1
+
+    if (nextQuantity * factor > stock) {
       setError(
-        `${product.name} only has ${stock} unit${
-          stock === 1 ? "" : "s"
-        } available.`,
+        `${product.name} only has ${stock} ${product.unit} available.`,
       )
       return
     }
@@ -300,6 +405,7 @@ export default function POS() {
     setCustomerId("")
     setPaymentMethod("Cash")
     setDiscount("")
+    setCashTendered("")
     setError("")
     setBarcode("")
     requestAnimationFrame(() => barcodeInputRef.current?.focus())
@@ -330,21 +436,46 @@ export default function POS() {
       return
     }
 
+    let cashTenderedAmount: number | undefined
+    if (paymentMethod === "Cash") {
+      cashTenderedAmount = cashTendered.trim() === ""
+        ? saleTotals.total
+        : Number(cashTendered)
+      if (!Number.isFinite(cashTenderedAmount) || cashTenderedAmount < saleTotals.total) {
+        setError("Cash received must be a valid amount at least equal to the sale total.")
+        return
+      }
+    }
+
+    // Reserve the thermal print window during the checkout click.
+    // This avoids popup blockers when the saved invoice opens.
+    const reservedPrintWindow = window.open("", "_blank")
+    reservePendingThermalPrintWindow(reservedPrintWindow)
+
     try {
       const sale = completeSale({
+        warehouseId,
         items: cart.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          packageId: item.packageId,
         })),
         customerId: customerId || null,
         paymentMethod,
+        cashTendered: cashTenderedAmount,
         discount: discountAmount,
       })
 
       setSuccessInvoice(sale.invoiceNumber)
       clearSale()
+
+      // Sale is saved before opening its printable A4 invoice.
+      navigate(
+        `/invoices/${encodeURIComponent(sale.invoiceNumber)}?autoprint=1`,
+      )
     } catch (saleError) {
+      closePendingThermalPrintWindow()
       setError(
         saleError instanceof Error
           ? saleError.message
@@ -356,6 +487,25 @@ export default function POS() {
   return (
     <section className="min-h-full bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-[1800px]">
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+          <label htmlFor="pos-warehouse" className="text-sm font-semibold text-slate-700">
+            Sales Warehouse
+          </label>
+          <select
+            id="pos-warehouse"
+            value={warehouseId}
+            onChange={(event) => {
+              setWarehouseId(event.target.value)
+              setError("")
+            }}
+            className="h-10 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          >
+            {activeWarehouses.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -439,7 +589,7 @@ export default function POS() {
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map((product) => {
-                const stock = getProductStock(product.id)
+                const stock = getProductStock(product.id, warehouseId)
                 const inCart =
                   cart.find((item) => item.productId === product.id)
                     ?.quantity ?? 0
@@ -556,6 +706,25 @@ export default function POS() {
                             <p className="font-medium text-slate-900">
                               {item.product.name}
                             </p>
+
+                            <select
+                              aria-label={`Selling unit for ${item.product.name}`}
+                              value={item.packageId || ""}
+                              onChange={(event) =>
+                                changeCartPackage(item.productId, event.target.value)
+                              }
+                              className="mt-2 h-9 max-w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-emerald-500"
+                            >
+                              <option value="">Base unit ({item.product.unit})</option>
+                              {(item.product.packagings || [])
+                                .filter((packaging) => packaging.salesEnabled)
+                                .map((packaging) => (
+                                  <option key={packaging.id} value={packaging.id}>
+                                    {packaging.name} · 1 {packaging.unit} = {packaging.conversionFactor} {item.product.unit}
+                                  </option>
+                                ))}
+                            </select>
+
                             <div className="mt-1 space-y-0.5 text-xs text-slate-500">
                               {itemLines.map((line, index) => (
                                 <p key={`${item.productId}-${line.lotId}-${index}`}>
@@ -593,8 +762,8 @@ export default function POS() {
                               <Minus className="h-4 w-4" />
                             </button>
 
-                            <span className="min-w-10 text-center text-sm font-medium text-slate-800">
-                              {item.quantity}
+                            <span className="min-w-16 px-1 text-center text-sm font-medium text-slate-800">
+                              {item.quantity} {item.sellingUnit}
                             </span>
 
                             <button
@@ -709,6 +878,30 @@ export default function POS() {
                   )}
                 </div>
               </div>
+
+              {paymentMethod === "Cash" && (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Cash tendered
+                    <input
+                      type="number"
+                      min={saleTotals.total}
+                      step="0.01"
+                      value={cashTendered}
+                      onChange={(event) => setCashTendered(event.target.value)}
+                      placeholder={saleTotals.total.toFixed(2)}
+                      className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    />
+                  </label>
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Change due</span>
+                    <span className="font-semibold text-slate-900">
+                      {cashTendered.trim() === "" ? "AED 0.00" : Number.isFinite(Number(cashTendered)) ? `AED ${(Number(cashTendered) - saleTotals.total).toFixed(2)}` : "—"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Leave blank to record an exact cash payment.</p>
+                </div>
+              )}
 
               <div className="my-5 border-t border-dashed border-slate-200" />
 

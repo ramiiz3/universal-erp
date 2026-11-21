@@ -1,3 +1,4 @@
+import { toStockMovementDelta, validateStockWriteOff } from "../lib/stockAdjustment"
 import {
   AlertTriangle,
   Barcode,
@@ -123,6 +124,8 @@ export default function Inventory() {
   const {
     products,
     inventoryLots,
+    warehouses,
+    storageLocations,
     receiveStock,
     addProductAndReceive,
     addProduct,
@@ -131,6 +134,18 @@ export default function Inventory() {
     getProductStock,
     importInventory,
   } = useERP()
+
+  const defaultWarehouseId = () =>
+    warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
+    warehouses.find((item) => item.active)?.id ??
+    ""
+
+  const [receiveWarehouseId, setReceiveWarehouseId] =
+    useState(defaultWarehouseId)
+  const [receiveLocationId, setReceiveLocationId] = useState("")
+  const [adjustWarehouseId, setAdjustWarehouseId] =
+    useState(defaultWarehouseId)
+  const [adjustLocationId, setAdjustLocationId] = useState("")
 
   const [productForm, setProductForm] = useState({
     name: "",
@@ -191,8 +206,26 @@ export default function Inventory() {
     const [adjustLotId, setAdjustLotId] = useState<string | null>(null)
     const [adjustQty, setAdjustQty] = useState("")
     const [adjustReason, setAdjustReason] = useState("Stock Count")
+    const [adjustType, setAdjustType] = useState<"ADJUSTMENT" | "DAMAGE" | "LOSS">("ADJUSTMENT")
 
     const [showProductLots, setShowProductLots] = useState<string | null>(null)
+
+  const activeWarehouses = warehouses.filter((item) => item.active)
+
+  const receiveLocations = storageLocations.filter(
+    (item) => item.active && item.warehouseId === receiveWarehouseId,
+  )
+
+  const adjustLocations = storageLocations.filter(
+    (item) => item.active && item.warehouseId === adjustWarehouseId,
+  )
+
+  const adjustmentLots = inventoryLots.filter(
+    (lot) =>
+      lot.productId === adjustProductId &&
+      lot.warehouseId === adjustWarehouseId &&
+      lot.quantity > 0,
+  )
 
   const totalUnits = inventoryLots.reduce(
     (sum, lot) =>
@@ -282,6 +315,8 @@ export default function Inventory() {
 
   function openReceiveStock() {
     resetReceiveForm()
+    setReceiveWarehouseId(defaultWarehouseId())
+    setReceiveLocationId("")
     setShowReceive(true)
   }
 
@@ -479,22 +514,59 @@ export default function Inventory() {
     function openAdjust(productId: string) {
       setAdjustProductId(productId)
       setAdjustLotId(null)
+      setAdjustWarehouseId(defaultWarehouseId())
+      setAdjustLocationId("")
       setAdjustQty("")
       setAdjustReason("Stock Count")
+      setAdjustType("ADJUSTMENT")
       setShowAdjust(true)
     }
 
     function doAdjust() {
       if (!adjustProductId) return
 
-      const delta = Number(adjustQty)
-      if (!Number.isInteger(delta)) {
-        window.alert("Enter a whole number quantity.")
+      let delta: number
+      try {
+        delta = toStockMovementDelta(Number(adjustQty), adjustType)
+        validateStockWriteOff(adjustType, delta, adjustLotId, adjustReason)
+      } catch (err: any) {
+        window.alert(err?.message ?? String(err))
+        return
+      }
+
+      const selectedAdjustmentLot = adjustLotId
+        ? inventoryLots.find((lot) => lot.id === adjustLotId)
+        : undefined
+
+      if (delta < 0 && !selectedAdjustmentLot) {
+        window.alert("Select a batch/lot before reducing stock.")
+        return
+      }
+
+      if (
+        selectedAdjustmentLot &&
+        selectedAdjustmentLot.warehouseId !== adjustWarehouseId
+      ) {
+        window.alert("The selected lot belongs to another warehouse.")
+        return
+      }
+
+      if (!adjustWarehouseId) {
+        window.alert("Select an active warehouse.")
         return
       }
 
       try {
-        adjustStock(adjustProductId, adjustLotId, delta, adjustReason)
+        adjustStock(
+          adjustProductId,
+          adjustLotId,
+          delta,
+          adjustReason,
+          adjustWarehouseId,
+          selectedAdjustmentLot ? undefined : adjustLocationId || null,
+          adjustType,
+        )
+
         window.alert("Stock adjusted.")
         setShowAdjust(false)
       } catch (err: any) {
@@ -587,6 +659,8 @@ export default function Inventory() {
         expiry,
         qty,
         cost,
+        receiveWarehouseId,
+        receiveLocationId || null,
       )
 
       window.alert(
@@ -1127,6 +1201,40 @@ export default function Inventory() {
             </div>
 
             <div className="space-y-5 p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Receiving Warehouse</span>
+                  <select
+                    value={receiveWarehouseId}
+                    onChange={(event) => {
+                      setReceiveWarehouseId(event.target.value)
+                      setReceiveLocationId("")
+                    }}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    {activeWarehouses.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Storage Location (Optional)</span>
+                  <select
+                    value={receiveLocationId}
+                    onChange={(event) => setReceiveLocationId(event.target.value)}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="">Not specified</option>
+                    {receiveLocations.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <div>
                 <label className="text-sm font-medium">
                   Scan Barcode
@@ -1408,13 +1516,87 @@ export default function Inventory() {
 
             <div className="p-5">
               <div className="grid gap-3">
-                <label className="space-y-2"><span className="text-sm font-medium">Quantity Delta (use negative to reduce)</span><input type="number" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/></label>
-                <label className="space-y-2"><span className="text-sm font-medium">Reason</span><input value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/></label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Warehouse</span>
+                  <select
+                    value={adjustWarehouseId}
+                    onChange={(event) => {
+                      setAdjustWarehouseId(event.target.value)
+                      setAdjustLotId(null)
+                      setAdjustLocationId("")
+                    }}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    {activeWarehouses.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">
+                    Existing Batch / Lot (required when reducing stock)
+                  </span>
+                  <select
+                    value={adjustLotId ?? ""}
+                    onChange={(event) => setAdjustLotId(event.target.value || null)}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="">Create new opening lot (positive quantity only)</option>
+                    {adjustmentLots.map((lot) => (
+                      <option key={lot.id} value={lot.id}>
+                        {lot.batch} · Expiry {lot.expiry || "Not specified"} · Qty {lot.quantity}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Storage Location (for new stock)</span>
+                  <select
+                    value={adjustLocationId}
+                    disabled={Boolean(adjustLotId)}
+                    onChange={(event) => setAdjustLocationId(event.target.value)}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="">Not specified</option>
+                    {adjustLocations.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} — {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Adjustment Type</span>
+                  <select
+                    value={adjustType}
+                    onChange={(event) => {
+                      const nextType = event.target.value as "ADJUSTMENT" | "DAMAGE" | "LOSS"
+                      setAdjustType(nextType)
+                      setAdjustQty("")
+                      setAdjustReason(nextType === "ADJUSTMENT" ? "Stock Count" : "")
+                    }}
+                    className="h-11 w-full rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="ADJUSTMENT">Stock Adjustment</option>
+                    <option value="DAMAGE">Damaged Stock</option>
+                    <option value="LOSS">Stock Loss</option>
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">{adjustType === "ADJUSTMENT" ? "Quantity Delta (use negative to reduce)" : "Quantity to write off (enter a positive quantity)"}</span>
+                  <input type="number" min={adjustType === "ADJUSTMENT" ? undefined : 1} step="1" value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/>
+                  {adjustType !== "ADJUSTMENT" && <span className="text-xs text-slate-500">The selected batch will be reduced and recorded as {adjustType === "DAMAGE" ? "Damaged Stock" : "Stock Loss"}.</span>}
+                </label>
+                <label className="space-y-2"><span className="text-sm font-medium">{adjustType === "ADJUSTMENT" ? "Reason" : "Reason (required)"}</span><input value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder={adjustType === "DAMAGE" ? "e.g. Broken seal, damaged packaging" : adjustType === "LOSS" ? "e.g. Missing during stock verification" : "Enter adjustment reason"} className="h-11 w-full rounded-xl border px-3 text-sm outline-none"/></label>
               </div>
 
               <div className="mt-4 flex justify-end gap-2">
                 <button onClick={() => setShowAdjust(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
-                <button onClick={() => { doAdjust() }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Apply</button>
+                <button onClick={() => { doAdjust() }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">{adjustType === "DAMAGE" ? "Record damage" : adjustType === "LOSS" ? "Record loss" : "Apply"}</button>
               </div>
             </div>
           </div>

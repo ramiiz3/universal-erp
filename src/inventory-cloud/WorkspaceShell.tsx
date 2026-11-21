@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
   Building2,
+  LayoutDashboard,
   Boxes,
   Bot,
   ClipboardList,
@@ -15,15 +16,36 @@ import { useAuth } from "../auth/AuthProvider"
 import { useTheme } from "../context/ThemeContext"
 import { CloudInventoryProvider } from "./CloudInventoryContext"
 
-const navigation = [
-  { to: "/workspace/products", label: "Products", icon: Package },
-  { to: "/workspace/warehouses", label: "Warehouses", icon: Warehouse },
-  { to: "/workspace/inventory", label: "Inventory lots", icon: Boxes },
-  { to: "/workspace/movements", label: "Stock movements", icon: ClipboardList },
-  { to: "/workspace/pos", label: "Cloud POS", icon: ShoppingCart },
-  { to: "/workspace/purchasing", label: "Purchasing", icon: ShoppingBag },
-  { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },
-  { to: "/workspace/ai", label: "Zaki AI", icon: Bot },
+const navigationGroups = [
+  {
+    label: "Overview",
+    items: [{ to: "/workspace/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Sales & POS",
+    items: [
+      { to: "/workspace/pos", label: "Point of sale", icon: ShoppingCart },
+      { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },
+    ],
+  },
+  {
+    label: "Procurement",
+    items: [{ to: "/workspace/purchasing", label: "Purchasing", icon: ShoppingBag }],
+  },
+  {
+    label: "Inventory & products",
+    items: [
+      { to: "/workspace/catalog", label: "Product catalog", icon: Package },
+      { to: "/workspace/products", label: "Products", icon: Boxes },
+      { to: "/workspace/warehouses", label: "Warehouses", icon: Warehouse },
+      { to: "/workspace/inventory", label: "Inventory lots", icon: Boxes },
+      { to: "/workspace/movements", label: "Stock movements", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [{ to: "/workspace/ai", label: "Zaki AI", icon: Bot }],
+  },
 ]
 
 export default function WorkspaceShell() {
@@ -110,15 +132,22 @@ export default function WorkspaceShell() {
           </p>
         </header>
         <div className="mx-auto grid max-w-7xl gap-5 p-4 md:grid-cols-[210px_minmax(0,1fr)] md:p-6">
-          <nav aria-label="Company workspace" className="flex gap-2 overflow-x-auto md:block md:space-y-1">
-            {navigation.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) => `flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
-              >
-                <Icon className="h-4 w-4" /> {label}
-              </NavLink>
+          <nav aria-label="Company workspace" className="flex gap-2 overflow-x-auto md:block md:space-y-5">
+            {navigationGroups.map((group) => (
+              <section key={group.label} className="shrink-0">
+                <p className="hidden px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 md:block">{group.label}</p>
+                <div className="flex gap-2 md:block md:space-y-1">
+                  {group.items.map(({ to, label, icon: Icon }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      className={({ isActive }) => `flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${isActive ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                    >
+                      <Icon className="h-4 w-4" /> {label}
+                    </NavLink>
+                  ))}
+                </div>
+              </section>
             ))}
           </nav>
           <main className="min-w-0">

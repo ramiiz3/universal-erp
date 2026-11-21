@@ -7,8 +7,18 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useERP, type Product } from "../context/ERPContext"
+import {
+  getERPUnits,
+  ERP_UNITS_EVENT,
+  type ERPUnitDefinition,
+} from "../lib/erpUnits"
+import {
+  getProductCategories,
+  PRODUCT_CATEGORIES_EVENT,
+  type ProductCategory,
+} from "../lib/productCategories"
 
 const emptyForm = {
   name: "",
@@ -20,6 +30,14 @@ const emptyForm = {
   minimumStock: "",
   vatRate: "5",
   unit: "Pack",
+  productType: "GOODS",
+  subcategory: "",
+  brand: "",
+  manufacturer: "",
+  alternateBarcodes: "",
+  description: "",
+  status: "ACTIVE",
+  returnEligible: "false",
 }
 
 function money(value: number) {
@@ -51,6 +69,42 @@ export default function Products() {
 
   const [form, setForm] = useState(emptyForm)
 
+  const [availableUnits, setAvailableUnits] =
+    useState<ERPUnitDefinition[]>([])
+
+  useEffect(() => {
+    const refreshUnits = () => {
+      setAvailableUnits(getERPUnits(products.map((product) => product.unit)))
+    }
+    refreshUnits()
+    window.addEventListener(ERP_UNITS_EVENT, refreshUnits)
+    window.addEventListener("storage", refreshUnits)
+    return () => {
+      window.removeEventListener(ERP_UNITS_EVENT, refreshUnits)
+      window.removeEventListener("storage", refreshUnits)
+    }
+  }, [products])
+
+
+  const [managedCategories, setManagedCategories] =
+    useState<ProductCategory[]>([])
+
+  useEffect(() => {
+    const refreshCategories = () => {
+      setManagedCategories(getProductCategories(products))
+    }
+
+    refreshCategories()
+    window.addEventListener(PRODUCT_CATEGORIES_EVENT, refreshCategories)
+    window.addEventListener("storage", refreshCategories)
+
+    return () => {
+      window.removeEventListener(PRODUCT_CATEGORIES_EVENT, refreshCategories)
+      window.removeEventListener("storage", refreshCategories)
+    }
+  }, [products])
+
+
   const categories = [
     "All",
     ...Array.from(
@@ -74,7 +128,10 @@ export default function Products() {
         product.sku
           .toLowerCase()
           .includes(query) ||
-        product.barcode.includes(query)
+        product.barcode.toLowerCase().includes(query) ||
+        (product.alternateBarcodes || []).some(
+          (barcode) => barcode.toLowerCase().includes(query),
+        )
 
       const matchesCategory =
         category === "All" ||
@@ -141,6 +198,14 @@ export default function Products() {
       ),
       vatRate: String(product.vatRate),
       unit: product.unit,
+      productType: product.productType || "GOODS",
+      subcategory: product.subcategory || "",
+      brand: product.brand || "",
+      manufacturer: product.manufacturer || "",
+      alternateBarcodes: (product.alternateBarcodes || []).join(", "),
+      description: product.description || "",
+      status: product.status || "ACTIVE",
+      returnEligible: product.returnEligible === true ? "true" : "false",
     })
 
     setEditingProduct(product)
@@ -161,7 +226,7 @@ export default function Products() {
       return
     }
 
-    if (!form.barcode.trim()) {
+    if (form.productType !== "SERVICE" && !form.barcode.trim()) {
       window.alert(
         "Barcode is required.",
       )
@@ -186,27 +251,52 @@ export default function Products() {
           Number(form.vatRate) || 0,
         unit:
           form.unit.trim() || "Unit",
+        productType: (form.productType || "GOODS") as Product["productType"],
+        subcategory: form.subcategory.trim() || undefined,
+        brand: form.brand.trim() || undefined,
+        manufacturer: form.manufacturer.trim() || undefined,
+        alternateBarcodes: form.alternateBarcodes
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        description: form.description.trim() || undefined,
+        returnEligible: form.productType !== "SERVICE" && form.returnEligible === "true",
+        status: (form.status || "ACTIVE") as Product["status"],
       }
+
+    const submittedCodes = [
+      productData.barcode,
+      ...(productData.alternateBarcodes || []),
+    ]
+      .map((code) => code.trim().toLowerCase())
+      .filter(Boolean)
+
+    if (new Set(submittedCodes).size !== submittedCodes.length) {
+      window.alert("The same barcode was entered more than once.")
+      return
+    }
+
+    const duplicate = products.some((product) => {
+      if (product.id === editingProduct?.id) return false
+
+      const existingCodes = [
+        product.barcode,
+        ...(product.alternateBarcodes || []),
+      ]
+
+      return existingCodes.some((code) =>
+        submittedCodes.includes(code.trim().toLowerCase()),
+      )
+    })
+
+    if (duplicate) {
+      window.alert("One or more barcodes are already assigned to another product.")
+      return
+    }
 
     if (editingProduct) {
-      updateProduct(
-        editingProduct.id,
-        productData,
-      )
+      updateProduct(editingProduct.id, productData)
     } else {
-      const duplicate = products.some(
-        (product) =>
-          product.barcode.trim() ===
-          productData.barcode.trim(),
-      )
-
-      if (duplicate) {
-        window.alert(
-          "A product with this barcode already exists.",
-        )
-        return
-      }
-
       addProduct(productData)
     }
 
@@ -650,16 +740,57 @@ export default function Products() {
                 required
               />
 
-              <Field
-                label="Category"
-                value={form.category}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    category: value,
-                  })
-                }
-              />
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Category
+                </span>
+                <select
+                  value={form.category}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      category: event.target.value,
+                      subcategory: "",
+                    })
+                  }
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                >
+                  <option value="">Select category</option>
+                  {managedCategories
+                    .filter((item) => item.active || item.name === form.category)
+                    .map((item) => (
+                      <option key={item.id} value={item.name}>
+                        {item.name}{item.active ? "" : " (Inactive)"}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Subcategory
+                </span>
+                <select
+                  value={form.subcategory}
+                  onChange={(event) =>
+                    setForm({ ...form, subcategory: event.target.value })
+                  }
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                >
+                  <option value="">Select subcategory (optional)</option>
+                  {managedCategories
+                    .find((item) => item.name === form.category)
+                    ?.subcategories.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  {form.subcategory &&
+                    !managedCategories
+                      .find((item) => item.name === form.category)
+                      ?.subcategories.includes(form.subcategory) && (
+                        <option value={form.subcategory}>{form.subcategory}</option>
+                      )}
+                </select>
+              </label>
 
               <Field
                 label="SKU"
@@ -732,16 +863,21 @@ export default function Products() {
                 type="number"
               />
 
-              <Field
-                label="Unit"
-                value={form.unit}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    unit: value,
-                  })
-                }
-              />
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Base Unit of Measure</span>
+                <select
+                  value={form.unit}
+                  onChange={(event) => setForm({ ...form, unit: event.target.value })}
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                >
+                  {availableUnits.filter((unit) => unit.active || unit.name === form.unit).map((unit) => (
+                    <option key={unit.id} value={unit.name}>{unit.name} ({unit.symbol})</option>
+                  ))}
+                  {!availableUnits.some((unit) => unit.name === form.unit) && (
+                    <option value={form.unit}>{form.unit}</option>
+                  )}
+                </select>
+              </label>
 
               <div className="flex items-end">
                 <div className="w-full rounded-xl bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-950">
@@ -749,7 +885,61 @@ export default function Products() {
                 </div>
               </div>
 
-              <div className="sm:col-span-2 flex justify-end gap-2 border-t pt-5 dark:border-slate-800">
+
+
+                  {/* Universal ERP extended product fields */}
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Product Type</span>
+                    <select
+                      value={form.productType}
+                      onChange={(event) => setForm({ ...form, productType: event.target.value })}
+                      className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                    >
+                      <option value="GOODS">Goods</option>
+                      <option value="SERVICE">Service</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Return eligibility</span>
+                    <select value={form.returnEligible} disabled={form.productType === "SERVICE"} onChange={(event) => setForm({ ...form, returnEligible: event.target.value })} className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950">
+                      <option value="false">Non-returnable (default)</option>
+                      <option value="true">Eligible for return (non-medicinal goods only)</option>
+                    </select>
+                    <span className="block text-xs text-amber-700">Do not enable this for medicines or products restricted by pharmacy policy.</span>
+                  </label>
+
+
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Brand</span>
+                    <input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="Brand name" className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950" />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Manufacturer</span>
+                    <input value={form.manufacturer} onChange={(event) => setForm({ ...form, manufacturer: event.target.value })} placeholder="Manufacturer" className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950" />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Additional Barcodes</span>
+                    <input value={form.alternateBarcodes} onChange={(event) => setForm({ ...form, alternateBarcodes: event.target.value })} placeholder="Separate multiple barcodes with commas" className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950" />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Product Status</span>
+                    <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950">
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                      <option value="DISCONTINUED">Discontinued</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2 md:col-span-2">
+                    <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Description</span>
+                    <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} placeholder="Product description and internal notes" className="w-full rounded-xl border px-3 py-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950" />
+                  </label>
+
+<div className="sm:col-span-2 flex justify-end gap-2 border-t pt-5 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={closeForm}
@@ -768,7 +958,7 @@ export default function Products() {
                     : "Add Product"}
                 </button>
               </div>
-            </div>
+</div>
           </div>
         </div>
       )}

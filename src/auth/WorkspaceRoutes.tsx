@@ -17,7 +17,9 @@ import { supabase } from "../lib/supabase"
 import type { CompanyMembership } from "./AuthProvider"
 import { useTheme } from "../context/ThemeContext"
 import WorkspaceShell from "../inventory-cloud/WorkspaceShell"
+import ERPDashboardPage from "../inventory-cloud/ERPDashboardPage"
 import ProductsPage from "../inventory-cloud/ProductsPage"
+import ProductCatalogPage from "../inventory-cloud/ProductCatalogPage"
 import WarehousesPage from "../inventory-cloud/WarehousesPage"
 import InventoryPage from "../inventory-cloud/InventoryPage"
 import MovementsPage from "../inventory-cloud/MovementsPage"
@@ -251,7 +253,7 @@ function WorkspaceHome() {
           <button type="button" onClick={() => setCreating((value) => !value)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white">
             <Plus className="h-4 w-4" /> Register company
           </button>
-          {activeCompany && <Link to="/workspace/products" className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white">Open company inventory</Link>}
+          {activeCompany && <Link to="/workspace/dashboard" className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white">Open ERP dashboard</Link>}
         </div>
 
         <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -812,7 +814,9 @@ export default function WorkspaceRoutes() {
       <Route index element={<WorkspaceGuard />} />
       <Route element={<InventoryWorkspaceGuard />}>
         <Route element={<WorkspaceShell />}>
+          <Route path="dashboard" element={<ERPDashboardPage />} />
           <Route path="products" element={<ProductsPage />} />
+          <Route path="catalog" element={<ProductCatalogPage />} />
           <Route path="warehouses" element={<WarehousesPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="movements" element={<MovementsPage />} />

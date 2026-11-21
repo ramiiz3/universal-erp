@@ -2,7 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
-  useState,
+  useState
 } from "react"
 import type { ReactNode } from "react"
 import {
@@ -19,7 +19,51 @@ import {
   ERP_STORAGE_KEY,
 } from "../lib/erpBackup"
 import { readStoredData } from "../lib/erpStorage"
+import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
+import { linkPurchasesToSuppliers, normalizeSupplierRecords, validateSupplierInput, type Supplier, type SupplierInput } from "../lib/supplierManagement"
+import { applySupplierInvoicePayment, buildSupplierInvoice, type CreateSupplierInvoiceInput, type RecordSupplierInvoicePaymentInput, type SupplierInvoice } from "../lib/supplierInvoices"
+export type { Supplier } from "../lib/supplierManagement"
+import { validateStockWriteOff } from "../lib/stockAdjustment"
+import { mergeLotReceiptCost } from "../lib/inventoryCosting"
+import { calculateCashSettlement } from "../lib/cashSettlement"
+import { buildCustomerPayment, getSalePaymentSummary, type CustomerPayment, type RecordCustomerPaymentInput } from "../lib/customerPayments"
+import { buildPaymentReconciliation, type CreatePaymentReconciliationInput, type PaymentReconciliation } from "../lib/paymentReconciliation"
+import {
+  applyPurchaseOrderReceipt,
+  buildPurchaseOrderFromRequisition,
+  buildPurchaseRequisition,
+  reviewPurchaseOrder as reviewPurchaseOrderRecord,
+  reviewPurchaseRequisition as reviewPurchaseRequisitionRecord,
+  submitPurchaseOrder as submitPurchaseOrderRecord,
+  submitPurchaseRequisition as submitPurchaseRequisitionRecord,
+  type CreatePurchaseRequisitionInput,
+  type PurchaseOrder,
+  type PurchaseRequisition
+} from "../lib/procurementWorkflow"
+import {
+  type StockCount,
+  calculateStockCountVariance,
+  createStockCountReference,
+  validateStockCountLines,
+} from "../lib/stockCounts"
+import { buildSalesReturn, isSaleFullyReturned, type CreateSalesReturnInput, type SalesReturn } from "../lib/salesReturns"
 import BackupRestorePanel from "../components/BackupRestorePanel"
+
+import { DEFAULT_CHART_OF_ACCOUNTS, buildChartOfAccount, validateChartOfAccountInput, validateChartAccountStatus, type ChartOfAccount, type ChartOfAccountInput, type ChartAccountStatus } from "../lib/chartOfAccounts"
+import { buildJournalEntry, postJournalEntry as postJournalEntryRecord, type JournalEntry, type JournalEntryInput } from "../lib/journalEntries"
+
+
+export type ProductPackaging = {
+  id: string
+  name: string
+  unit: string
+  conversionFactor: number
+  barcode?: string
+  purchasePrice?: number
+  sellingPrice?: number
+  purchaseEnabled: boolean
+  salesEnabled: boolean
+}
 
 export type Product = {
   id: string
@@ -33,6 +77,16 @@ export type Product = {
   vatRate: number
   unit: string
   manufacturer?: string
+
+  // Extended Universal ERP product master fields
+  productType?: "GOODS" | "SERVICE"
+  subcategory?: string
+  brand?: string
+  alternateBarcodes?: string[]
+  description?: string
+  returnEligible?: boolean
+  status?: "ACTIVE" | "INACTIVE" | "DISCONTINUED"
+  packagings?: ProductPackaging[]
 }
 
 export type InventoryLot = {
@@ -45,17 +99,51 @@ export type InventoryLot = {
   sellingPrice?: number
   totalPurchaseValue?: number
   totalSellingValue?: number
+  warehouseId?: string
+  locationId?: string | null
 }
 
 export type InventoryMovement = {
   id: string
-  type: "OPENING" | "RECEIPT" | "SALE" | "RETURN" | "ADJUSTMENT" | "DAMAGE" | "LOSS"
+  type: "OPENING" | "RECEIPT" | "SALE" | "RETURN" | "ADJUSTMENT" | "DAMAGE" | "LOSS" | "TRANSFER_OUT" | "TRANSFER_IN"
   productId: string
   lotId?: string | null
+  // Positive = stock received; negative = stock issued.
   quantity: number
   reason?: string
   createdAt: string
   metadata?: Record<string, any>
+}
+
+export type WarehouseType =
+  | "MAIN"
+  | "BRANCH"
+  | "STORE"
+  | "TRANSIT"
+
+export type Warehouse = {
+  id: string
+  code: string
+  name: string
+  type: WarehouseType
+  address: string
+  manager: string
+  phone: string
+  active: boolean
+  createdAt: string
+}
+
+export type StorageLocation = {
+  id: string
+  warehouseId: string
+  code: string
+  name: string
+  zone: string
+  rack: string
+  shelf: string
+  bin: string
+  active: boolean
+  createdAt: string
 }
 
 export type Customer = {
@@ -97,6 +185,11 @@ export type SaleItem = {
   unitPrice: number
   vatRate: number
   total: number
+  sellingUnit?: string
+  packageId?: string
+  packageName?: string
+  conversionFactor?: number
+  baseQuantity?: number
   batchAllocations: {
     lotId: string
     batch: string
@@ -113,12 +206,17 @@ export type Sale = {
   customerId: string | null
   customerName: string
   paymentMethod: PaymentMethod
+  cashTendered?: number
+  changeDue?: number
   subtotal: number
   discount: number
   vat: number
   total: number
   status: "Paid" | "Pending" | "Refunded"
   items: SaleItem[]
+
+  warehouseId?: string
+  warehouseName?: string
 }
 
 export type PurchaseItem = {
@@ -131,18 +229,33 @@ export type PurchaseItem = {
   batch: string
   expiry: string
   total: number
+  packageId?: string
+  packageName?: string
+  purchaseUnit?: string
+  baseUnit?: string
+  conversionFactor?: number
+  baseQuantity?: number
+  baseUnitPurchasePrice?: number
 }
 
 export type Purchase = {
   id: string
   purchaseNumber: string
   supplierName: string
+  supplierId?: string
   supplierInvoice: string
+  purchaseOrderId?: string
+  purchaseOrderNumber?: string
   createdAt: string
   subtotal: number
   total: number
   status: "Received"
   items: PurchaseItem[]
+
+  warehouseId?: string
+  warehouseName?: string
+  locationId?: string | null
+  locationName?: string
 }
 
 type CompleteSaleInput = {
@@ -150,31 +263,69 @@ type CompleteSaleInput = {
     productId: string
     quantity: number
     unitPrice?: number
+    packageId?: string
   }[]
   customerId?: string | null
   paymentMethod: PaymentMethod
+  cashTendered?: number
   discount?: number
+
+  warehouseId?: string
 }
 
 type CreatePurchaseInput = {
   supplierName: string
+  supplierId?: string
   supplierInvoice: string
+  purchaseOrderId?: string
   items: {
     productId: string
     quantity: number
     purchasePrice: number
+    packageId?: string
     batch: string
     expiry: string
   }[]
+
+  warehouseId?: string
+  locationId?: string | null
 }
 
 type ERPContextValue = {
+  chartOfAccounts: ChartOfAccount[]
+  createChartOfAccount: (input: ChartOfAccountInput) => ChartOfAccount
+  updateChartOfAccount: (id: string, input: ChartOfAccountInput) => void
+  setChartOfAccountStatus: (id: string, status: ChartAccountStatus) => void
+  journalEntries: JournalEntry[]
+  createJournalEntry: (input: JournalEntryInput) => JournalEntry
+  postJournalEntry: (id: string) => JournalEntry
   products: Product[]
   inventoryLots: InventoryLot[]
   inventoryMovements: InventoryMovement[]
   customers: Customer[]
   sales: Sale[]
+  customerPayments: CustomerPayment[]
+  recordCustomerPayment: (input: RecordCustomerPaymentInput) => CustomerPayment
+  paymentReconciliations: PaymentReconciliation[]
+  salesReturns: SalesReturn[]
+  createSalesReturn: (input: CreateSalesReturnInput) => SalesReturn
+  createPaymentReconciliation: (input: CreatePaymentReconciliationInput) => PaymentReconciliation
   purchases: Purchase[]
+  suppliers: Supplier[]
+  createSupplier: (input: SupplierInput) => Supplier
+  updateSupplier: (id: string, input: SupplierInput) => void
+  deleteSupplier: (id: string) => void
+  supplierInvoices: SupplierInvoice[]
+  createSupplierInvoice: (input: CreateSupplierInvoiceInput) => SupplierInvoice
+  recordSupplierInvoicePayment: (id: string, input: RecordSupplierInvoicePaymentInput) => SupplierInvoice
+  purchaseRequisitions: PurchaseRequisition[]
+  purchaseOrders: PurchaseOrder[]
+  createPurchaseRequisition: (input: CreatePurchaseRequisitionInput) => PurchaseRequisition
+  submitPurchaseRequisition: (id: string) => void
+  reviewPurchaseRequisition: (id: string, decision: "APPROVE" | "REJECT", reviewer: string, note?: string) => void
+  createPurchaseOrderFromRequisition: (requisitionId: string) => PurchaseOrder
+  submitPurchaseOrder: (id: string) => void
+  reviewPurchaseOrder: (id: string, decision: "APPROVE" | "REJECT", reviewer: string, note?: string) => void
 
   addProduct: (
     product: Omit<Product, "id">,
@@ -193,6 +344,9 @@ type ERPContextValue = {
     lotId: string | null,
     quantityDelta: number,
     reason: string,
+    warehouseId?: string,
+    locationId?: string | null,
+    movementType?: "ADJUSTMENT" | "DAMAGE" | "LOSS",
   ) => void
 
   recordMovement: (
@@ -212,6 +366,8 @@ type ERPContextValue = {
     expiry: string,
     quantity: number,
     purchasePrice: number,
+    warehouseId?: string,
+    locationId?: string | null,
   ) => InventoryLot
 
   importInventory: (
@@ -230,9 +386,7 @@ type ERPContextValue = {
 
   deleteCustomer: (id: string) => void
 
-  getProductStock: (
-    productId: string,
-  ) => number
+  getProductStock: (productId: string, warehouseId?: string) => number
 
   createPurchase: (
     input: CreatePurchaseInput,
@@ -241,6 +395,25 @@ type ERPContextValue = {
   completeSale: (
     input: CompleteSaleInput,
   ) => Sale
+  warehouses: Warehouse[]
+  storageLocations: StorageLocation[]
+  createWarehouse: (input: Omit<Warehouse, 'id' | 'createdAt'>) => Warehouse
+  updateWarehouse: (id: string, updates: Partial<Omit<Warehouse, 'id' | 'createdAt'>>) => void
+  createStorageLocation: (input: Omit<StorageLocation, 'id' | 'createdAt'>) => StorageLocation
+  updateStorageLocation: (id: string, updates: Partial<Omit<StorageLocation, 'id' | 'createdAt'>>) => void
+  deleteStorageLocation: (id: string) => void
+
+  stockTransfers: StockTransfer[]
+  createStockTransfer: (input: CreateStockTransferInput) => StockTransfer
+  dispatchStockTransfer: (id: string) => void
+  receiveStockTransfer: (id: string, input: ReceiveStockTransferInput) => void
+  cancelStockTransfer: (id: string) => void
+  stockCounts: StockCount[]
+  createStockCount: (input: { warehouseId: string; locationId?: string | null; notes?: string }) => StockCount
+  updateStockCountLine: (countId: string, lineId: string, countedQuantity: number | null) => void
+  submitStockCount: (id: string) => void
+  postStockCount: (id: string) => void
+  cancelStockCount: (id: string) => void
 }
 
 const initialProducts: Product[] = [
@@ -415,23 +588,206 @@ const initialCustomers: Customer[] = [
 const initialSales: Sale[] = []
 const initialPurchases: Purchase[] = []
 
+export type StockTransferStatus =
+  | "DRAFT"
+  | "DISPATCHED"
+  | "PARTIALLY_RECEIVED"
+  | "RECEIVED"
+  | "CANCELLED"
+
+export type StockTransferReceipt = {
+  id: string
+  quantity: number
+  destinationLotId: string
+  locationId: string | null
+  receivedAt: string
+}
+
+export type StockTransferItem = {
+  id: string
+  productId: string
+  productName: string
+  sourceLotId: string
+  batch: string
+  expiry: string
+  quantity: number
+  purchasePrice: number
+  sellingPrice?: number
+  sourceLocationId: string | null
+  receipts: StockTransferReceipt[]
+}
+
+export type StockTransfer = {
+  id: string
+  transferNumber: string
+  sourceWarehouseId: string
+  sourceWarehouseName: string
+  destinationWarehouseId: string
+  destinationWarehouseName: string
+  destinationLocationId: string | null
+  status: StockTransferStatus
+  notes: string
+  createdAt: string
+  dispatchedAt?: string
+  receivedAt?: string
+  cancelledAt?: string
+  items: StockTransferItem[]
+}
+
+type CreateStockTransferInput = {
+  sourceWarehouseId: string
+  destinationWarehouseId: string
+  destinationLocationId?: string | null
+  notes?: string
+  items: {
+    sourceLotId: string
+    quantity: number
+  }[]
+}
+
+type ReceiveStockTransferInput = {
+  items: {
+    itemId: string
+    quantity: number
+  }[]
+  locationId?: string | null
+}
+
 type StoredData = {
+  chartOfAccounts: ChartOfAccount[]
+  journalEntries: JournalEntry[]
+  suppliers: Supplier[]
+  supplierInvoices: SupplierInvoice[]
+  purchaseRequisitions: PurchaseRequisition[]
+  purchaseOrders: PurchaseOrder[]
+  customerPayments: CustomerPayment[]
+  paymentReconciliations: PaymentReconciliation[]
+  salesReturns: SalesReturn[]
   products: Product[]
   inventoryLots: InventoryLot[]
   inventoryMovements: InventoryMovement[]
   customers: Customer[]
   sales: Sale[]
   purchases: Purchase[]
+  warehouses: Warehouse[]
+  storageLocations: StorageLocation[]
+
+  stockTransfers: StockTransfer[]
+  stockCounts: StockCount[]
 }
+
+function readLegacySuppliers(): Supplier[] {
+  try {
+    const raw = localStorage.getItem(ERP_SUPPLIERS_STORAGE_KEY)
+    return raw ? normalizeSupplierRecords(JSON.parse(raw)) : []
+  } catch {
+    return []
+  }
+}
+
+const DEFAULT_WAREHOUSE_ID = "WH-MAIN"
+
+const initialWarehouses: Warehouse[] = [
+  {
+    id: DEFAULT_WAREHOUSE_ID,
+    code: "MAIN",
+    name: "Main Warehouse",
+    type: "MAIN",
+    address: "",
+    manager: "",
+    phone: "",
+    active: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+]
 
 function createDemoStore(): StoredData {
   return {
+    chartOfAccounts: DEFAULT_CHART_OF_ACCOUNTS.map((account) => ({ ...account })),
+    journalEntries: [],
+    suppliers: readLegacySuppliers(),
+    supplierInvoices: [],
+    purchaseRequisitions: [],
+    purchaseOrders: [],
+    customerPayments: [],
+    paymentReconciliations: [],
+    salesReturns: [],
     products: initialProducts,
     inventoryLots: initialInventoryLots,
     inventoryMovements: [],
     customers: initialCustomers,
     sales: initialSales,
     purchases: initialPurchases,
+    warehouses: initialWarehouses,
+    storageLocations: [],
+    stockTransfers: [],
+    stockCounts: [],
+  }
+}
+
+
+function migrateWarehouseData(data: StoredData): StoredData {
+  const raw = data as StoredData & {
+    warehouses?: Warehouse[]
+    storageLocations?: StorageLocation[]
+    stockTransfers?: StockTransfer[]
+    stockCounts?: StockCount[]
+    suppliers?: Supplier[]
+    chartOfAccounts?: ChartOfAccount[]
+    journalEntries?: JournalEntry[]
+    supplierInvoices?: SupplierInvoice[]
+    purchaseRequisitions?: PurchaseRequisition[]
+    purchaseOrders?: PurchaseOrder[]
+    customerPayments?: CustomerPayment[]
+    salesReturns?: SalesReturn[]
+  }
+
+  const suppliers = normalizeSupplierRecords(
+    Array.isArray(raw.suppliers) ? raw.suppliers : readLegacySuppliers(),
+  )
+  const purchases = linkPurchasesToSuppliers(data.purchases || [], suppliers)
+
+  const warehouses =
+    Array.isArray(raw.warehouses) && raw.warehouses.length
+      ? raw.warehouses
+      : initialWarehouses
+
+  const activeMain =
+    warehouses.find((item) => item.active && item.type === "MAIN") ??
+    warehouses.find((item) => item.active) ??
+    warehouses[0]
+
+  const validIds = new Set(warehouses.map((item) => item.id))
+
+  return {
+    ...data,
+    chartOfAccounts: Array.isArray(raw.chartOfAccounts) ? raw.chartOfAccounts : DEFAULT_CHART_OF_ACCOUNTS.map((account) => ({ ...account })),
+    journalEntries: Array.isArray(raw.journalEntries) ? raw.journalEntries : [],
+    suppliers,
+    purchases,
+    supplierInvoices: Array.isArray(raw.supplierInvoices) ? raw.supplierInvoices : [],
+    purchaseRequisitions: Array.isArray(raw.purchaseRequisitions) ? raw.purchaseRequisitions : [],
+    purchaseOrders: Array.isArray(raw.purchaseOrders) ? raw.purchaseOrders : [],
+    customerPayments: Array.isArray(raw.customerPayments) ? raw.customerPayments : [],
+    paymentReconciliations: Array.isArray(raw.paymentReconciliations) ? raw.paymentReconciliations : [],
+    salesReturns: Array.isArray(raw.salesReturns) ? raw.salesReturns : [],
+    warehouses,
+    storageLocations: Array.isArray(raw.storageLocations)
+      ? raw.storageLocations
+      : [],
+    stockTransfers: Array.isArray(raw.stockTransfers)
+      ? raw.stockTransfers
+      : [],
+    stockCounts: Array.isArray(raw.stockCounts)
+      ? raw.stockCounts
+      : [],
+    inventoryLots: (data.inventoryLots || []).map((lot) => ({
+      ...lot,
+      warehouseId:
+        lot.warehouseId && validIds.has(lot.warehouseId)
+          ? lot.warehouseId
+          : activeMain.id,
+    })),
   }
 }
 
@@ -463,7 +819,7 @@ export function ERPProvider({
 }) {
   const [loadResult] = useState(loadStoredData)
   const [store, setStore] =
-    useState<StoredData>(loadResult.data)
+    useState<StoredData>(() => migrateWarehouseData(loadResult.data))
 
   useEffect(() => {
     if (loadResult.error) return
@@ -476,12 +832,14 @@ export function ERPProvider({
   function persistStore(
     nextStore: StoredData,
   ) {
+    const normalizedStore = migrateWarehouseData(nextStore)
+
     localStorage.setItem(
       ERP_STORAGE_KEY,
-      JSON.stringify(nextStore),
+      JSON.stringify(normalizedStore),
     )
 
-    setStore(nextStore)
+    setStore(normalizedStore)
   }
 
   async function importInventory(
@@ -544,6 +902,814 @@ export function ERPProvider({
 
     setStore(nextStore)
     return result
+  }
+
+
+  function createStockCount(input: {
+    warehouseId: string
+    locationId?: string | null
+    notes?: string
+  }): StockCount {
+    const warehouse = resolveActiveWarehouse(input.warehouseId)
+    const selectedLocation = input.locationId
+      ? resolveActiveLocation(input.locationId, warehouse.id)
+      : undefined
+
+    const matchingLots = store.inventoryLots
+      .filter((lot) =>
+        lot.warehouseId === warehouse.id &&
+        (!selectedLocation || (lot.locationId ?? null) === selectedLocation.id),
+      )
+      .sort((a, b) => {
+        const productA = store.products.find((product) => product.id === a.productId)?.name ?? ""
+        const productB = store.products.find((product) => product.id === b.productId)?.name ?? ""
+        return productA.localeCompare(productB) || a.batch.localeCompare(b.batch)
+      })
+
+    if (!matchingLots.length) {
+      throw new Error("There are no inventory lots in this warehouse/location to count.")
+    }
+
+    const missingProduct = matchingLots.find(
+      (lot) => !store.products.some((product) => product.id === lot.productId),
+    )
+    if (missingProduct) {
+      throw new Error(`Inventory lot ${missingProduct.id} refers to a missing product. Resolve that record before counting.`)
+    }
+
+    const now = new Date()
+    const nowIso = now.toISOString()
+    const reference = createStockCountReference(store.stockCounts ?? [], now)
+    const lines = matchingLots.map((lot, index) => {
+      const product = store.products.find((item) => item.id === lot.productId)!
+      const lotLocation = store.storageLocations.find((item) => item.id === lot.locationId)
+      return {
+        id: `${reference}-LINE-${String(index + 1).padStart(4, "0")}`,
+        lotId: lot.id,
+        productId: lot.productId,
+        productName: product.name,
+        sku: product.sku ?? "",
+        unit: product.unit ?? "Unit",
+        batch: lot.batch,
+        expiry: lot.expiry,
+        locationId: lot.locationId ?? null,
+        locationName: lotLocation?.name ?? "",
+        systemQuantity: lot.quantity,
+        countedQuantity: null,
+      }
+    })
+
+    const count: StockCount = {
+      id: reference,
+      reference,
+      warehouseId: warehouse.id,
+      warehouseName: warehouse.name,
+      locationId: selectedLocation?.id ?? null,
+      locationName: selectedLocation?.name ?? "All locations",
+      notes: input.notes?.trim() ?? "",
+      status: "DRAFT",
+      lines,
+      createdAt: nowIso,
+    }
+
+    persistStore({
+      ...store,
+      stockCounts: [count, ...(store.stockCounts ?? [])],
+    })
+    return count
+  }
+
+  function updateStockCountLine(
+    countId: string,
+    lineId: string,
+    countedQuantity: number | null,
+  ) {
+    const count = (store.stockCounts ?? []).find((item) => item.id === countId)
+    if (!count) throw new Error("Stock count not found.")
+    if (count.status !== "DRAFT") throw new Error("Only draft stock counts can be edited.")
+    if (
+      countedQuantity !== null &&
+      (!Number.isInteger(countedQuantity) || countedQuantity < 0)
+    ) {
+      throw new Error("Counted quantity must be a whole number greater than or equal to zero.")
+    }
+    if (!count.lines.some((line) => line.id === lineId)) {
+      throw new Error("Stock count line not found.")
+    }
+
+    const updatedCount: StockCount = {
+      ...count,
+      lines: count.lines.map((line) =>
+        line.id === lineId ? { ...line, countedQuantity } : line,
+      ),
+    }
+    persistStore({
+      ...store,
+      stockCounts: (store.stockCounts ?? []).map((item) =>
+        item.id === countId ? updatedCount : item,
+      ),
+    })
+  }
+
+  function submitStockCount(id: string) {
+    const count = (store.stockCounts ?? []).find((item) => item.id === id)
+    if (!count) throw new Error("Stock count not found.")
+    if (count.status !== "DRAFT") throw new Error("Only draft stock counts can be submitted for review.")
+    const validationErrors = validateStockCountLines(count.lines)
+    if (validationErrors.length) throw new Error(validationErrors.join(" "))
+
+    const updatedCount: StockCount = {
+      ...count,
+      status: "REVIEW",
+      submittedAt: new Date().toISOString(),
+    }
+    persistStore({
+      ...store,
+      stockCounts: (store.stockCounts ?? []).map((item) =>
+        item.id === id ? updatedCount : item,
+      ),
+    })
+  }
+
+  function postStockCount(id: string) {
+    const count = (store.stockCounts ?? []).find((item) => item.id === id)
+    if (!count) throw new Error("Stock count not found.")
+    if (count.status !== "REVIEW") throw new Error("Submit the stock count for review before posting adjustments.")
+
+    const validationErrors = validateStockCountLines(count.lines)
+    if (validationErrors.length) throw new Error(validationErrors.join(" "))
+
+    // Protect stock movements made after the count snapshot. A changed or newly
+    // created lot requires a fresh count instead of silently overwriting stock.
+    const currentScopeLots = store.inventoryLots.filter((lot) =>
+      lot.warehouseId === count.warehouseId &&
+      (!count.locationId || (lot.locationId ?? null) === count.locationId),
+    )
+    const snapshotLotIds = new Set(count.lines.map((line) => line.lotId))
+    if (
+      currentScopeLots.length !== count.lines.length ||
+      currentScopeLots.some((lot) => !snapshotLotIds.has(lot.id))
+    ) {
+      throw new Error("Inventory lots changed after this count started. Cancel this count and create a new count before posting.")
+    }
+
+    const currentLotsById = new Map(store.inventoryLots.map((lot) => [lot.id, lot]))
+    for (const line of count.lines) {
+      const currentLot = currentLotsById.get(line.lotId)
+      if (
+        !currentLot ||
+        currentLot.productId !== line.productId ||
+        currentLot.warehouseId !== count.warehouseId ||
+        (currentLot.locationId ?? null) !== line.locationId ||
+        currentLot.quantity !== line.systemQuantity
+      ) {
+        throw new Error(`Stock for ${line.productName} / batch ${line.batch} changed after the count began. Cancel this count and recount before posting.`)
+      }
+    }
+
+    const nowIso = new Date().toISOString()
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
+    const updatedLotsById = new Map(updatedLots.map((lot) => [lot.id, lot]))
+    const newMovements: InventoryMovement[] = []
+
+    count.lines.forEach((line, index) => {
+      const variance = calculateStockCountVariance(line)
+      if (variance === null || variance === 0) return
+      const lot = updatedLotsById.get(line.lotId)
+      if (!lot) throw new Error(`Inventory lot ${line.lotId} no longer exists.`)
+      const countedQuantity = line.countedQuantity!
+      lot.quantity = countedQuantity
+      const location = store.storageLocations.find((item) => item.id === line.locationId)
+      newMovements.push({
+        id: `MOV-${Date.now()}-SC-${index + 1}`,
+        type: "ADJUSTMENT",
+        productId: line.productId,
+        lotId: line.lotId,
+        quantity: variance,
+        reason: `Stock count ${count.reference}${count.notes ? ` — ${count.notes}` : ""}`,
+        createdAt: nowIso,
+        metadata: {
+          source: "STOCK_COUNT",
+          stockCountId: count.id,
+          stockCountReference: count.reference,
+          warehouseId: count.warehouseId,
+          warehouseName: count.warehouseName,
+          locationId: line.locationId,
+          locationName: location?.name ?? line.locationName,
+          batch: line.batch,
+          expiry: line.expiry,
+          systemQuantity: line.systemQuantity,
+          countedQuantity,
+          variance,
+        },
+      })
+    })
+
+    const postedCount: StockCount = {
+      ...count,
+      status: "POSTED",
+      postedAt: nowIso,
+    }
+    persistStore({
+      ...store,
+      inventoryLots: updatedLots,
+      inventoryMovements: [...newMovements, ...(store.inventoryMovements ?? [])],
+      stockCounts: (store.stockCounts ?? []).map((item) =>
+        item.id === id ? postedCount : item,
+      ),
+    })
+  }
+
+  function cancelStockCount(id: string) {
+    const count = (store.stockCounts ?? []).find((item) => item.id === id)
+    if (!count) throw new Error("Stock count not found.")
+    if (count.status !== "DRAFT" && count.status !== "REVIEW") {
+      throw new Error("Only draft or review stock counts can be cancelled.")
+    }
+    const cancelledCount: StockCount = {
+      ...count,
+      status: "CANCELLED",
+      cancelledAt: new Date().toISOString(),
+    }
+    persistStore({
+      ...store,
+      stockCounts: (store.stockCounts ?? []).map((item) =>
+        item.id === id ? cancelledCount : item,
+      ),
+    })
+  }
+
+  function createStockTransfer(
+    input: CreateStockTransferInput,
+  ): StockTransfer {
+    if (!input.items.length) {
+      throw new Error("Add at least one batch to the transfer.")
+    }
+
+    const source = resolveActiveWarehouse(input.sourceWarehouseId)
+    const destination = resolveActiveWarehouse(input.destinationWarehouseId)
+
+    if (source.id === destination.id) {
+      throw new Error("Source and destination warehouses must be different.")
+    }
+
+    const destinationLocation = resolveActiveLocation(
+      input.destinationLocationId,
+      destination.id,
+    )
+
+    const seen = new Set<string>()
+
+    const items: StockTransferItem[] = input.items.map((request, index) => {
+      if (!Number.isInteger(request.quantity) || request.quantity <= 0) {
+        throw new Error("Transfer quantities must be positive whole numbers.")
+      }
+
+      if (seen.has(request.sourceLotId)) {
+        throw new Error("A batch can only appear once in a transfer.")
+      }
+      seen.add(request.sourceLotId)
+
+      const lot = store.inventoryLots.find(
+        (candidate) => candidate.id === request.sourceLotId,
+      )
+
+      if (!lot || lot.warehouseId !== source.id) {
+        throw new Error("A selected batch does not belong to the source warehouse.")
+      }
+
+      if (lot.quantity < request.quantity) {
+        throw new Error(`Insufficient stock in batch ${lot.batch}.`)
+      }
+
+      const product = store.products.find(
+        (candidate) => candidate.id === lot.productId,
+      )
+      if (!product) {
+        throw new Error("Product for selected batch was not found.")
+      }
+
+      return {
+        id: `TITEM-${Date.now()}-${index}`,
+        productId: product.id,
+        productName: product.name,
+        sourceLotId: lot.id,
+        batch: lot.batch,
+        expiry: lot.expiry,
+        quantity: request.quantity,
+        purchasePrice: lot.purchasePrice,
+        sellingPrice: lot.sellingPrice,
+        sourceLocationId: lot.locationId ?? null,
+        receipts: [],
+      }
+    })
+
+    const year = new Date().getFullYear()
+    const prefix = `TRF-${year}-`
+
+    const highest = (store.stockTransfers ?? [])
+      .filter((item) => item.transferNumber.startsWith(prefix))
+      .reduce((max, item) => {
+        const number = Number(item.transferNumber.slice(prefix.length))
+        return Number.isFinite(number) ? Math.max(max, number) : max
+      }, 0)
+
+    const transfer: StockTransfer = {
+      id: `TRANSFER-${Date.now()}`,
+      transferNumber: `${prefix}${String(highest + 1).padStart(5, "0")}`,
+      sourceWarehouseId: source.id,
+      sourceWarehouseName: source.name,
+      destinationWarehouseId: destination.id,
+      destinationWarehouseName: destination.name,
+      destinationLocationId: destinationLocation?.id ?? null,
+      status: "DRAFT",
+      notes: (input.notes ?? "").trim(),
+      createdAt: new Date().toISOString(),
+      items,
+    }
+
+    persistStore({
+      ...store,
+      stockTransfers: [transfer, ...(store.stockTransfers ?? [])],
+    })
+
+    return transfer
+  }
+
+  function dispatchStockTransfer(id: string) {
+    const transfer = store.stockTransfers.find((item) => item.id === id)
+
+    if (!transfer) throw new Error("Stock transfer was not found.")
+    if (transfer.status !== "DRAFT") {
+      throw new Error("Only draft transfers can be dispatched.")
+    }
+
+    resolveActiveWarehouse(transfer.sourceWarehouseId)
+    resolveActiveWarehouse(transfer.destinationWarehouseId)
+
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
+
+    // Validate every source lot before changing any stock.
+    for (const item of transfer.items) {
+      const lot = updatedLots.find((candidate) => candidate.id === item.sourceLotId)
+
+      if (
+        !lot ||
+        lot.productId !== item.productId ||
+        lot.warehouseId !== transfer.sourceWarehouseId ||
+        lot.batch !== item.batch ||
+        lot.expiry !== item.expiry
+      ) {
+        throw new Error(`Source batch ${item.batch} is no longer valid.`)
+      }
+
+      if (lot.quantity < item.quantity) {
+        throw new Error(`Insufficient remaining stock in batch ${item.batch}.`)
+      }
+    }
+
+    const dispatchedAt = new Date().toISOString()
+    const movements: InventoryMovement[] = []
+
+    transfer.items.forEach((item, index) => {
+      const lot = updatedLots.find((candidate) => candidate.id === item.sourceLotId)!
+      lot.quantity -= item.quantity
+
+      const product = store.products.find((candidate) => candidate.id === item.productId)
+
+      movements.push({
+        id: `MOV-${transfer.id}-OUT-${index}`,
+        type: "TRANSFER_OUT",
+        productId: item.productId,
+        lotId: lot.id,
+        quantity: -item.quantity,
+        reason: `Transfer dispatch ${transfer.transferNumber}`,
+        createdAt: dispatchedAt,
+        metadata: {
+          referenceType: "STOCK_TRANSFER",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          sourceWarehouseId: transfer.sourceWarehouseId,
+          sourceWarehouseName: transfer.sourceWarehouseName,
+          destinationWarehouseId: transfer.destinationWarehouseId,
+          destinationWarehouseName: transfer.destinationWarehouseName,
+          sourceLocationId: item.sourceLocationId,
+          batch: item.batch,
+          expiry: item.expiry,
+          baseUnit: product?.unit ?? "",
+          unitCost: item.purchasePrice,
+          totalCost: item.quantity * item.purchasePrice,
+        },
+      })
+    })
+
+    const updatedTransfer: StockTransfer = {
+      ...transfer,
+      status: "DISPATCHED",
+      dispatchedAt,
+    }
+
+    persistStore({
+      ...store,
+      inventoryLots: updatedLots,
+      inventoryMovements: [...movements, ...store.inventoryMovements],
+      stockTransfers: store.stockTransfers.map((item) =>
+        item.id === id ? updatedTransfer : item,
+      ),
+    })
+  }
+
+  function receiveStockTransfer(
+    id: string,
+    input: ReceiveStockTransferInput,
+  ) {
+    const transfer = store.stockTransfers.find((item) => item.id === id)
+
+    if (!transfer) throw new Error("Stock transfer was not found.")
+    if (
+      transfer.status !== "DISPATCHED" &&
+      transfer.status !== "PARTIALLY_RECEIVED"
+    ) {
+      throw new Error("This transfer is not awaiting receipt.")
+    }
+    if (!input.items.length) {
+      throw new Error("Enter at least one quantity to receive.")
+    }
+
+    const destination = resolveActiveWarehouse(transfer.destinationWarehouseId)
+    const requestedLocation =
+      input.locationId === undefined
+        ? transfer.destinationLocationId
+        : input.locationId
+
+    const location = resolveActiveLocation(requestedLocation, destination.id)
+    const seen = new Set<string>()
+
+    // Validate every receipt line before changing destination inventory.
+    for (const request of input.items) {
+      if (seen.has(request.itemId)) {
+        throw new Error("A transfer line can only appear once per receipt.")
+      }
+      seen.add(request.itemId)
+
+      if (!Number.isInteger(request.quantity) || request.quantity <= 0) {
+        throw new Error("Receipt quantities must be positive whole numbers.")
+      }
+
+      const line = transfer.items.find((item) => item.id === request.itemId)
+      if (!line) throw new Error("Selected transfer line was not found.")
+
+      const received = line.receipts.reduce(
+        (sum, receipt) => sum + receipt.quantity,
+        0,
+      )
+      const remaining = line.quantity - received
+
+      if (request.quantity > remaining) {
+        throw new Error(`Cannot receive more than ${remaining} remaining units of ${line.batch}.`)
+      }
+    }
+
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
+    const updatedItems = transfer.items.map((item) => ({
+      ...item,
+      receipts: [...item.receipts],
+    }))
+    const movements: InventoryMovement[] = []
+    const receivedAt = new Date().toISOString()
+
+    input.items.forEach((request, index) => {
+      const line = updatedItems.find((item) => item.id === request.itemId)!
+      const product = store.products.find((item) => item.id === line.productId)
+
+      if (!product) {
+        throw new Error(`Product ${line.productName} was not found.`)
+      }
+
+      const existingLot = updatedLots.find(
+        (lot) =>
+          lot.productId === line.productId &&
+          lot.batch === line.batch &&
+          lot.expiry === line.expiry &&
+          lot.warehouseId === destination.id &&
+          (lot.locationId ?? null) === (location?.id ?? null) &&
+          lot.purchasePrice === line.purchasePrice &&
+          lot.sellingPrice === line.sellingPrice,
+      )
+
+      let destinationLot: InventoryLot
+
+      if (existingLot) {
+        existingLot.quantity += request.quantity
+        destinationLot = existingLot
+      } else {
+        destinationLot = {
+          id: `LOT-TRF-${Date.now()}-${index}`,
+          productId: line.productId,
+          batch: line.batch,
+          expiry: line.expiry,
+          quantity: request.quantity,
+          purchasePrice: line.purchasePrice,
+          sellingPrice: line.sellingPrice,
+          warehouseId: destination.id,
+          locationId: location?.id ?? null,
+        }
+        updatedLots.push(destinationLot)
+      }
+
+      const receiptId = `TRFREC-${Date.now()}-${index}-${line.receipts.length}`
+
+      line.receipts.push({
+        id: receiptId,
+        quantity: request.quantity,
+        destinationLotId: destinationLot.id,
+        locationId: location?.id ?? null,
+        receivedAt,
+      })
+
+      movements.push({
+        id: `MOV-${transfer.id}-IN-${receiptId}`,
+        type: "TRANSFER_IN",
+        productId: line.productId,
+        lotId: destinationLot.id,
+        quantity: request.quantity,
+        reason: `Transfer receipt ${transfer.transferNumber}`,
+        createdAt: receivedAt,
+        metadata: {
+          referenceType: "STOCK_TRANSFER",
+          referenceId: transfer.id,
+          referenceNumber: transfer.transferNumber,
+          receiptId,
+          sourceWarehouseId: transfer.sourceWarehouseId,
+          sourceWarehouseName: transfer.sourceWarehouseName,
+          destinationWarehouseId: destination.id,
+          destinationWarehouseName: destination.name,
+          sourceLotId: line.sourceLotId,
+          locationId: location?.id ?? null,
+          locationName: location?.name ?? "",
+          batch: line.batch,
+          expiry: line.expiry,
+          baseUnit: product.unit,
+          unitCost: line.purchasePrice,
+          totalCost: request.quantity * line.purchasePrice,
+        },
+      })
+    })
+
+    const outstanding = updatedItems.reduce(
+      (sum, item) =>
+        sum + item.quantity -
+        item.receipts.reduce((received, receipt) => received + receipt.quantity, 0),
+      0,
+    )
+
+    const receivedTotal = updatedItems.reduce(
+      (sum, item) =>
+        sum + item.receipts.reduce((received, receipt) => received + receipt.quantity, 0),
+      0,
+    )
+
+    const updatedTransfer: StockTransfer = {
+      ...transfer,
+      items: updatedItems,
+      status:
+        outstanding === 0
+          ? "RECEIVED"
+          : receivedTotal > 0
+            ? "PARTIALLY_RECEIVED"
+            : "DISPATCHED",
+      receivedAt: outstanding === 0 ? receivedAt : undefined,
+    }
+
+    persistStore({
+      ...store,
+      inventoryLots: updatedLots,
+      inventoryMovements: [...movements, ...store.inventoryMovements],
+      stockTransfers: store.stockTransfers.map((item) =>
+        item.id === id ? updatedTransfer : item,
+      ),
+    })
+  }
+
+  function cancelStockTransfer(id: string) {
+    const transfer = store.stockTransfers.find((item) => item.id === id)
+
+    if (!transfer) throw new Error("Stock transfer was not found.")
+    if (transfer.status !== "DRAFT") {
+      throw new Error("Only draft transfers can be cancelled.")
+    }
+
+    persistStore({
+      ...store,
+      stockTransfers: store.stockTransfers.map((item) =>
+        item.id === id
+          ? { ...item, status: "CANCELLED", cancelledAt: new Date().toISOString() }
+          : item,
+      ),
+    })
+  }
+
+  function createWarehouse(
+    input: Omit<Warehouse, "id" | "createdAt">,
+  ): Warehouse {
+    const code = input.code.trim().toUpperCase()
+    const name = input.name.trim()
+
+    if (!code || !name) {
+      throw new Error("Warehouse name and code are required.")
+    }
+
+    if (store.warehouses.some(
+      (item) => item.code.toLowerCase() === code.toLowerCase(),
+    )) {
+      throw new Error("A warehouse with this code already exists.")
+    }
+
+    if (
+      input.type === "MAIN" &&
+      input.active &&
+      store.warehouses.some((item) => item.active && item.type === "MAIN")
+    ) {
+      throw new Error("Only one active Main Warehouse is allowed.")
+    }
+
+    const warehouse: Warehouse = {
+      ...input,
+      id: `WH-${Date.now()}`,
+      code,
+      name,
+      createdAt: new Date().toISOString(),
+    }
+
+    persistStore({
+      ...store,
+      warehouses: [...store.warehouses, warehouse],
+    })
+
+    return warehouse
+  }
+
+  function updateWarehouse(
+    id: string,
+    updates: Partial<Omit<Warehouse, "id" | "createdAt">>,
+  ) {
+    const current = store.warehouses.find((item) => item.id === id)
+    if (!current) throw new Error("Warehouse not found.")
+
+    const code = (updates.code ?? current.code).trim().toUpperCase()
+    const name = (updates.name ?? current.name).trim()
+    const active = updates.active ?? current.active
+    const type = updates.type ?? current.type
+
+    if (!code || !name) {
+      throw new Error("Warehouse name and code are required.")
+    }
+
+    if (store.warehouses.some(
+      (item) =>
+        item.id !== id &&
+        item.code.toLowerCase() === code.toLowerCase(),
+    )) {
+      throw new Error("A warehouse with this code already exists.")
+    }
+
+    if (
+      type === "MAIN" &&
+      active &&
+      store.warehouses.some(
+        (item) => item.id !== id && item.active && item.type === "MAIN",
+      )
+    ) {
+      throw new Error("Only one active Main Warehouse is allowed.")
+    }
+
+    const hasStock = store.inventoryLots.some(
+      (lot) => lot.warehouseId === id && lot.quantity > 0,
+    )
+
+    if (!active && hasStock) {
+      throw new Error("Transfer all stock before deactivating this warehouse.")
+    }
+
+    if (
+      current.type === "MAIN" &&
+      current.active &&
+      !active &&
+      !store.warehouses.some(
+        (item) => item.id !== id && item.active && item.type === "MAIN",
+      )
+    ) {
+      throw new Error("The active Main Warehouse cannot be deactivated.")
+    }
+
+    persistStore({
+      ...store,
+      warehouses: store.warehouses.map((item) =>
+        item.id === id ? { ...item, ...updates, code, name } : item,
+      ),
+    })
+  }
+
+  function createStorageLocation(
+    input: Omit<StorageLocation, "id" | "createdAt">,
+  ): StorageLocation {
+    const warehouse = store.warehouses.find(
+      (item) => item.id === input.warehouseId && item.active,
+    )
+
+    if (!warehouse) throw new Error("Select an active warehouse.")
+
+    const code = input.code.trim().toUpperCase()
+    const name = input.name.trim()
+
+    if (!code || !name) {
+      throw new Error("Location name and code are required.")
+    }
+
+    if (store.storageLocations.some(
+      (item) =>
+        item.warehouseId === input.warehouseId &&
+        item.code.toLowerCase() === code.toLowerCase(),
+    )) {
+      throw new Error("This location code already exists in the warehouse.")
+    }
+
+    const location: StorageLocation = {
+      ...input,
+      id: `LOC-${Date.now()}`,
+      code,
+      name,
+      createdAt: new Date().toISOString(),
+    }
+
+    persistStore({
+      ...store,
+      storageLocations: [...store.storageLocations, location],
+    })
+
+    return location
+  }
+
+  function updateStorageLocation(
+    id: string,
+    updates: Partial<Omit<StorageLocation, "id" | "createdAt">>,
+  ) {
+    const current = store.storageLocations.find((item) => item.id === id)
+    if (!current) throw new Error("Storage location not found.")
+
+    const warehouseId = updates.warehouseId ?? current.warehouseId
+    const warehouse = store.warehouses.find(
+      (item) => item.id === warehouseId && item.active,
+    )
+
+    if (!warehouse) throw new Error("Select an active warehouse.")
+
+    const code = (updates.code ?? current.code).trim().toUpperCase()
+    const name = (updates.name ?? current.name).trim()
+
+    if (!code || !name) {
+      throw new Error("Location name and code are required.")
+    }
+
+    if (store.storageLocations.some(
+      (item) =>
+        item.id !== id &&
+        item.warehouseId === warehouseId &&
+        item.code.toLowerCase() === code.toLowerCase(),
+    )) {
+      throw new Error("This location code already exists in the warehouse.")
+    }
+
+    if (
+      updates.active === false &&
+      store.inventoryLots.some(
+        (lot) => lot.locationId === id && lot.quantity > 0,
+      )
+    ) {
+      throw new Error("This location still contains stock and cannot be deactivated.")
+    }
+
+    persistStore({
+      ...store,
+      storageLocations: store.storageLocations.map((item) =>
+        item.id === id
+          ? { ...item, ...updates, warehouseId, code, name }
+          : item,
+      ),
+    })
+  }
+
+  function deleteStorageLocation(id: string) {
+    if (store.inventoryLots.some(
+      (lot) => lot.locationId === id && lot.quantity > 0,
+    )) {
+      throw new Error("This location still contains stock and cannot be deleted.")
+    }
+
+    persistStore({
+      ...store,
+      storageLocations: store.storageLocations.filter((item) => item.id !== id),
+    })
   }
 
   function addProduct(
@@ -683,40 +1849,115 @@ export function ERPProvider({
     return movement
   }
 
+  function resolveActiveWarehouse(requestedId?: string): Warehouse {
+    const fallback =
+      store.warehouses.find((item) => item.active && item.type === "MAIN") ??
+      store.warehouses.find((item) => item.active)
+
+    const selectedId = requestedId ?? fallback?.id
+    const warehouse = store.warehouses.find(
+      (item) => item.id === selectedId && item.active,
+    )
+
+    if (!warehouse) {
+      throw new Error("Select an active warehouse.")
+    }
+
+    return warehouse
+  }
+
+  function resolveActiveLocation(
+    locationId: string | null | undefined,
+    warehouseId: string,
+  ): StorageLocation | null {
+    if (!locationId) return null
+
+    const location = store.storageLocations.find(
+      (item) =>
+        item.id === locationId &&
+        item.warehouseId === warehouseId &&
+        item.active,
+    )
+
+    if (!location) {
+      throw new Error("Select an active storage location in the selected warehouse.")
+    }
+
+    return location
+  }
+
   function adjustStock(
     productId: string,
     lotId: string | null,
     quantityDelta: number,
     reason: string,
+    warehouseId?: string,
+    locationId?: string | null,
+    movementType: "ADJUSTMENT" | "DAMAGE" | "LOSS" = "ADJUSTMENT",
   ) {
-    if (!Number.isInteger(quantityDelta)) {
-      throw new Error("Quantity delta must be an integer.")
+    if (!Number.isInteger(quantityDelta) || quantityDelta === 0) {
+      throw new Error("Quantity delta must be a non-zero whole number.")
     }
 
-    const updatedLots = store.inventoryLots.map((l) => ({ ...l }))
+    validateStockWriteOff(movementType, quantityDelta, lotId, reason)
+
+    const originalLot = lotId
+      ? store.inventoryLots.find((lot) => lot.id === lotId)
+      : undefined
+
+    if (lotId && !originalLot) {
+      throw new Error("Lot not found.")
+    }
+
+    const warehouse = resolveActiveWarehouse(
+      warehouseId ?? originalLot?.warehouseId,
+    )
+
+    if (
+      originalLot?.warehouseId &&
+      originalLot.warehouseId !== warehouse.id
+    ) {
+      throw new Error("The selected lot belongs to a different warehouse.")
+    }
+
+    const targetLocationId = originalLot
+      ? originalLot.locationId ?? null
+      : locationId ?? null
+
+    if (
+      originalLot &&
+      locationId !== undefined &&
+      targetLocationId !== locationId
+    ) {
+      throw new Error("The selected lot belongs to a different storage location.")
+    }
+
+    const location = resolveActiveLocation(
+      targetLocationId,
+      warehouse.id,
+    )
+
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
 
     if (lotId) {
-      const lot = updatedLots.find((l) => l.id === lotId)
-
-      if (!lot) throw new Error("Lot not found.")
-
-      lot.quantity += quantityDelta
-    } else {
-      // If no lot specified and delta > 0, create an unnamed opening lot
-      if (quantityDelta > 0) {
-        const newLot: InventoryLot = {
-          id: `LOT-${Date.now()}`,
-          productId,
-          batch: "OPENING",
-          expiry: "",
-          quantity: quantityDelta,
-          purchasePrice: 0,
-        }
-
-        updatedLots.push(newLot)
-      } else {
-        throw new Error("Must specify lot to decrease stock.")
+      const lot = updatedLots.find((item) => item.id === lotId)!
+      if (lot.quantity + quantityDelta < 0) {
+        throw new Error("Adjustment would make stock negative.")
       }
+      lot.quantity += quantityDelta
+    } else if (quantityDelta > 0) {
+      updatedLots.push({
+        id: `LOT-${Date.now()}`,
+        productId,
+        batch: "OPENING",
+        expiry: "",
+        quantity: quantityDelta,
+        purchasePrice: 0,
+        warehouseId: warehouse.id,
+        locationId: location?.id ?? null,
+      })
+    } else {
+      throw new Error("Must specify a lot to decrease stock.")
     }
 
     persistStore({
@@ -725,12 +1966,18 @@ export function ERPProvider({
       inventoryMovements: [
         {
           id: `MOV-${Date.now()}`,
-          type: "ADJUSTMENT",
+          type: movementType,
           productId,
           lotId,
           quantity: quantityDelta,
           reason,
           createdAt: new Date().toISOString(),
+          metadata: {
+            warehouseId: warehouse.id,
+            warehouseName: warehouse.name,
+            locationId: location?.id ?? null,
+            locationName: location?.name ?? "",
+          },
         },
         ...store.inventoryMovements,
       ],
@@ -771,53 +2018,32 @@ export function ERPProvider({
     expiry: string,
     quantity: number,
     purchasePrice: number,
+    warehouseId?: string,
+    locationId?: string | null,
   ) {
-    if (
-      !Number.isInteger(quantity) ||
-      quantity <= 0
-    ) {
-      throw new Error(
-        "Quantity must be a whole number greater than zero.",
-      )
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new Error("Quantity must be a whole number greater than zero.")
     }
 
-    const product = store.products.find(
-      (item) => item.id === productId,
-    )
+    const product = store.products.find((item) => item.id === productId)
+    if (!product) throw new Error("Product was not found.")
 
-    if (!product) {
-      throw new Error(
-        "Product was not found.",
-      )
-    }
+    const normalizedBatch = batch.trim().toUpperCase()
+    if (!normalizedBatch) throw new Error("Batch number is required.")
+    if (!expiry) throw new Error("Expiry date is required.")
 
-    const normalizedBatch =
-      batch.trim().toUpperCase()
+    const warehouse = resolveActiveWarehouse(warehouseId)
+    const location = resolveActiveLocation(locationId, warehouse.id)
 
-    if (!normalizedBatch) {
-      throw new Error(
-        "Batch number is required.",
-      )
-    }
-
-    if (!expiry) {
-      throw new Error(
-        "Expiry date is required.",
-      )
-    }
-
-    const lots = store.inventoryLots.map(
-      (lot) => ({
-        ...lot,
-      }),
-    )
+    const lots = store.inventoryLots.map((lot) => ({ ...lot }))
 
     const existing = lots.find(
       (lot) =>
         lot.productId === productId &&
-        lot.batch.trim().toUpperCase() ===
-          normalizedBatch &&
-        lot.expiry === expiry,
+        lot.batch.trim().toUpperCase() === normalizedBatch &&
+        lot.expiry === expiry &&
+        lot.warehouseId === warehouse.id &&
+        (lot.locationId ?? null) === (location?.id ?? null),
     )
 
     let savedLot: InventoryLot
@@ -834,17 +2060,374 @@ export function ERPProvider({
         expiry,
         quantity,
         purchasePrice,
+        warehouseId: warehouse.id,
+        locationId: location?.id ?? null,
       }
-
       lots.push(savedLot)
+    }
+
+    const receiptMovement: InventoryMovement = {
+      id: `MOV-MANUAL-RECEIPT-${savedLot.id}-${Date.now()}`,
+      type: "RECEIPT",
+      productId,
+      lotId: savedLot.id,
+      quantity,
+      reason: "Manual stock receipt",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        referenceType: "MANUAL_RECEIPT",
+        batch: normalizedBatch,
+        expiry,
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+        locationId: location?.id ?? null,
+        locationName: location?.name ?? "",
+        baseUnit: product.unit,
+        unitCost: purchasePrice,
+        totalCost: quantity * purchasePrice,
+      },
     }
 
     persistStore({
       ...store,
       inventoryLots: lots,
+      inventoryMovements: [
+        receiptMovement,
+        ...store.inventoryMovements,
+      ],
     })
 
     return savedLot
+  }
+
+  function createSupplier(input: SupplierInput): Supplier {
+    const normalized = validateSupplierInput(input, store.suppliers ?? [])
+    const baseId = `SUP-${Date.now()}`
+    const id = store.suppliers.some((item) => item.id === baseId)
+      ? `${baseId}-${store.suppliers.length + 1}`
+      : baseId
+    const supplier: Supplier = { id, ...normalized }
+
+    persistStore({
+      ...store,
+      suppliers: [...(store.suppliers ?? []), supplier],
+    })
+    return supplier
+  }
+
+  function updateSupplier(id: string, input: SupplierInput) {
+    const existing = store.suppliers.find((item) => item.id === id)
+    if (!existing) throw new Error("Supplier not found.")
+
+    const normalized = validateSupplierInput(input, store.suppliers, id)
+    persistStore({
+      ...store,
+      suppliers: store.suppliers.map((item) =>
+        item.id === id ? { id, ...normalized } : item,
+      ),
+    })
+  }
+
+  function deleteSupplier(id: string) {
+    const supplier = store.suppliers.find((item) => item.id === id)
+    if (!supplier) throw new Error("Supplier not found.")
+
+    const normalizedName = supplier.name.trim().toLowerCase()
+    const hasPurchaseHistory = store.purchases.some(
+      (purchase) =>
+        purchase.supplierId === id ||
+        (!purchase.supplierId &&
+          purchase.supplierName.trim().toLowerCase() === normalizedName),
+    )
+    if (hasPurchaseHistory) {
+      throw new Error("This supplier has purchase history and cannot be deleted. Mark it Inactive instead.")
+    }
+
+    persistStore({
+      ...store,
+      suppliers: store.suppliers.filter((item) => item.id !== id),
+    })
+  }
+
+  function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
+    const invoice = buildSupplierInvoice(
+      input,
+      store.suppliers ?? [],
+      store.purchases ?? [],
+      store.supplierInvoices ?? [],
+    )
+    persistStore({
+      ...store,
+      supplierInvoices: [invoice, ...(store.supplierInvoices ?? [])],
+    })
+    return invoice
+  }
+
+  function recordSupplierInvoicePayment(id: string, input: RecordSupplierInvoicePaymentInput) {
+    const current = (store.supplierInvoices ?? []).find((item) => item.id === id)
+    if (!current) throw new Error("Supplier invoice not found.")
+    const updated = applySupplierInvoicePayment(current, input)
+    persistStore({
+      ...store,
+      supplierInvoices: (store.supplierInvoices ?? []).map((item) => item.id === id ? updated : item),
+    })
+    return updated
+  }
+
+  function createSalesReturn(input: CreateSalesReturnInput): SalesReturn {
+    const sale = store.sales.find((item) => item.id === input.saleId)
+    const salesReturn = buildSalesReturn(input, sale, store.products, store.salesReturns ?? [])
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
+    const movements: InventoryMovement[] = []
+
+    salesReturn.items.forEach((returnItem, itemIndex) => {
+      const saleItem = sale!.items.find((item) => item.id === returnItem.saleItemId)!
+      returnItem.allocations.forEach((allocation, allocationIndex) => {
+        const lot = updatedLots.find((candidate) => candidate.id === allocation.lotId)
+        if (!lot || lot.productId !== returnItem.productId || lot.batch !== allocation.batch || lot.expiry !== allocation.expiry) {
+          throw new Error(`Original batch ${allocation.batch} for ${returnItem.productName} is no longer available. The return was not posted.`)
+        }
+        lot.quantity += allocation.quantity
+        const costAllocation = saleItem.costSnapshot?.lotAllocations?.find((candidate) => candidate.lotId === allocation.lotId)
+        const unitCost = costAllocation?.unitCost ?? lot.purchasePrice
+        movements.push({
+          id: `MOV-${salesReturn.id}-${itemIndex}-${allocationIndex}`,
+          type: "RETURN",
+          productId: returnItem.productId,
+          lotId: lot.id,
+          quantity: allocation.quantity,
+          reason: `Sales return ${salesReturn.returnNumber}`,
+          createdAt: salesReturn.createdAt,
+          metadata: {
+            referenceType: "SALES_RETURN",
+            referenceId: salesReturn.id,
+            referenceNumber: salesReturn.returnNumber,
+            originalSaleId: sale!.id,
+            originalInvoiceNumber: sale!.invoiceNumber,
+            refundMethod: salesReturn.refundMethod,
+            warehouseId: lot.warehouseId,
+            locationId: lot.locationId ?? null,
+            batch: lot.batch,
+            expiry: lot.expiry,
+            unitCost,
+            totalCost: unitCost * allocation.quantity,
+          },
+        })
+      })
+    })
+
+    const nextReturns = [salesReturn, ...(store.salesReturns ?? [])]
+    const nextSales = store.sales.map((item) => item.id === sale!.id && isSaleFullyReturned(item, nextReturns)
+      ? { ...item, status: "Refunded" as const }
+      : item)
+
+    persistStore({
+      ...store,
+      sales: nextSales,
+      salesReturns: nextReturns,
+      inventoryLots: updatedLots,
+      inventoryMovements: [...movements, ...store.inventoryMovements],
+    })
+    return salesReturn
+  }
+
+  function createPaymentReconciliation(input: CreatePaymentReconciliationInput): PaymentReconciliation {
+    const reconciliation = buildPaymentReconciliation(
+      input,
+      store.sales,
+      store.customerPayments ?? [],
+      store.paymentReconciliations ?? [],
+      new Date(),
+      store.salesReturns ?? [],
+    )
+    persistStore({
+      ...store,
+      paymentReconciliations: [reconciliation, ...(store.paymentReconciliations ?? [])],
+    })
+    return reconciliation
+  }
+
+  function recordCustomerPayment(input: RecordCustomerPaymentInput) {
+    const payment = buildCustomerPayment(
+      input,
+      store.sales,
+      store.customers,
+      store.customerPayments ?? [],
+    )
+    const nextPayments = [payment, ...(store.customerPayments ?? [])]
+    const allocatedSaleIds = new Set(payment.allocations.map((item) => item.saleId))
+    const nextSales = store.sales.map((sale) => {
+      if (!allocatedSaleIds.has(sale.id)) return sale
+      const settlement = getSalePaymentSummary(sale, nextPayments)
+      // Sale.status remains the legacy Paid/Pending/Refunded field. Partial
+      // settlements stay Pending; the payment register displays Partially Paid.
+      return settlement.status === "Paid" ? { ...sale, status: "Paid" as const } : sale
+    })
+    persistStore({
+      ...store,
+      customerPayments: nextPayments,
+      sales: nextSales,
+    })
+    return payment
+  }
+
+  function createChartOfAccount(input: ChartOfAccountInput): ChartOfAccount {
+    const currentAccounts = store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS
+    const account = buildChartOfAccount(input, currentAccounts)
+    persistStore({ ...store, chartOfAccounts: [...currentAccounts, account] })
+    return account
+  }
+
+  function updateChartOfAccount(id: string, input: ChartOfAccountInput) {
+    const currentAccounts = store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS
+    const current = currentAccounts.find((item) => item.id === id)
+    if (!current) throw new Error("Chart account not found.")
+    if (current.isSystem) throw new Error("System accounts are protected from editing.")
+    const normalized = validateChartOfAccountInput(input, currentAccounts, id)
+    const updated: ChartOfAccount = { ...current, ...normalized, parentId: normalized.parentId ?? null, description: normalized.description ?? "" }
+    persistStore({ ...store, chartOfAccounts: currentAccounts.map((item) => item.id === id ? updated : item) })
+  }
+
+  function setChartOfAccountStatus(id: string, status: ChartAccountStatus) {
+    const currentAccounts = store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS
+    const current = currentAccounts.find((item) => item.id === id)
+    if (!current) throw new Error("Chart account not found.")
+    validateChartAccountStatus(current, status, currentAccounts)
+    persistStore({ ...store, chartOfAccounts: currentAccounts.map((item) => item.id === id ? { ...item, status } : item) })
+  }
+
+  function createJournalEntry(input: JournalEntryInput): JournalEntry {
+    const currentEntries = store.journalEntries ?? []
+    const currentAccounts = store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS
+    const entry = buildJournalEntry(input, currentAccounts, currentEntries)
+
+    persistStore({
+      ...store,
+      journalEntries: [...currentEntries, entry],
+    })
+
+    return entry
+  }
+
+  function postJournalEntryInStore(id: string): JournalEntry {
+    const currentEntries = store.journalEntries ?? []
+    const current = currentEntries.find((entry) => entry.id === id)
+
+    if (!current) throw new Error("Journal entry not found.")
+
+    const posted = postJournalEntryRecord(
+      current,
+      store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS,
+    )
+
+    persistStore({
+      ...store,
+      journalEntries: currentEntries.map((entry) =>
+        entry.id === id ? posted : entry
+      ),
+    })
+
+    return posted
+  }
+
+
+  function createPurchaseRequisition(input: CreatePurchaseRequisitionInput) {
+    const requisition = buildPurchaseRequisition(
+      input,
+      store.suppliers,
+      store.products,
+      store.warehouses,
+      store.purchaseRequisitions ?? [],
+    )
+    persistStore({
+      ...store,
+      purchaseRequisitions: [requisition, ...(store.purchaseRequisitions ?? [])],
+    })
+    return requisition
+  }
+
+  function submitPurchaseRequisition(id: string) {
+    const current = store.purchaseRequisitions.find((item) => item.id === id)
+    if (!current) throw new Error("Purchase requisition not found.")
+    const updated = submitPurchaseRequisitionRecord(current)
+    persistStore({
+      ...store,
+      purchaseRequisitions: store.purchaseRequisitions.map((item) =>
+        item.id === id ? updated : item,
+      ),
+    })
+  }
+
+  function reviewPurchaseRequisition(
+    id: string,
+    decision: "APPROVE" | "REJECT",
+    reviewer: string,
+    note = "",
+  ) {
+    const current = store.purchaseRequisitions.find((item) => item.id === id)
+    if (!current) throw new Error("Purchase requisition not found.")
+    const updated = reviewPurchaseRequisitionRecord(current, decision, reviewer, note)
+    persistStore({
+      ...store,
+      purchaseRequisitions: store.purchaseRequisitions.map((item) =>
+        item.id === id ? updated : item,
+      ),
+    })
+  }
+
+  function createPurchaseOrderFromRequisition(requisitionId: string) {
+    const requisition = store.purchaseRequisitions.find((item) => item.id === requisitionId)
+    if (!requisition) throw new Error("Purchase requisition not found.")
+    if (requisition.convertedPurchaseOrderId) {
+      throw new Error("This requisition has already been converted to a purchase order.")
+    }
+    const order = buildPurchaseOrderFromRequisition(
+      requisition,
+      store.warehouses,
+      store.purchaseOrders ?? [],
+    )
+    const converted: PurchaseRequisition = {
+      ...requisition,
+      status: "CONVERTED",
+      convertedPurchaseOrderId: order.id,
+    }
+    persistStore({
+      ...store,
+      purchaseRequisitions: store.purchaseRequisitions.map((item) =>
+        item.id === requisitionId ? converted : item,
+      ),
+      purchaseOrders: [order, ...(store.purchaseOrders ?? [])],
+    })
+    return order
+  }
+
+  function submitPurchaseOrder(id: string) {
+    const current = store.purchaseOrders.find((item) => item.id === id)
+    if (!current) throw new Error("Purchase order not found.")
+    const updated = submitPurchaseOrderRecord(current)
+    persistStore({
+      ...store,
+      purchaseOrders: store.purchaseOrders.map((item) =>
+        item.id === id ? updated : item,
+      ),
+    })
+  }
+
+  function reviewPurchaseOrder(
+    id: string,
+    decision: "APPROVE" | "REJECT",
+    reviewer: string,
+    note = "",
+  ) {
+    const current = store.purchaseOrders.find((item) => item.id === id)
+    if (!current) throw new Error("Purchase order not found.")
+    const updated = reviewPurchaseOrderRecord(current, decision, reviewer, note)
+    persistStore({
+      ...store,
+      purchaseOrders: store.purchaseOrders.map((item) =>
+        item.id === id ? updated : item,
+      ),
+    })
   }
 
   function addCustomer(
@@ -893,16 +2476,15 @@ export function ERPProvider({
 
   function getProductStock(
     productId: string,
+    warehouseId?: string,
   ) {
     return store.inventoryLots
       .filter(
-        (lot) => lot.productId === productId,
+        (lot) =>
+          lot.productId === productId &&
+          (!warehouseId || lot.warehouseId === warehouseId),
       )
-      .reduce(
-        (sum, lot) =>
-          sum + lot.quantity,
-        0,
-      )
+      .reduce((sum, lot) => sum + lot.quantity, 0)
   }
 
   function getNextInvoiceNumber(
@@ -962,10 +2544,27 @@ export function ERPProvider({
   function createPurchase(
     input: CreatePurchaseInput,
   ): Purchase {
-    if (!input.supplierName.trim()) {
-      throw new Error(
-        "Supplier name is required.",
-      )
+    const selectedSupplier = input.supplierId
+      ? store.suppliers.find((item) => item.id === input.supplierId)
+      : undefined
+    if (input.supplierId && (!selectedSupplier || selectedSupplier.status !== "Active")) {
+      throw new Error("Select an active supplier.")
+    }
+    const resolvedSupplierName = selectedSupplier?.name ?? input.supplierName.trim()
+    const receivingOrder = input.purchaseOrderId
+      ? (store.purchaseOrders ?? []).find((item) => item.id === input.purchaseOrderId)
+      : undefined
+    if (input.purchaseOrderId && !receivingOrder) {
+      throw new Error("Purchase order not found.")
+    }
+    if (receivingOrder && (!selectedSupplier || selectedSupplier.id !== receivingOrder.supplierId)) {
+      throw new Error("The goods receipt supplier must match the purchase order supplier.")
+    }
+    if (receivingOrder && receivingOrder.status !== "APPROVED" && receivingOrder.status !== "PARTIALLY_RECEIVED") {
+      throw new Error("Goods can only be received against an approved purchase order.")
+    }
+    if (!resolvedSupplierName) {
+      throw new Error("Supplier name is required.")
     }
 
     if (!input.items.length) {
@@ -974,16 +2573,23 @@ export function ERPProvider({
       )
     }
 
+    const receivingWarehouse = resolveActiveWarehouse(input.warehouseId)
+    const receivingLocation = resolveActiveLocation(
+      input.locationId,
+      receivingWarehouse.id,
+    )
+    if (receivingOrder && receivingOrder.warehouseId !== receivingWarehouse.id) {
+      throw new Error("The receiving warehouse must match the purchase order warehouse.")
+    }
+
     const preparedItems =
       input.items.map((item) => {
         if (
-          !Number.isInteger(
-            item.quantity,
-          ) ||
+          !Number.isFinite(item.quantity) ||
           item.quantity <= 0
         ) {
           throw new Error(
-            "Purchase quantity must be a whole number greater than zero.",
+            "Purchase quantity must be a number greater than zero.",
           )
         }
 
@@ -1023,18 +2629,57 @@ export function ERPProvider({
           )
         }
 
+        const selectedPackage = item.packageId
+          ? product.packagings?.find(
+              (packaging) => packaging.id === item.packageId,
+            )
+          : undefined
+
+        if (item.packageId && !selectedPackage) {
+          throw new Error(`Selected package was not found for ${product.name}.`)
+        }
+
+        if (selectedPackage && !selectedPackage.purchaseEnabled) {
+          throw new Error(`${selectedPackage.name} is not enabled for purchasing.`)
+        }
+
+        const conversionFactor = selectedPackage?.conversionFactor ?? 1
+
+        if (!Number.isFinite(conversionFactor) || conversionFactor <= 0) {
+          throw new Error(`Invalid package conversion for ${product.name}.`)
+        }
+
+        const baseQuantity = item.quantity * conversionFactor
+        const baseUnitPurchasePrice = item.purchasePrice / conversionFactor
+
+        if (
+          !Number.isFinite(baseQuantity) ||
+          !Number.isFinite(baseUnitPurchasePrice)
+        ) {
+          throw new Error(`Invalid converted purchase quantity or price for ${product.name}.`)
+        }
+
         return {
           product,
           quantity: item.quantity,
-          purchasePrice:
-            item.purchasePrice,
-          batch:
-            item.batch
-              .trim()
-              .toUpperCase(),
+          purchasePrice: item.purchasePrice,
+          packageId: selectedPackage?.id,
+          packageName: selectedPackage?.name,
+          purchaseUnit: selectedPackage?.unit ?? product.unit,
+          conversionFactor,
+          baseQuantity,
+          baseUnitPurchasePrice,
+          batch: item.batch.trim().toUpperCase(),
           expiry: item.expiry,
         }
       })
+
+    const updatedPurchaseOrder = receivingOrder
+      ? applyPurchaseOrderReceipt(
+          receivingOrder,
+          preparedItems.map((item) => ({ productId: item.product.id, quantity: item.baseQuantity })),
+        )
+      : undefined
 
     const updatedLots =
       store.inventoryLots.map(
@@ -1051,22 +2696,21 @@ export function ERPProvider({
         const existingLot =
           updatedLots.find(
             (lot) =>
-              lot.productId ===
-                item.product.id &&
-              lot.batch
-                .trim()
-                .toUpperCase() ===
-                item.batch &&
-              lot.expiry ===
-                item.expiry,
+              lot.productId === item.product.id && lot.batch.trim().toUpperCase() === item.batch && lot.expiry === item.expiry && lot.warehouseId === receivingWarehouse.id && (lot.locationId ?? null) === (receivingLocation?.id ?? null),
           )
 
         if (existingLot) {
-          existingLot.quantity +=
-            item.quantity
-
-          existingLot.purchasePrice =
-            item.purchasePrice
+          const mergedCost = mergeLotReceiptCost(
+            existingLot.quantity,
+            existingLot.purchasePrice,
+            item.baseQuantity,
+            item.baseUnitPurchasePrice,
+          )
+          existingLot.quantity = mergedCost.quantity
+          existingLot.purchasePrice = mergedCost.unitCost
+          if (existingLot.totalPurchaseValue !== undefined) {
+            existingLot.totalPurchaseValue = mergedCost.totalValue
+          }
         } else {
           updatedLots.push({
             id: `LOT-${Date.now()}-${index}`,
@@ -1075,9 +2719,10 @@ export function ERPProvider({
             batch: item.batch,
             expiry: item.expiry,
             quantity:
-              item.quantity,
-            purchasePrice:
-              item.purchasePrice,
+              item.baseQuantity,
+            purchasePrice: item.baseUnitPurchasePrice,
+            warehouseId: receivingWarehouse.id,
+            locationId: receivingLocation?.id ?? null,
           })
         }
 
@@ -1089,15 +2734,18 @@ export function ERPProvider({
             item.product.name,
           barcode:
             item.product.barcode,
-          quantity:
-            item.quantity,
-          purchasePrice:
-            item.purchasePrice,
+          quantity: item.quantity,
+          purchasePrice: item.purchasePrice,
+          packageId: item.packageId,
+          packageName: item.packageName,
+          purchaseUnit: item.purchaseUnit,
+          baseUnit: item.product.unit,
+          conversionFactor: item.conversionFactor,
+          baseQuantity: item.baseQuantity,
+          baseUnitPurchasePrice: item.baseUnitPurchasePrice,
           batch: item.batch,
           expiry: item.expiry,
-          total:
-            item.quantity *
-            item.purchasePrice,
+          total: item.quantity * item.purchasePrice,
         })
       },
     )
@@ -1118,10 +2766,15 @@ export function ERPProvider({
         getNextPurchaseNumber(
           store.purchases,
         ),
-      supplierName:
-        input.supplierName.trim(),
-      supplierInvoice:
-        input.supplierInvoice.trim(),
+      supplierName: resolvedSupplierName,
+      supplierId: selectedSupplier?.id,
+      supplierInvoice: input.supplierInvoice.trim(),
+      purchaseOrderId: receivingOrder?.id,
+      purchaseOrderNumber: receivingOrder?.purchaseOrderNumber,
+      warehouseId: receivingWarehouse.id,
+      warehouseName: receivingWarehouse.name,
+      locationId: receivingLocation?.id ?? null,
+      locationName: receivingLocation?.name ?? "",
       createdAt:
         new Date().toISOString(),
       subtotal,
@@ -1130,14 +2783,61 @@ export function ERPProvider({
       items: purchaseItems,
     }
 
+    const purchaseMovements: InventoryMovement[] =
+      purchaseItems.map((item, index) => {
+        const matchedLot = updatedLots.find(
+          (lot) =>
+            lot.productId === item.productId && lot.batch.trim().toUpperCase() === item.batch.trim().toUpperCase() && lot.expiry === item.expiry && lot.warehouseId === receivingWarehouse.id && (lot.locationId ?? null) === (receivingLocation?.id ?? null),
+        )
+
+        return {
+          id: `MOV-${purchase.id}-${index}`,
+          type: "RECEIPT",
+          productId: item.productId,
+          lotId: matchedLot?.id ?? null,
+          quantity: item.baseQuantity ?? item.quantity,
+          reason: receivingOrder
+            ? `Goods receipt ${purchase.purchaseNumber} against ${receivingOrder.purchaseOrderNumber}`
+            : `Purchase receipt ${purchase.purchaseNumber}`,
+          createdAt: purchase.createdAt,
+          metadata: {
+            warehouseId: receivingWarehouse.id,
+            warehouseName: receivingWarehouse.name,
+            locationId: receivingLocation?.id ?? null,
+            locationName: receivingLocation?.name ?? "",
+            referenceType: receivingOrder ? "PURCHASE_ORDER_RECEIPT" : "PURCHASE",
+            referenceId: purchase.id,
+            purchaseOrderId: receivingOrder?.id,
+            purchaseOrderNumber: receivingOrder?.purchaseOrderNumber,
+            referenceNumber: purchase.purchaseNumber,
+            supplierName: purchase.supplierName,
+            batch: item.batch,
+            expiry: item.expiry,
+            purchaseQuantity: item.quantity,
+            purchaseUnit: item.purchaseUnit ?? item.baseUnit ?? "",
+            conversionFactor: item.conversionFactor ?? 1,
+            baseUnit: item.baseUnit ?? "",
+            unitCost: item.baseUnitPurchasePrice ?? item.purchasePrice,
+            totalCost: item.total,
+            packageName: item.packageName ?? "",
+          },
+        }
+      })
+
     const nextStore: StoredData = {
       ...store,
-      inventoryLots:
-        updatedLots,
+      inventoryLots: updatedLots,
+      inventoryMovements: [
+        ...purchaseMovements,
+        ...store.inventoryMovements,
+      ],
       purchases: [
         purchase,
         ...store.purchases,
       ],
+      purchaseOrders: updatedPurchaseOrder
+        ? (store.purchaseOrders ?? []).map((item) => item.id === updatedPurchaseOrder.id ? updatedPurchaseOrder : item)
+        : (store.purchaseOrders ?? []),
     }
 
     persistStore(nextStore)
@@ -1159,12 +2859,12 @@ export function ERPProvider({
       input.discount ?? 0,
     )
 
+    const sellingWarehouse = resolveActiveWarehouse(input.warehouseId)
+
     const requestedItems =
       input.items.map((item) => {
         if (
-          !Number.isInteger(
-            item.quantity,
-          ) ||
+          !Number.isInteger(item.quantity) ||
           item.quantity <= 0
         ) {
           throw new Error(
@@ -1172,12 +2872,9 @@ export function ERPProvider({
           )
         }
 
-        const product =
-          store.products.find(
-            (candidate) =>
-              candidate.id ===
-              item.productId,
-          )
+        const product = store.products.find(
+          (candidate) => candidate.id === item.productId,
+        )
 
         if (!product) {
           throw new Error(
@@ -1185,32 +2882,98 @@ export function ERPProvider({
           )
         }
 
-        const currentStock =
-          getProductStock(
-            product.id,
+        const selectedPackage = item.packageId
+          ? product.packagings?.find(
+              (packaging) => packaging.id === item.packageId,
+            )
+          : undefined
+
+        if (item.packageId && !selectedPackage) {
+          throw new Error(
+            `The selected package for ${product.name} was not found.`,
           )
+        }
+
+        if (selectedPackage && !selectedPackage.salesEnabled) {
+          throw new Error(
+            `${selectedPackage.name} is not enabled for sales.`,
+          )
+        }
+
+        const conversionFactor =
+          selectedPackage?.conversionFactor ?? 1
 
         if (
-          item.quantity >
-          currentStock
+          !Number.isFinite(conversionFactor) ||
+          conversionFactor <= 0
         ) {
           throw new Error(
-            `${product.name} only has ${currentStock} unit(s) available.`,
+            `Invalid package conversion for ${product.name}.`,
+          )
+        }
+
+        const sellingUnitPrice = selectedPackage
+          ? item.unitPrice ??
+            selectedPackage.sellingPrice ??
+            product.sellingPrice * conversionFactor
+          : item.unitPrice ?? product.sellingPrice
+
+        if (
+          !Number.isFinite(sellingUnitPrice) ||
+          sellingUnitPrice < 0
+        ) {
+          throw new Error(
+            `Invalid selling price for ${product.name}.`,
+          )
+        }
+
+        const baseQuantity =
+          item.quantity * conversionFactor
+
+        const baseUnitPrice =
+          sellingUnitPrice / conversionFactor
+
+        if (
+          !Number.isFinite(baseQuantity) ||
+          baseQuantity <= 0 ||
+          !Number.isFinite(baseUnitPrice)
+        ) {
+          throw new Error(
+            `Invalid base-unit conversion for ${product.name}.`,
+          )
+        }
+
+        const currentStock = getProductStock(product.id, sellingWarehouse.id)
+
+        if (baseQuantity > currentStock) {
+          throw new Error(
+            `${product.name} requires ${baseQuantity} ${product.unit}, but only ${currentStock} ${product.unit} are available.`,
           )
         }
 
         return {
           product,
-          quantity:
-            item.quantity,
-          unitPrice:
-            item.unitPrice ??
-            product.sellingPrice,
+          quantity: baseQuantity,
+          unitPrice: baseUnitPrice,
+          unitPriceOverride: Boolean(selectedPackage),
+          displayQuantity: item.quantity,
+          displayUnitPrice: sellingUnitPrice,
+          sellingUnit: selectedPackage?.unit ?? product.unit,
+          packageId: selectedPackage?.id,
+          packageName: selectedPackage?.name,
+          conversionFactor,
+          baseQuantity,
         }
       })
 
     const allocation = allocateSaleLots(
-      requestedItems,
+      requestedItems.map((item) => ({
+        product: item.product,
+          warehouseId: sellingWarehouse.id,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unitPriceOverride: item.unitPriceOverride,
+      })),
       store.inventoryLots,
     )
 
@@ -1222,39 +2985,67 @@ export function ERPProvider({
     }
 
     const totals = calculateLotSaleTotals(allocation.lines, discount)
+    const cashSettlement = input.paymentMethod === "Cash"
+      ? calculateCashSettlement(totals.total, input.cashTendered ?? totals.total)
+      : null
 
-    const saleItems: SaleItem[] = allocation.lines.map((line, index) => {
-      const lotAllocation = {
-        lotId: line.lotId,
-        batch: line.batch,
-        expiry: line.expiry,
-        quantity: line.quantity,
-        unitCost: line.unitCost,
-        totalCost: line.totalCost,
-      }
+    const saleItems: SaleItem[] = requestedItems.map(
+      (request, index) => {
+        const allocatedLines = allocation.lines.filter(
+          (line) => line.product.id === request.product.id,
+        )
 
-      return {
-        id: `ITEM-${Date.now()}-${index}`,
-        productId: line.product.id,
-        name: line.product.name,
-        barcode: line.product.barcode,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        vatRate: line.product.vatRate,
-        total: line.quantity * line.unitPrice,
-        batchAllocations: [{
+        const lotAllocations = allocatedLines.map((line) => ({
           lotId: line.lotId,
+          warehouseId: line.warehouseId,
+          locationId: line.locationId ?? null,
           batch: line.batch,
           expiry: line.expiry,
           quantity: line.quantity,
-        }],
-        costSnapshot: {
-          cogs: line.totalCost,
           unitCost: line.unitCost,
-          lotAllocations: [lotAllocation],
-        },
-      }
-    })
+          totalCost: line.totalCost,
+        }))
+
+        const cogs = lotAllocations.reduce(
+          (sum, lot) => sum + lot.totalCost,
+          0,
+        )
+
+        const allocatedBaseQuantity = lotAllocations.reduce(
+          (sum, lot) => sum + lot.quantity,
+          0,
+        )
+
+        return {
+          id: `ITEM-${Date.now()}-${index}`,
+          productId: request.product.id,
+          name: request.product.name,
+          barcode: request.product.barcode,
+          quantity: request.displayQuantity,
+          unitPrice: request.displayUnitPrice,
+          vatRate: request.product.vatRate,
+          total: request.displayQuantity * request.displayUnitPrice,
+          sellingUnit: request.sellingUnit,
+          packageId: request.packageId,
+          packageName: request.packageName,
+          conversionFactor: request.conversionFactor,
+          baseQuantity: request.baseQuantity,
+          batchAllocations: lotAllocations.map((lot) => ({
+            lotId: lot.lotId,
+            batch: lot.batch,
+            expiry: lot.expiry,
+            quantity: lot.quantity,
+          })),
+          costSnapshot: {
+            cogs,
+            unitCost: allocatedBaseQuantity > 0
+              ? cogs / allocatedBaseQuantity
+              : 0,
+            lotAllocations,
+          },
+        }
+      },
+    )
 
     const customer =
       input.customerId
@@ -1266,6 +3057,8 @@ export function ERPProvider({
         : undefined
 
     const sale: Sale = {
+      warehouseId: sellingWarehouse.id,
+      warehouseName: sellingWarehouse.name,
       id: `SALE-${Date.now()}`,
       invoiceNumber:
         getNextInvoiceNumber(
@@ -1280,6 +3073,8 @@ export function ERPProvider({
         "Walk-in Customer",
       paymentMethod:
         input.paymentMethod,
+      cashTendered: cashSettlement?.cashTendered,
+      changeDue: cashSettlement?.changeDue,
       subtotal: totals.subtotal,
       discount: totals.discount,
       vat: totals.vat,
@@ -1292,10 +3087,37 @@ export function ERPProvider({
       items: saleItems,
     }
 
+    const saleMovements: InventoryMovement[] =
+      allocation.lines.map((line, index) => ({
+        id: `MOV-${sale.id}-${index}`,
+        type: "SALE",
+        productId: line.product.id,
+        lotId: line.lotId,
+        quantity: -line.quantity,
+        reason: `POS sale ${sale.invoiceNumber}`,
+        createdAt: sale.createdAt,
+        metadata: {
+          referenceType: "SALE",
+          referenceId: sale.id,
+          referenceNumber: sale.invoiceNumber,
+          warehouseId: sellingWarehouse.id,
+          warehouseName: sellingWarehouse.name,
+          locationId: line.locationId ?? null,
+          batch: line.batch,
+          expiry: line.expiry,
+          baseUnit: line.product.unit,
+          unitCost: line.unitCost,
+          totalCost: line.totalCost,
+        },
+      }))
+
     const nextStore: StoredData = {
       ...store,
-      inventoryLots:
-        allocation.updatedLots,
+      inventoryLots: allocation.updatedLots,
+      inventoryMovements: [
+        ...saleMovements,
+        ...store.inventoryMovements,
+      ],
       sales: [
         sale,
         ...store.sales,
@@ -1350,13 +3172,59 @@ export function ERPProvider({
     <ERPContext.Provider
       value={{
         products: store.products,
-        inventoryLots:
-          store.inventoryLots,
+        chartOfAccounts: store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS,
+        createChartOfAccount,
+        updateChartOfAccount,
+        setChartOfAccountStatus,
+        journalEntries: store.journalEntries ?? [],
+        createJournalEntry,
+        postJournalEntry: postJournalEntryInStore,
+        inventoryLots: store.inventoryLots,
         inventoryMovements: store.inventoryMovements,
         customers: store.customers,
         sales: store.sales,
+        customerPayments: store.customerPayments ?? [],
+        paymentReconciliations: store.paymentReconciliations ?? [],
+        salesReturns: store.salesReturns ?? [],
+        createPaymentReconciliation,
+        createSalesReturn,
         purchases:
           store.purchases,
+
+        suppliers: store.suppliers ?? [],
+        createSupplier,
+        updateSupplier,
+        deleteSupplier,
+        supplierInvoices: store.supplierInvoices ?? [],
+        createSupplierInvoice,
+        recordSupplierInvoicePayment,
+        purchaseRequisitions: store.purchaseRequisitions ?? [],
+        purchaseOrders: store.purchaseOrders ?? [],
+        createPurchaseRequisition,
+        submitPurchaseRequisition,
+        reviewPurchaseRequisition,
+        createPurchaseOrderFromRequisition,
+        submitPurchaseOrder,
+        reviewPurchaseOrder,
+        recordCustomerPayment,
+        stockTransfers: store.stockTransfers ?? [],
+        createStockTransfer,
+        dispatchStockTransfer,
+        receiveStockTransfer,
+        cancelStockTransfer,
+        stockCounts: store.stockCounts ?? [],
+        createStockCount,
+        updateStockCountLine,
+        submitStockCount,
+        postStockCount,
+        cancelStockCount,
+        warehouses: store.warehouses,
+        storageLocations: store.storageLocations,
+        createWarehouse,
+        updateWarehouse,
+        createStorageLocation,
+        updateStorageLocation,
+        deleteStorageLocation,
         addProduct,
         addProductAndReceive,
         adjustStock,

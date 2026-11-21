@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import jsPDF from "jspdf"
 import JsBarcode from "jsbarcode"
@@ -13,6 +13,7 @@ import {
   Search,
 } from "lucide-react"
 import { useERP, type Sale } from "../context/ERPContext"
+import { takePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
 
 const PHARMACY_NAME = "Zaki Pharmacy LLC"
 const PHARMACY_ADDRESS = "Shop No. 3, Nuaimeya 1, Ajman"
@@ -60,7 +61,7 @@ function getInvoiceLineAmounts(sale: Sale, item: Sale["items"][number]) {
   }
 }
 
-function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
+function printThermalReceipt(format: PrintFormat, invoiceNumber: string, onAfterPrint?: () => void, reservedWindow: Window | null = null,): boolean {
   const widthMm = format === "80mm" ? 80 : 58
   const receiptClass = format === "80mm" ? "thermal-80" : "thermal-58"
   const receiptTemplate = document.querySelector<HTMLElement>(
@@ -69,14 +70,14 @@ function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
 
   if (!receiptTemplate) {
     window.alert("Unable to prepare the receipt for printing.")
-    return
+    return false
   }
 
   const receiptCard = receiptTemplate.cloneNode(true) as HTMLElement
   const barcode = receiptCard.querySelector<SVGSVGElement>(".thermal-barcode svg")
   if (!barcode) {
     window.alert("Unable to prepare the invoice barcode.")
-    return
+    return false
   }
 
   try {
@@ -92,13 +93,13 @@ function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
   } catch (error) {
     console.error("Unable to generate the invoice barcode.", error)
     window.alert("Unable to generate the invoice barcode.")
-    return
+    return false
   }
 
   const barcodeWidth = Number.parseFloat(barcode.getAttribute("width") ?? "")
   if (!Number.isFinite(barcodeWidth) || barcodeWidth <= 0) {
     window.alert("Unable to measure the invoice barcode.")
-    return
+    return false
   }
   barcode.style.width = `${Math.min((barcodeWidth * 25.4) / 96, widthMm - 12)}mm`
   barcode.style.maxWidth = "100%"
@@ -106,10 +107,14 @@ function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
   barcode.setAttribute("role", "img")
   barcode.setAttribute("aria-label", `Code 128 barcode for invoice ${invoiceNumber}`)
 
-  const printWindow = window.open("", "_blank")
+  const printWindow =
+    reservedWindow && !reservedWindow.closed
+      ? reservedWindow
+      : window.open("", "_blank")
+
   if (!printWindow) {
     window.alert("Allow pop-ups for this site to print thermal receipts.")
-    return
+    return false
   }
 
   const printDocument = printWindow.document
@@ -222,9 +227,14 @@ function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
       const pageStyle = printDocument.createElement("style")
       pageStyle.textContent = `@page { size: ${widthMm}mm ${pageHeightMm}mm; margin: 2mm; }`
       printDocument.head.append(pageStyle)
-      printWindow.addEventListener("afterprint", () => printWindow.close(), {
-        once: true,
-      })
+      printWindow.addEventListener(
+        "afterprint",
+        () => {
+          printWindow.close()
+          onAfterPrint?.()
+        },
+        { once: true },
+      )
       printWindow.focus()
       printWindow.print()
     } catch (error) {
@@ -233,6 +243,8 @@ function printThermalReceipt(format: PrintFormat, invoiceNumber: string) {
       window.alert("Unable to prepare the receipt for printing.")
     }
   })()
+
+  return true
 }
 
 function getBatchText(saleItem: Sale["items"][number]) {
@@ -425,7 +437,12 @@ async function createInvoicePdf(sale: Sale) {
     pdf.setFontSize(6.2)
     pdf.text("Unit / وحدة", left + 109, rowY + 7)
 
-    pdf.text(String(item.quantity), left + 136, rowY + 7, { align: "right" })
+    pdf.text(
+      `${item.quantity} ${item.sellingUnit || ""}`.trim(),
+      left + 136,
+      rowY + 7,
+      { align: "right" },
+    )
     pdf.text(money(item.unitPrice), left + 159, rowY + 7, { align: "right" })
     pdf.text(money(lineVat), left + 176, rowY + 7, { align: "right" })
     pdf.setTextColor(...text)
@@ -515,6 +532,37 @@ export default function Invoices() {
       ) ?? null
     )
   }, [sales, invoiceId])
+
+  // Automatically print the saved POS invoice using the 80mm thermal receipt.
+  useEffect(() => {
+    const shouldAutoPrint =
+      new URLSearchParams(window.location.search).get("autoprint") === "1"
+
+    if (!invoiceId || !selectedSale || !shouldAutoPrint) return
+
+    let active = true
+
+    const printTimer = window.setTimeout(() => {
+      const reservedWindow = takePendingThermalPrintWindow()
+
+      printThermalReceipt(
+        "80mm",
+        selectedSale.invoiceNumber,
+        () => {
+          if (active) {
+            navigate("/pos", { replace: true })
+          }
+        },
+        reservedWindow,
+      )
+    }, 600)
+
+    return () => {
+      active = false
+      window.clearTimeout(printTimer)
+    }
+  }, [invoiceId, selectedSale, navigate])
+
 
   const filteredInvoices = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -878,7 +926,7 @@ export default function Invoices() {
                           )}
                         </div>
                         <span className="text-right text-sm text-slate-600">{product?.unit ?? "Unit / وحدة"}</span>
-                        <span className="text-right text-sm font-medium text-slate-600">{item.quantity}</span>
+                        <span className="text-right text-sm font-medium text-slate-600">{item.quantity} {item.sellingUnit || ""}</span>
                         <span className="text-right text-sm text-slate-600">AED {item.unitPrice.toFixed(2)}</span>
                         <span className="text-right text-sm text-slate-600">AED {itemVat.toFixed(2)}</span>
                         <span className="text-right text-sm font-semibold text-[#17221D]">AED {item.total.toFixed(2)}</span>
@@ -902,10 +950,10 @@ export default function Invoices() {
                     <p className="mt-1 text-sm text-slate-600">Discount / الخصم: AED {sale.discount.toFixed(2)}</p>
                   )}
                   <p className="mt-1 text-sm text-slate-600">
-                    Cash / النقد: AED {sale.paymentMethod === "Cash" ? Math.max(0, sale.total).toFixed(2) : "0.00"}
+                    Cash / النقد: AED {sale.paymentMethod === "Cash" ? (sale.cashTendered ?? sale.total).toFixed(2) : "0.00"}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
-                    Change / الباقي: AED {sale.paymentMethod === "Cash" ? "0.00" : "0.00"}
+                    Change / الباقي: AED {sale.paymentMethod === "Cash" ? (sale.changeDue ?? 0).toFixed(2) : "0.00"}
                   </p>
                 </div>
               </div>
@@ -1042,7 +1090,7 @@ export default function Invoices() {
                     return (
                       <tr key={item.id} className="thermal-item-row">
                         <td className="product">{item.name}</td>
-                        <td className="uom">{product?.unit ?? "Unit"}</td>
+                        <td className="uom">{item.sellingUnit ?? product?.unit ?? "Unit"}</td>
                         <td className="numeric">{item.quantity}</td>
                         <td className="numeric">{item.unitPrice.toFixed(2)}</td>
                         <td className="numeric">
@@ -1087,11 +1135,11 @@ export default function Invoices() {
                 <div className="thermal-payment-title">Payment Details</div>
                 <div className="thermal-payment-row">
                   <span>Cash / السيولة النقدية</span>
-                  <span>{sale.paymentMethod === "Cash" ? money(sale.total) : "—"}</span>
+                  <span>{sale.paymentMethod === "Cash" ? money(sale.cashTendered ?? sale.total) : "—"}</span>
                 </div>
                 <div className="thermal-payment-row">
                   <span>Change / توازن</span>
-                  <span>Not recorded</span>
+                  <span>{sale.paymentMethod === "Cash" ? money(sale.changeDue ?? 0) : "—"}</span>
                 </div>
                 <div className="thermal-payment-row">
                   <span>Payment Mode</span>
@@ -1099,7 +1147,7 @@ export default function Invoices() {
                 </div>
                 <div className="thermal-payment-row">
                   <span>Associate</span>
-                  <span>Not recorded</span>
+                  <span>{sale.paymentMethod === "Cash" ? money(sale.changeDue ?? 0) : "—"}</span>
                 </div>
               </div>
 
@@ -1159,7 +1207,7 @@ export default function Invoices() {
                 <div key={item.id} className="thermal-item-compact">
                   <div className="thermal-item-head compact-head">
                     <span>{item.name}</span>
-                    <span>{item.quantity} x AED {item.unitPrice.toFixed(2)}</span>
+                    <span>{item.quantity} {item.sellingUnit || ""} x AED {item.unitPrice.toFixed(2)}</span>
                   </div>
                   <div className="thermal-item-sub compact-sub">
                     <span>
@@ -1190,12 +1238,12 @@ export default function Invoices() {
               <div className="thermal-summary-row">
                 <span>Cash / النقد</span>
                 <span>
-                  AED {sale.paymentMethod === "Cash" ? breakdown.netTotal.toFixed(2) : "0.00"}
+                  AED {sale.paymentMethod === "Cash" ? (sale.cashTendered ?? breakdown.netTotal).toFixed(2) : "0.00"}
                 </span>
               </div>
               <div className="thermal-summary-row">
                 <span>Change / الباقي</span>
-                <span>AED 0.00</span>
+                <span>AED {sale.paymentMethod === "Cash" ? (sale.changeDue ?? 0).toFixed(2) : "0.00"}</span>
               </div>
               <div className="thermal-note">{REFUND_NOTE}</div>
               <div className="thermal-footer">Thank you / شكراً لك</div>
