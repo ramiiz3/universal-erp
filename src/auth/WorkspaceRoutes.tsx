@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
-import { Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom"
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import {
   Building2,
   LogOut,
@@ -12,7 +12,6 @@ import {
   Users,
 } from "lucide-react"
 import { useAuth } from "./AuthProvider"
-import { LoginPage } from "./AuthPages"
 import { supabase } from "../lib/supabase"
 import type { CompanyMembership } from "./AuthProvider"
 import { useTheme } from "../context/ThemeContext"
@@ -806,9 +805,10 @@ function WorkspaceAIAssistant() {
 
 export default function WorkspaceRoutes() {
   const { configured, loading, user } = useAuth()
+  const location = useLocation()
   if (!configured) return <SetupNotice />
   if (loading) return <main className="grid min-h-screen place-items-center text-sm text-slate-600">Checking authenticated session…</main>
-  if (!user) return <LoginPage />
+  if (!user) return <Navigate to="/auth/login" replace state={{ from: `${location.pathname}${location.search}` }} />
   return (
     <Routes>
       <Route index element={<WorkspaceGuard />} />
