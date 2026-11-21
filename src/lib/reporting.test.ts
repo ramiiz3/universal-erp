@@ -134,19 +134,24 @@ describe("reporting utilities", () => {
         costsUnavailableCount: 0,
         costsUnavailableMessage: "",
       },
+      returnBreakdown: [],
+      salesRegister: [],
       productBreakdown: [
         {
           productId: "P-1",
           name: 'Widget "A", Extra',
           category: "Sundries",
           quantitySold: 2,
+          quantityReturned: 0,
           grossSales: 120,
           discounts: 10,
+          refunds: 0,
           netSales: 110,
           cogs: 40,
           grossProfit: 70,
           grossMargin: 63.64,
           vatCollected: 5,
+          costsComplete: true,
         },
       ],
       dailyBreakdown: [],
@@ -157,4 +162,243 @@ describe("reporting utilities", () => {
     expect(csv).toContain('"Widget ""A"", Extra"')
     expect(csv).toContain("grossSales")
   })
+
+  it("includes credit sales and recognises returns on the refund date with historical COGS reversal", () => {
+    const sale = {
+      id: "S-RETURN-1",
+      invoiceNumber: "INV-RETURN-1",
+      createdAt: "2025-03-03T10:00:00.000Z",
+      customerId: "C-1",
+      customerName: "Example Customer",
+      paymentMethod: "Credit",
+      subtotal: 120,
+      discount: 10,
+      vat: 5,
+      total: 115,
+      status: "Pending",
+      items: [
+        {
+          id: "I-RETURN-1",
+          productId: "P-1",
+          name: "Example Product",
+          barcode: "123",
+          quantity: 2,
+          unitPrice: 60,
+          vatRate: 5,
+          total: 120,
+          costSnapshot: {
+            cogs: 40,
+            unitCost: 20,
+            lotAllocations: [
+              { lotId: "L-1", batch: "B1", expiry: "2025-11-01", quantity: 2, unitCost: 20, totalCost: 40 },
+            ],
+          },
+        },
+      ],
+    }
+
+    const salesReturn = {
+      id: "R-1",
+      returnNumber: "SR-2025-00001",
+      saleId: "S-RETURN-1",
+      invoiceNumber: "INV-RETURN-1",
+      customerName: "Example Customer",
+      createdAt: "2025-03-04T10:00:00.000Z",
+      refundMethod: "Cash",
+      reason: "Customer return",
+      items: [
+        {
+          id: "RI-1",
+          saleItemId: "I-RETURN-1",
+          productId: "P-1",
+          productName: "Example Product",
+          quantity: 1,
+          baseQuantity: 1,
+          subtotalAmount: 60,
+          discountAmount: 5,
+          vatAmount: 2.75,
+          refundAmount: 57.75,
+          allocations: [{ lotId: "L-1", batch: "B1", expiry: "2025-11-01", quantity: 1 }],
+        },
+      ],
+      subtotalAmount: 60,
+      discountAmount: 5,
+      vatAmount: 2.75,
+      refundTotal: 57.75,
+    }
+
+    const report = buildReportDataset({
+      sales: [sale],
+      salesReturns: [salesReturn],
+      period: getDateRange("custom", new Date("2025-03-04T12:00:00Z"), "2025-03-03", "2025-03-04"),
+    })
+
+    expect(report.summary.transactionCount).toBe(1)
+    expect(report.summary.grossSales).toBe(120)
+    expect(report.summary.discounts).toBe(10)
+    expect(report.summary.refunds).toBe(57.75)
+    expect(report.summary.netSales).toBe(55)
+    expect(report.summary.vatCollected).toBe(2.25)
+    expect(report.summary.cogs).toBe(20)
+    expect(report.summary.grossProfit).toBe(35)
+    expect(report.returnBreakdown).toHaveLength(1)
+    expect(report.returnBreakdown[0].returnNumber).toBe("SR-2025-00001")
+    expect(report.productBreakdown[0].quantitySold).toBe(2)
+    expect(report.productBreakdown[0].quantityReturned).toBe(1)
+    expect(report.productBreakdown[0].refunds).toBe(57.75)
+    expect(report.productBreakdown[0].netSales).toBe(55)
+    const refundDay = report.dailyBreakdown.find((row) => row.date === "2025-03-04")
+    expect(refundDay?.refunds).toBe(57.75)
+    expect(refundDay?.refundTransactions).toBe(1)
+    expect(refundDay?.netSales).toBe(-55)
+    expect(refundDay?.cogs).toBe(-20)
+    expect(refundDay?.grossProfit).toBe(-35)
+  })
+
+  it("recognises a refund in the period it was recorded even when the original sale was earlier", () => {
+    const sale = {
+      id: "S-OLD",
+      invoiceNumber: "INV-OLD",
+      createdAt: "2025-02-20T10:00:00.000Z",
+      customerId: "C-1",
+      customerName: "Example Customer",
+      paymentMethod: "Cash",
+      subtotal: 120,
+      discount: 10,
+      vat: 5,
+      total: 115,
+      status: "Paid",
+      items: [
+        {
+          id: "I-OLD",
+          productId: "P-1",
+          name: "Example Product",
+          barcode: "123",
+          quantity: 2,
+          unitPrice: 60,
+          vatRate: 5,
+          total: 120,
+          costSnapshot: {
+            cogs: 40,
+            unitCost: 20,
+            lotAllocations: [
+              { lotId: "L-1", batch: "B1", expiry: "2025-11-01", quantity: 2, unitCost: 20, totalCost: 40 },
+            ],
+          },
+        },
+      ],
+    }
+    const salesReturn = {
+      id: "R-OLD",
+      returnNumber: "SR-2025-00002",
+      saleId: "S-OLD",
+      invoiceNumber: "INV-OLD",
+      customerName: "Example Customer",
+      createdAt: "2025-03-04T10:00:00.000Z",
+      refundMethod: "Card",
+      reason: "Refund after sale",
+      items: [
+        {
+          id: "RI-OLD",
+          saleItemId: "I-OLD",
+          productId: "P-1",
+          productName: "Example Product",
+          quantity: 1,
+          baseQuantity: 1,
+          subtotalAmount: 60,
+          discountAmount: 5,
+          vatAmount: 2.75,
+          refundAmount: 57.75,
+          allocations: [{ lotId: "L-1", batch: "B1", expiry: "2025-11-01", quantity: 1 }],
+        },
+      ],
+      subtotalAmount: 60,
+      discountAmount: 5,
+      vatAmount: 2.75,
+      refundTotal: 57.75,
+    }
+
+    const report = buildReportDataset({
+      sales: [sale],
+      salesReturns: [salesReturn],
+      period: getDateRange("daily", new Date("2025-03-04T12:00:00Z")),
+    })
+
+    expect(report.summary.transactionCount).toBe(0)
+    expect(report.summary.grossSales).toBe(0)
+    expect(report.summary.refunds).toBe(57.75)
+    expect(report.summary.netSales).toBe(-55)
+    expect(report.summary.cogs).toBe(-20)
+    expect(report.summary.grossProfit).toBe(-35)
+    expect(report.dailyBreakdown).toHaveLength(1)
+    expect(report.dailyBreakdown[0].netSales).toBe(-55)
+    expect(report.productBreakdown[0].quantityReturned).toBe(1)
+    expect(report.productBreakdown[0].costsComplete).toBe(true)
+  })
+
+
+  it("does not invent returned COGS when the original batch cost allocation is unavailable", () => {
+    const sale = {
+      id: "S-NOCOST",
+      invoiceNumber: "INV-NOCOST",
+      createdAt: "2025-03-03T10:00:00.000Z",
+      customerId: null,
+      customerName: "Walk-in Customer",
+      paymentMethod: "Cash",
+      subtotal: 60,
+      discount: 0,
+      vat: 3,
+      total: 63,
+      status: "Paid",
+      items: [{
+        id: "I-NOCOST",
+        productId: "P-1",
+        name: "Example Product",
+        barcode: "123",
+        quantity: 1,
+        unitPrice: 60,
+        vatRate: 5,
+        total: 60,
+        costSnapshot: { cogs: 20, unitCost: 20, lotAllocations: [] },
+      }],
+    }
+    const salesReturn = {
+      id: "R-NOCOST",
+      returnNumber: "SR-2025-00003",
+      saleId: "S-NOCOST",
+      invoiceNumber: "INV-NOCOST",
+      customerName: "Walk-in Customer",
+      createdAt: "2025-03-04T10:00:00.000Z",
+      refundMethod: "Cash",
+      reason: "Original lot cost missing",
+      items: [{
+        id: "RI-NOCOST",
+        saleItemId: "I-NOCOST",
+        productId: "P-1",
+        productName: "Example Product",
+        quantity: 1,
+        baseQuantity: 1,
+        subtotalAmount: 60,
+        discountAmount: 0,
+        vatAmount: 3,
+        refundAmount: 63,
+        allocations: [{ lotId: "LOT-UNKNOWN", batch: "B-UNKNOWN", expiry: "2025-10-01", quantity: 1 }],
+      }],
+      subtotalAmount: 60,
+      discountAmount: 0,
+      vatAmount: 3,
+      refundTotal: 63,
+    }
+
+    const report = buildReportDataset({
+      sales: [sale],
+      salesReturns: [salesReturn],
+      period: getDateRange("custom", new Date("2025-03-04T12:00:00Z"), "2025-03-03", "2025-03-04"),
+    })
+
+    expect(report.summary.refunds).toBe(63)
+    expect(report.summary.costsUnavailableCount).toBe(1)
+    expect(report.productBreakdown[0].costsComplete).toBe(false)
+  })
+
 })

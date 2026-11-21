@@ -15,10 +15,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -69,6 +66,8 @@ export default function Reports() {
     products,
     inventoryLots,
     sales,
+    salesReturns,
+    customerPayments,
   } = useERP()
   const { theme } = useTheme()
   const darkMode = theme === "dark"
@@ -100,6 +99,7 @@ export default function Reports() {
     () =>
       buildReportDataset({
         sales,
+        salesReturns,
         products,
         period: currentRange,
         title: "UniversalERP Report",
@@ -117,7 +117,7 @@ export default function Reports() {
   )
 
   const totalDiscount = salesInRange.reduce((sum, sale) => sum + sale.discount, 0)
-  const totalVat = salesInRange.reduce((sum, sale) => sum + sale.vat, 0)
+  const totalVat = report.summary.vatCollected
   const totalUnitsSold = salesInRange.reduce(
     (sum, sale) => sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
     0,
@@ -153,14 +153,34 @@ export default function Reports() {
   const paymentData = useMemo(() => {
     const cash = salesInRange.filter((sale) => sale.paymentMethod === "Cash").reduce((sum, sale) => sum + sale.total, 0)
     const card = salesInRange.filter((sale) => sale.paymentMethod === "Card").reduce((sum, sale) => sum + sale.total, 0)
-    const credit = salesInRange.filter((sale) => sale.paymentMethod === "Credit").reduce((sum, sale) => sum + sale.total, 0)
+    const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
+    const customerCollections = customerPayments
+      .filter((payment) => {
+        const timestamp = new Date(payment.createdAt).getTime()
+        return timestamp >= currentRange.start.getTime() && timestamp <= currentRange.end.getTime()
+      })
+      .reduce((totals, payment) => {
+        totals[payment.method] = (totals[payment.method] ?? 0) + payment.amount
+        return totals
+      }, {} as Record<string, number>)
+    const refundsByMethod = salesReturns
+      .filter((record) => {
+        const timestamp = new Date(record.createdAt).getTime()
+        return timestamp >= currentRange.start.getTime() && timestamp <= currentRange.end.getTime()
+      })
+      .reduce((totals, record) => {
+        totals[record.refundMethod] = (totals[record.refundMethod] ?? 0) + record.refundTotal
+        return totals
+      }, {} as Record<string, number>)
 
+    // Credit invoices are not collections until a customer receipt is recorded.
+    // Refunds are netted against the actual refund method on the refund date.
     return [
-      { name: "Cash", value: Number(cash.toFixed(2)) },
-      { name: "Card", value: Number(card.toFixed(2)) },
-      { name: "Credit", value: Number(credit.toFixed(2)) },
-    ].filter((entry) => entry.value > 0)
-  }, [salesInRange])
+      { name: "Cash", value: Number((cash + (customerCollections.Cash ?? 0) - (refundsByMethod.Cash ?? 0)).toFixed(2)) },
+      { name: "Card", value: Number((card + (customerCollections.Card ?? 0) - (refundsByMethod.Card ?? 0)).toFixed(2)) },
+      { name: "Bank Transfer", value: Number((bankTransfer + (customerCollections["Bank Transfer"] ?? 0) - (refundsByMethod["Bank Transfer"] ?? 0)).toFixed(2)) },
+    ].filter((entry) => entry.value !== 0)
+  }, [salesInRange, customerPayments, salesReturns, currentRange])
 
   const topProducts = useMemo(
     () =>
@@ -177,20 +197,22 @@ export default function Reports() {
   }))
 
   const salesChart = useMemo(() => {
-    const data: Array<{ label: string; sales: number; units: number }> = []
+    const data: Array<{ label: string; sales: number; netSales: number; units: number }> = []
 
     const start = new Date(currentRange.start)
     const end = new Date(currentRange.end)
 
     for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-      const key = startOfDay(cursor).toISOString().slice(0, 10)
+      const key = formatDateInput(startOfDay(cursor))
       const dayRows = report.dailyBreakdown.filter((entry) => entry.date === key)
       const dayValue = dayRows.reduce((sum, row) => sum + row.grossSales, 0)
+      const dayNetSales = dayRows.reduce((sum, row) => sum + row.netSales, 0)
       const dayUnits = dayRows.reduce((sum, row) => sum + row.transactions, 0)
 
       data.push({
         label: formatShortDate(cursor),
         sales: Number(dayValue.toFixed(2)),
+        netSales: Number(dayNetSales.toFixed(2)),
         units: dayUnits,
       })
     }
@@ -198,7 +220,6 @@ export default function Reports() {
     return data
   }, [currentRange, report.dailyBreakdown])
 
-  const paymentColors = chartColors
 
   const customRangeInvalid =
     rangeMode === "custom" &&
@@ -334,15 +355,15 @@ export default function Reports() {
               <div className="rounded-xl bg-violet-50 p-2 text-violet-700"><Package className="h-4 w-4" /></div>
             </div>
             <p className="mt-3 text-2xl font-semibold text-slate-900">{money(report.summary.cogs)}</p>
-            <p className="mt-1 text-xs text-slate-500">Historical cost on verified sales only</p>
+            <p className="mt-1 text-xs text-slate-500">Verified historical costs only</p>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Gross Profit</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(report.summary.grossProfit)}</p>
-            <p className="mt-1 text-xs text-slate-500">Margin {report.summary.grossMargin.toFixed(1)}%</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{report.summary.costsUnavailableCount > 0 ? "Incomplete" : money(report.summary.grossProfit)}</p>
+            <p className="mt-1 text-xs text-slate-500">{report.summary.costsUnavailableCount > 0 ? "Historical cost data is missing for some sales or returns" : `Margin ${report.summary.grossMargin.toFixed(1)}%`}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -375,7 +396,7 @@ export default function Reports() {
             <div className="mb-5 flex items-start justify-between">
               <div>
                 <h2 className="font-semibold text-slate-900">Sales Trend</h2>
-                <p className="mt-1 text-xs text-slate-500">Daily gross sales in the selected period.</p>
+                <p className="mt-1 text-xs text-slate-500">Gross sales compared with net sales after discounts and returns.</p>
               </div>
               <CalendarDays className="h-5 w-5 text-slate-400" />
             </div>
@@ -387,7 +408,9 @@ export default function Reports() {
                   <XAxis dataKey="label" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
-                  <Bar dataKey="sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="sales" name="Gross Sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="netSales" name="Net Sales" fill={chartColors[1]} radius={[6, 6, 0, 0]} />
+                  <Legend />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -395,22 +418,20 @@ export default function Reports() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
-              <h2 className="font-semibold text-slate-900">Payment Mix</h2>
-              <p className="mt-1 text-xs text-slate-500">Sales by payment method.</p>
+              <h2 className="font-semibold text-slate-900">Payment Collections</h2>
+              <p className="mt-1 text-xs text-slate-500">Cash, card and bank receipts less refunds recorded in this period.</p>
             </div>
 
             <div className="mt-4 h-[250px]">
               {paymentData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={paymentData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={88} paddingAngle={3}>
-                      {paymentData.map((_, index) => (
-                        <Cell key={`payment-${index}`} fill={paymentColors[index % paymentColors.length]} />
-                      ))}
-                    </Pie>
+                  <BarChart data={paymentData} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                    <XAxis dataKey="name" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: chartAxisText, fontSize: 10 }} tickLine={false} axisLine={false} />
                     <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
-                    <Legend />
-                  </PieChart>
+                    <Bar dataKey="value" name="Net collections" fill={chartColors[0]} radius={[5, 5, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-center text-sm text-slate-500">
@@ -453,8 +474,8 @@ export default function Reports() {
                         <span className="text-sm font-medium text-slate-800">{product.name}</span>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-900">{product.quantitySold} units</p>
-                        <p className="text-xs text-slate-500">{money(product.netSales)}</p>
+                        <p className="text-sm font-semibold text-slate-900">{product.quantitySold} sold · {product.quantityReturned} returned</p>
+                        <p className="text-xs text-slate-500">{money(product.netSales)} net sales · {money(product.refunds)} refunded</p>
                       </div>
                     </div>
                   ))}
@@ -534,6 +555,195 @@ export default function Reports() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Sales Register</h2>
+              <p className="mt-1 text-xs text-slate-500">Sales invoices recorded during the selected reporting period.</p>
+            </div>
+            <p className="text-sm font-semibold text-slate-700">{report.salesRegister.length} invoice{report.salesRegister.length === 1 ? "" : "s"}</p>
+          </div>
+          {report.salesRegister.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Invoice</th>
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Customer</th>
+                    <th className="px-3 py-3 font-medium">Payment</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
+                    <th className="px-3 py-3 text-right font-medium">Lines</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross</th>
+                    <th className="px-3 py-3 text-right font-medium">Discount</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
+                    <th className="px-3 py-3 text-right font-medium">VAT</th>
+                    <th className="px-3 py-3 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.salesRegister.slice(0, 25).map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.invoiceNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{new Date(row.date).toLocaleString("en-GB")}</td>
+                      <td className="px-3 py-3 text-slate-700">{row.customerName}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.paymentMethod}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.status}</td>
+                      <td className="px-3 py-3 text-right text-slate-600">{row.lineCount}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.grossSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.discounts)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.vat)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {report.salesRegister.length > 25 && (
+                <p className="pt-3 text-xs text-slate-500">Showing the latest 25 invoices. CSV and Excel exports include all invoices in the selected period.</p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No sales recorded in this period.</div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Product Performance</h2>
+              <p className="mt-1 text-xs text-slate-500">Units sold and returned, net sales and historical cost coverage by product.</p>
+            </div>
+          </div>
+          {report.productBreakdown.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Product</th>
+                    <th className="px-3 py-3 font-medium">Category</th>
+                    <th className="px-3 py-3 text-right font-medium">Sold</th>
+                    <th className="px-3 py-3 text-right font-medium">Returned</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
+                    <th className="px-3 py-3 text-right font-medium">Refunds</th>
+                    <th className="px-3 py-3 text-right font-medium">COGS</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.productBreakdown.map((row) => (
+                    <tr key={row.productId} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.name}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.category}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantitySold}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantityReturned}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.refunds)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.costsComplete ? money(row.cogs) : "Unavailable"}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{row.costsComplete ? money(row.grossProfit) : "Unavailable"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No product sales or returns recorded in this period.</div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="font-semibold text-slate-900">Category Performance</h2>
+            <p className="mt-1 text-xs text-slate-500">Net sales, returns and cost coverage grouped by product category.</p>
+          </div>
+          {report.categoryBreakdown?.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Category</th>
+                    <th className="px-3 py-3 text-right font-medium">Sold</th>
+                    <th className="px-3 py-3 text-right font-medium">Returned</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
+                    <th className="px-3 py-3 text-right font-medium">Refunds</th>
+                    <th className="px-3 py-3 text-right font-medium">COGS</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.categoryBreakdown.map((row) => (
+                    <tr key={row.category} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.category}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantitySold}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantityReturned}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.refunds)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.costsComplete ? money(row.cogs) : "Unavailable"}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{row.costsComplete ? money(row.grossProfit) : "Unavailable"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No category sales or returns recorded in this period.</div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Sales Returns</h2>
+              <p className="mt-1 text-xs text-slate-500">Refunds recorded during the selected reporting period.</p>
+            </div>
+            <p className="text-sm font-semibold text-slate-700">
+              {report.returnBreakdown.length} item line{report.returnBreakdown.length === 1 ? "" : "s"} · {money(report.summary.refunds)} refunded
+            </p>
+          </div>
+
+          {report.returnBreakdown.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Return</th>
+                    <th className="px-3 py-3 font-medium">Invoice</th>
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Customer</th>
+                    <th className="px-3 py-3 font-medium">Product</th>
+                    <th className="px-3 py-3 text-right font-medium">Qty</th>
+                    <th className="px-3 py-3 font-medium">Method</th>
+                    <th className="px-3 py-3 font-medium">Reason</th>
+                    <th className="px-3 py-3 text-right font-medium">Refund</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.returnBreakdown.slice(0, 10).map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.returnNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.invoiceNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{new Date(row.date).toLocaleString("en-GB")}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.customerName}</td>
+                      <td className="px-3 py-3 text-slate-700">{row.productName}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantity}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.refundMethod}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.reason}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.refundAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {report.returnBreakdown.length > 10 && (
+                <p className="pt-3 text-xs text-slate-500">Showing the latest 10 item lines. The CSV and Excel exports include all matching returns.</p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              No sales returns recorded in this period.
+            </div>
+          )}
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
