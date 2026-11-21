@@ -150,6 +150,7 @@ describe("reporting utilities", () => {
           grossProfit: 70,
           grossMargin: 63.64,
           vatCollected: 5,
+          costsComplete: true,
         },
       ],
       dailyBreakdown: [],
@@ -241,6 +242,16 @@ describe("reporting utilities", () => {
     expect(report.summary.grossProfit).toBe(35)
     expect(report.returnBreakdown).toHaveLength(1)
     expect(report.returnBreakdown[0].returnNumber).toBe("SR-2025-00001")
+    expect(report.productBreakdown[0].quantitySold).toBe(2)
+    expect(report.productBreakdown[0].quantityReturned).toBe(1)
+    expect(report.productBreakdown[0].refunds).toBe(57.75)
+    expect(report.productBreakdown[0].netSales).toBe(55)
+    const refundDay = report.dailyBreakdown.find((row) => row.date === "2025-03-04")
+    expect(refundDay?.refunds).toBe(57.75)
+    expect(refundDay?.refundTransactions).toBe(1)
+    expect(refundDay?.netSales).toBe(-55)
+    expect(refundDay?.cogs).toBe(-20)
+    expect(refundDay?.grossProfit).toBe(-35)
   })
 
   it("recognises a refund in the period it was recorded even when the original sale was earlier", () => {
@@ -318,6 +329,10 @@ describe("reporting utilities", () => {
     expect(report.summary.netSales).toBe(-55)
     expect(report.summary.cogs).toBe(-20)
     expect(report.summary.grossProfit).toBe(-35)
+    expect(report.dailyBreakdown).toHaveLength(1)
+    expect(report.dailyBreakdown[0].netSales).toBe(-55)
+    expect(report.productBreakdown[0].quantityReturned).toBe(1)
+    expect(report.productBreakdown[0].costsComplete).toBe(true)
   })
 
 })
