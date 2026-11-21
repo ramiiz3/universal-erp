@@ -748,6 +748,7 @@ export function exportReportCsv(report: ReportDataset) {
       "grossProfit",
       "grossMargin",
       "vatCollected",
+      "costsComplete",
     ],
     ...report.productBreakdown.map((row) => [
       row.productId,
@@ -763,6 +764,7 @@ export function exportReportCsv(report: ReportDataset) {
       row.grossProfit,
       row.grossMargin,
       row.vatCollected,
+      row.costsComplete,
     ]),
   ]
 
@@ -779,6 +781,7 @@ export function exportReportCsv(report: ReportDataset) {
       "grossProfit",
       "grossMargin",
       "vatCollected",
+      "costsComplete",
     ],
     ...categoryBreakdown.map((row) => [
       row.category,
@@ -792,6 +795,7 @@ export function exportReportCsv(report: ReportDataset) {
       row.grossProfit,
       row.grossMargin,
       row.vatCollected,
+      row.costsComplete,
     ]),
   ]
 
