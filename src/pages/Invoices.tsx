@@ -270,7 +270,7 @@ function loadInvoiceLogo(): Promise<HTMLImageElement> {
 
     image.onload = () => resolve(image)
     image.onerror = () =>
-      reject(new Error("Unable to load Zaki Pharmacy logo."))
+      reject(new Error("Unable to load the company logo."))
 
     image.src = "/brand/zaki-logo.png"
   })
