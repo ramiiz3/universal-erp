@@ -112,19 +112,6 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
   if (!record) return false
 
-  const exactIdentity =
-    record.id === expected.id
-    && record.name === expected.name
-    && record.sku === expected.sku
-    && record.barcode === expected.barcode
-    && record.unit === expected.unit
-
-  if (!exactIdentity) return false
-
-  // Match the original starter record by its stable local ID, SKU, barcode,
-  // name and unit. Business transactions are checked separately below before
-  // anything is removed. Values such as prices and on-hand quantities may have
-  // been changed during demo testing, but remain demo rows without activity.
   const allowedFields = new Set([
     "id", "name", "category", "sku", "barcode", "purchasePrice",
     "sellingPrice", "minimumStock", "vatRate", "unit", "productType",
@@ -134,16 +121,12 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   ])
   if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
 
-  return (record.productType === undefined || record.productType === "GOODS")
-    && isEmptyValue(record.subcategory)
-    && isEmptyValue(record.brand)
-    && isEmptyValue(record.manufacturer)
-    && isEmptyValue(record.description)
-    && (record.alternateBarcodes === undefined
-      || (Array.isArray(record.alternateBarcodes) && record.alternateBarcodes.length === 0))
-    && (record.returnEligible === undefined || record.returnEligible === false)
-    && (record.status === undefined || record.status === "ACTIVE")
-    && (record.vatApplicable === undefined || record.vatApplicable === true)
+  // Seed identity is the stable legacy ID plus SKU and barcode. Editable
+  // descriptions, names, prices, VAT and stock levels do not turn a demo seed
+  // into a genuine company product. Business references are checked separately.
+  return record.id === expected.id
+    && record.sku === expected.sku
+    && record.barcode === expected.barcode
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
@@ -159,13 +142,6 @@ function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
   return record.id === expected.id
     && record.productId === expected.productId
     && record.batch === expected.batch
-    && record.expiry === expected.expiry
-    && Number(record.purchasePrice) === expected.purchasePrice
-    && (!record.warehouseId || record.warehouseId === "WH-MAIN")
-    && isEmptyValue(record.locationId)
-    && isEmptyValue(record.sellingPrice)
-    && isEmptyValue(record.totalPurchaseValue)
-    && isEmptyValue(record.totalSellingValue)
 }
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
@@ -178,23 +154,9 @@ function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean
   ])
   if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
 
-  const hasOnlyEmptyOptionalData = [
-    record.address,
-    record.notes,
-    record.customerType,
-    record.taxRegistrationNumber,
-  ].every(isEmptyValue)
-    && (record.creditLimit === undefined || Number(record.creditLimit) === 0)
-    && (record.loyaltyPoints === undefined || Number(record.loyaltyPoints) === 0)
-    && (record.isActive === undefined || record.isActive === true)
-
   return record.id === expected.id
-    && record.name === expected.name
-    && record.phone === expected.phone
     && record.email === expected.email
-    && record.whatsapp === expected.whatsapp
-    && record.status === expected.status
-    && hasOnlyEmptyOptionalData
+    && record.phone === expected.phone
 }
 
 function containsReference(value: unknown, fields: ReadonlySet<string>, targetId: string): boolean {
@@ -303,16 +265,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
       if (!record || !matchesOnlyKnownFields(record, [
         "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt", "updatedAt",
       ])) return false
-      return record.id === expectedWarehouse.id
-        && record.name === expectedWarehouse.name
-        && record.code === expectedWarehouse.code
-        && record.type === expectedWarehouse.type
-        && record.address === expectedWarehouse.address
-        && record.manager === expectedWarehouse.manager
-        && record.phone === expectedWarehouse.phone
-        && record.active === expectedWarehouse.active
-        && record.createdAt === expectedWarehouse.createdAt
-        && (record.updatedAt === undefined || typeof record.updatedAt === "string")
+      return record.id === expectedWarehouse.id && record.code === expectedWarehouse.code
     })
     if (!warehouse) continue
     const hasBusinessReferences = isReferencedOutside(
