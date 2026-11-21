@@ -113,25 +113,31 @@ export type ProductBreakdownRow = {
   name: string
   category: string
   quantitySold: number
+  quantityReturned: number
   grossSales: number
   discounts: number
+  refunds: number
   netSales: number
   cogs: number
   grossProfit: number
   grossMargin: number
   vatCollected: number
+  costsComplete: boolean
 }
 
 export type CategoryBreakdownRow = {
   category: string
   quantitySold: number
+  quantityReturned: number
   grossSales: number
   discounts: number
+  refunds: number
   netSales: number
   cogs: number
   grossProfit: number
   grossMargin: number
   vatCollected: number
+  costsComplete: boolean
 }
 
 export type DailyBreakdownRow = {
@@ -144,7 +150,10 @@ export type DailyBreakdownRow = {
   grossProfit: number
   grossMargin: number
   vatCollected: number
+  refunds: number
+  refundTransactions: number
   transactions: number
+  costsComplete: boolean
 }
 
 export type ReportDataset = {
@@ -438,7 +447,10 @@ export function buildReportDataset({
       grossProfit: 0,
       grossMargin: 0,
       vatCollected: 0,
+      refunds: 0,
+      refundTransactions: 0,
       transactions: 0,
+      costsComplete: true,
     }
 
     dayRow.grossSales += saleGrossSales
@@ -446,8 +458,11 @@ export function buildReportDataset({
     dayRow.netSales += saleNetSales
     dayRow.vatCollected += saleVat
     dayRow.transactions += 1
-    if (sale.items.every((item) => item.costSnapshot && Number.isFinite(item.costSnapshot.cogs))) {
+    const saleCostsComplete = sale.items.every((item) => item.costSnapshot && Number.isFinite(item.costSnapshot.cogs))
+    if (saleCostsComplete) {
       dayRow.cogs += saleCogs
+    } else {
+      dayRow.costsComplete = false
     }
     dailyMap.set(dayKey, dayRow)
 
@@ -466,13 +481,16 @@ export function buildReportDataset({
         name: item.name,
         category: categoryName,
         quantitySold: 0,
+        quantityReturned: 0,
         grossSales: 0,
         discounts: 0,
+        refunds: 0,
         netSales: 0,
         cogs: 0,
         grossProfit: 0,
         grossMargin: 0,
         vatCollected: 0,
+        costsComplete: true,
       }
 
       existingProduct.quantitySold += item.quantity
@@ -481,18 +499,22 @@ export function buildReportDataset({
       existingProduct.netSales += itemNetSales
       existingProduct.cogs += itemCogs
       existingProduct.vatCollected += itemVatCollected
+      if (!item.costSnapshot || !Number.isFinite(item.costSnapshot.cogs)) existingProduct.costsComplete = false
       productMap.set(item.productId, existingProduct)
 
       const categoryRow = categoryMap.get(categoryName) ?? {
         category: categoryName,
         quantitySold: 0,
+        quantityReturned: 0,
         grossSales: 0,
         discounts: 0,
+        refunds: 0,
         netSales: 0,
         cogs: 0,
         grossProfit: 0,
         grossMargin: 0,
         vatCollected: 0,
+        costsComplete: true,
       }
 
       categoryRow.quantitySold += item.quantity
@@ -501,8 +523,99 @@ export function buildReportDataset({
       categoryRow.netSales += itemNetSales
       categoryRow.cogs += itemCogs
       categoryRow.vatCollected += itemVatCollected
+      if (!item.costSnapshot || !Number.isFinite(item.costSnapshot.cogs)) categoryRow.costsComplete = false
       categoryMap.set(categoryName, categoryRow)
     }
+  }
+
+  for (const record of inRangeReturns) {
+    const returnDate = new Date(record.createdAt)
+    const dayKey = startOfDay(returnDate).toISOString().slice(0, 10)
+    const dayLabel = formatDisplayDate(startOfDay(returnDate))
+    const dayRow = dailyMap.get(dayKey) ?? {
+      date: dayKey,
+      label: dayLabel,
+      grossSales: 0,
+      discounts: 0,
+      netSales: 0,
+      cogs: 0,
+      grossProfit: 0,
+      grossMargin: 0,
+      vatCollected: 0,
+      refunds: 0,
+      refundTransactions: 0,
+      transactions: 0,
+      costsComplete: true,
+    }
+    dayRow.refunds += safeNumber(record.refundTotal)
+    dayRow.netSales -= Math.max(0, safeNumber(record.subtotalAmount) - safeNumber(record.discountAmount))
+    dayRow.vatCollected -= safeNumber(record.vatAmount)
+    dayRow.refundTransactions += 1
+
+    const originalSale = salesById.get(record.saleId)
+    for (const item of record.items) {
+      const categoryName = productLookup.get(item.productId)?.category ?? "Uncategorized"
+      const returnedNetSales = Math.max(0, safeNumber(item.subtotalAmount) - safeNumber(item.discountAmount))
+      const returnedCost = getReliableReturnedCost(originalSale, item)
+
+      const productRow = productMap.get(item.productId) ?? {
+        productId: item.productId,
+        name: item.productName,
+        category: categoryName,
+        quantitySold: 0,
+        quantityReturned: 0,
+        grossSales: 0,
+        discounts: 0,
+        refunds: 0,
+        netSales: 0,
+        cogs: 0,
+        grossProfit: 0,
+        grossMargin: 0,
+        vatCollected: 0,
+        costsComplete: returnedCost !== null,
+      }
+      productRow.quantityReturned += safeNumber(item.quantity)
+      productRow.refunds += safeNumber(item.refundAmount)
+      productRow.netSales -= returnedNetSales
+      productRow.vatCollected -= safeNumber(item.vatAmount)
+      if (returnedCost === null) {
+        productRow.costsComplete = false
+      } else {
+        productRow.cogs -= returnedCost
+        dayRow.cogs -= returnedCost
+      }
+      productMap.set(item.productId, productRow)
+
+      const categoryRow = categoryMap.get(categoryName) ?? {
+        category: categoryName,
+        quantitySold: 0,
+        quantityReturned: 0,
+        grossSales: 0,
+        discounts: 0,
+        refunds: 0,
+        netSales: 0,
+        cogs: 0,
+        grossProfit: 0,
+        grossMargin: 0,
+        vatCollected: 0,
+        costsComplete: returnedCost !== null,
+      }
+      categoryRow.quantityReturned += safeNumber(item.quantity)
+      categoryRow.refunds += safeNumber(item.refundAmount)
+      categoryRow.netSales -= returnedNetSales
+      categoryRow.vatCollected -= safeNumber(item.vatAmount)
+      if (returnedCost === null) {
+        categoryRow.costsComplete = false
+      } else {
+        categoryRow.cogs -= returnedCost
+      }
+      categoryMap.set(categoryName, categoryRow)
+    }
+
+    if (record.items.some((item) => getReliableReturnedCost(originalSale, item) === null)) {
+      dayRow.costsComplete = false
+    }
+    dailyMap.set(dayKey, dayRow)
   }
 
   const productBreakdown = Array.from(productMap.values()).map((row) => {
@@ -548,6 +661,7 @@ export function buildReportDataset({
         cogs: moneyRound(row.cogs),
         grossProfit: moneyRound(grossProfit),
         grossMargin: moneyRound(grossMargin),
+        refunds: moneyRound(row.refunds),
       }
     })
 
@@ -557,7 +671,7 @@ export function buildReportDataset({
       returnNumber: record.returnNumber,
       invoiceNumber: record.invoiceNumber,
       saleId: record.saleId,
-      date: formatDisplayDate(new Date(record.createdAt)),
+      date: record.createdAt,
       customerName: record.customerName,
       productName: item.productName,
       quantity: item.quantity,
@@ -625,8 +739,10 @@ export function exportReportCsv(report: ReportDataset) {
       "name",
       "category",
       "quantitySold",
+      "quantityReturned",
       "grossSales",
       "discounts",
+      "refunds",
       "netSales",
       "cogs",
       "grossProfit",
@@ -638,8 +754,10 @@ export function exportReportCsv(report: ReportDataset) {
       row.name,
       row.category,
       row.quantitySold,
+      row.quantityReturned,
       row.grossSales,
       row.discounts,
+      row.refunds,
       row.netSales,
       row.cogs,
       row.grossProfit,
@@ -652,8 +770,10 @@ export function exportReportCsv(report: ReportDataset) {
     [
       "category",
       "quantitySold",
+      "quantityReturned",
       "grossSales",
       "discounts",
+      "refunds",
       "netSales",
       "cogs",
       "grossProfit",
@@ -663,8 +783,10 @@ export function exportReportCsv(report: ReportDataset) {
     ...categoryBreakdown.map((row) => [
       row.category,
       row.quantitySold,
+      row.quantityReturned,
       row.grossSales,
       row.discounts,
+      row.refunds,
       row.netSales,
       row.cogs,
       row.grossProfit,
@@ -694,7 +816,10 @@ export function exportReportCsv(report: ReportDataset) {
       "grossProfit",
       "grossMargin",
       "vatCollected",
+      "refunds",
+      "refundTransactions",
       "transactions",
+      "costsComplete",
     ],
     ...report.dailyBreakdown.map((row) => [
       row.date,
@@ -706,7 +831,10 @@ export function exportReportCsv(report: ReportDataset) {
       row.grossProfit,
       row.grossMargin,
       row.vatCollected,
+      row.refunds,
+      row.refundTransactions,
       row.transactions,
+      row.costsComplete,
     ]),
     [],
     ["SALES RETURNS"],
@@ -763,6 +891,7 @@ export async function exportReportWorkbook(report: ReportDataset) {
     { metric: "transactionCount", value: report.summary.transactionCount },
     { metric: "costsUnavailableCount", value: report.summary.costsUnavailableCount },
     { metric: "costsUnavailableMessage", value: report.summary.costsUnavailableMessage },
+    { metric: "salesReturnCount", value: report.returnBreakdown.length },
   ])
 
   const productSheet = XLSX.utils.json_to_sheet(report.productBreakdown)
