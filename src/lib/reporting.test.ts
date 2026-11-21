@@ -336,4 +336,69 @@ describe("reporting utilities", () => {
     expect(report.productBreakdown[0].costsComplete).toBe(true)
   })
 
+
+  it("does not invent returned COGS when the original batch cost allocation is unavailable", () => {
+    const sale = {
+      id: "S-NOCOST",
+      invoiceNumber: "INV-NOCOST",
+      createdAt: "2025-03-03T10:00:00.000Z",
+      customerId: null,
+      customerName: "Walk-in Customer",
+      paymentMethod: "Cash",
+      subtotal: 60,
+      discount: 0,
+      vat: 3,
+      total: 63,
+      status: "Paid",
+      items: [{
+        id: "I-NOCOST",
+        productId: "P-1",
+        name: "Example Product",
+        barcode: "123",
+        quantity: 1,
+        unitPrice: 60,
+        vatRate: 5,
+        total: 60,
+        costSnapshot: { cogs: 20, unitCost: 20, lotAllocations: [] },
+      }],
+    }
+    const salesReturn = {
+      id: "R-NOCOST",
+      returnNumber: "SR-2025-00003",
+      saleId: "S-NOCOST",
+      invoiceNumber: "INV-NOCOST",
+      customerName: "Walk-in Customer",
+      createdAt: "2025-03-04T10:00:00.000Z",
+      refundMethod: "Cash",
+      reason: "Original lot cost missing",
+      items: [{
+        id: "RI-NOCOST",
+        saleItemId: "I-NOCOST",
+        productId: "P-1",
+        productName: "Example Product",
+        quantity: 1,
+        baseQuantity: 1,
+        subtotalAmount: 60,
+        discountAmount: 0,
+        vatAmount: 3,
+        refundAmount: 63,
+        allocations: [{ lotId: "LOT-UNKNOWN", batch: "B-UNKNOWN", expiry: "2025-10-01", quantity: 1 }],
+      }],
+      subtotalAmount: 60,
+      discountAmount: 0,
+      vatAmount: 3,
+      refundTotal: 63,
+    }
+
+    const report = buildReportDataset({
+      sales: [sale],
+      salesReturns: [salesReturn],
+      period: getDateRange("custom", new Date("2025-03-04T12:00:00Z"), "2025-03-03", "2025-03-04"),
+    })
+
+    expect(report.summary.refunds).toBe(63)
+    expect(report.summary.costsUnavailableCount).toBe(1)
+    expect(report.productBreakdown[0].costsComplete).toBe(false)
+  })
+
 })
