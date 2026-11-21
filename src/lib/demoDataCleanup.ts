@@ -11,6 +11,12 @@ type BuiltInDemoProduct = {
   name: string
   sku: string
   barcode: string
+  category: string
+  purchasePrice: number
+  sellingPrice: number
+  minimumStock: number
+  vatRate: number
+  unit: string
 }
 
 type BuiltInDemoLot = {
@@ -18,6 +24,7 @@ type BuiltInDemoLot = {
   productId: string
   batch: string
   expiry: string
+  quantity: number
   purchasePrice: number
 }
 
@@ -38,6 +45,8 @@ type BuiltInDemoCustomer = {
   name: string
   phone: string
   email: string
+  whatsapp: string
+  status: "Active" | "Inactive"
 }
 
 const BUILT_IN_PRODUCTS: BuiltInDemoProduct[] = [
@@ -78,7 +87,7 @@ const BUILT_IN_CUSTOMERS: BuiltInDemoCustomer[] = [
   { id: "CUS-003", name: "Mohammed Hassan", phone: "+971 52 345 7890", email: "mohammed@example.com", whatsapp: "+971523457890", status: "Active" },
   { id: "CUS-004", name: "Fatima Rahman", phone: "+971 56 456 8901", email: "fatima@example.com", whatsapp: "+971564568901", status: "Active" },
   { id: "CUS-005", name: "Omar Abdullah", phone: "+971 58 567 9012", email: "omar@example.com", whatsapp: "+971585679012", status: "Active" },
-
+]
 
 const PRODUCT_REFERENCE_FIELDS = new Set(["productId", "product_id", "sourceProductId", "source_product_id", "productIds", "product_ids"])
 const LOT_REFERENCE_FIELDS = new Set(["lotId", "lot_id", "sourceLotId", "source_lot_id", "destinationLotId", "destination_lot_id", "inventoryLotId", "inventory_lot_id", "stockLotId", "stock_lot_id", "lotIds", "lot_ids"])
