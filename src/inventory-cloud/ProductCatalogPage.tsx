@@ -503,7 +503,7 @@ export default function ProductCatalogPage() {
                             setError(caught instanceof Error ? caught.message : String(caught))
                           }
                         }} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold dark:border-slate-700"><BarcodeIcon className="h-4 w-4" /> Generate Code 128</button>
-                        <BarcodePreview value={barcodeValue} />
+                        {barcodeType === "code128" && <BarcodePreview value={barcodeValue} />}
                       </div>
                       <select value={barcodeType} onChange={(event) => setBarcodeType(event.target.value)} className={inputClass}>
                         {BARCODE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
