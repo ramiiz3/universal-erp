@@ -104,6 +104,26 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.inventoryLots).toHaveLength(1)
   })
 
+  it("preserves starter records when stock, price, lot quantity or customer status was changed", () => {
+    const changedProduct = { ...demoProduct, sellingPrice: 19 }
+    const changedLot = { ...demoLot, quantity: 13 }
+    const changedCustomer = { ...demoCustomer, status: "Inactive" as const }
+
+    const result = removeBuiltInDemoData({
+      products: [changedProduct],
+      inventoryLots: [changedLot],
+      customers: [changedCustomer],
+      sales: [],
+    })
+
+    expect(result.removedProducts).toBe(0)
+    expect(result.removedInventoryLots).toBe(0)
+    expect(result.removedCustomers).toBe(0)
+    expect(result.data.products).toEqual([changedProduct])
+    expect(result.data.inventoryLots).toEqual([changedLot])
+    expect(result.data.customers).toEqual([changedCustomer])
+  })
+
   it("preserves demo-looking records referenced by business activity", () => {
     const result = removeBuiltInDemoData({
       products: [demoProduct],
