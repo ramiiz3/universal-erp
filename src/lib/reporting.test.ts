@@ -134,14 +134,17 @@ describe("reporting utilities", () => {
         costsUnavailableCount: 0,
         costsUnavailableMessage: "",
       },
+      returnBreakdown: [],
       productBreakdown: [
         {
           productId: "P-1",
           name: 'Widget "A", Extra',
           category: "Sundries",
           quantitySold: 2,
+          quantityReturned: 0,
           grossSales: 120,
           discounts: 10,
+          refunds: 0,
           netSales: 110,
           cogs: 40,
           grossProfit: 70,
