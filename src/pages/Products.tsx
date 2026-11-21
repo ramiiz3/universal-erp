@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useState } from "react"
 import BarcodePreview from "../components/BarcodePreview"
 import { generateCompanyProductBarcode } from "../lib/productBarcode"
-import { ERP_SETTINGS_STORAGE_KEY } from "../lib/erpStorageKeys"
+import { getERPSettings } from "../lib/erpSettings"
 import { useERP, type Product } from "../context/ERPContext"
 import {
   getERPUnits,
@@ -52,17 +52,11 @@ type LegacyCompanyBarcodeProfile = {
 }
 
 function getLegacyCompanyBarcodeProfile(): LegacyCompanyBarcodeProfile {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(ERP_SETTINGS_STORAGE_KEY) ?? "{}") as Partial<LegacyCompanyBarcodeProfile>
-    return {
-      businessName: typeof parsed.businessName === "string" && parsed.businessName.trim()
-        ? (parsed.businessName.trim() === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : parsed.businessName.trim())
-        : "Zaki Pharmacy LLC",
-      phone: typeof parsed.phone === "string" ? parsed.phone : "",
-      vatRate: Number(parsed.vatRate) > 0 ? String(parsed.vatRate) : "5",
-    }
-  } catch {
-    return { businessName: "Zaki Pharmacy LLC", phone: "", vatRate: "5" }
+  const settings = getERPSettings()
+  return {
+    businessName: settings.businessName.trim() || "Zaki Pharmacy LLC",
+    phone: settings.phone,
+    vatRate: Number(settings.vatRate) > 0 ? settings.vatRate : "5",
   }
 }
 
