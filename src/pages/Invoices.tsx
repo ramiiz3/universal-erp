@@ -836,7 +836,7 @@ export default function Invoices() {
               <div className="invoice-header relative overflow-hidden bg-white px-7 py-7 text-slate-900">
                 <div className="invoice-header-inner relative flex flex-col items-center justify-center gap-2 text-center">
                   <div className="invoice-brand-block">
-                    <img src="/brand/zaki-logo.png" alt="Zaki Pharmacy" className="invoice-brand-logo h-14 w-[190px] object-contain" />
+                    <img src="/brand/zaki-logo.png" alt={PHARMACY_NAME} className="invoice-brand-logo h-14 w-[190px] object-contain" />
                   </div>
 
                   <div className="invoice-brand-name text-[26px] font-black uppercase tracking-[0.08em] text-slate-900">
@@ -1028,11 +1028,9 @@ export default function Invoices() {
           >
             <div className="thermal-receipt-card">
               <div className="thermal-header">
-                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
-                  صيدلية زاكي ذ.م.م
-                </div>
-                <div className="thermal-address">Shop No. 3, Nuaimeya 1, AJMAN</div>
+                <div className="thermal-brand">{PHARMACY_NAME}</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">{PHARMACY_ARABIC_NAME}</div>
+                <div className="thermal-address">{PHARMACY_ADDRESS}</div>
                 <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
                   {PHARMACY_ARABIC_ADDRESS}
                 </div>
@@ -1168,10 +1166,8 @@ export default function Invoices() {
           >
             <div className="thermal-receipt-card compact">
               <div className="thermal-header">
-                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
-                  صيدلية زاكي ذ.م.م
-                </div>
+                <div className="thermal-brand">{PHARMACY_NAME}</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">{PHARMACY_ARABIC_NAME}</div>
                 <div>{PHARMACY_ADDRESS}</div>
                 <div className="thermal-arabic" dir="rtl" lang="ar">
                   {PHARMACY_ARABIC_ADDRESS}
