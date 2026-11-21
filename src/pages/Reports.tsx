@@ -196,7 +196,7 @@ export default function Reports() {
   }))
 
   const salesChart = useMemo(() => {
-    const data: Array<{ label: string; sales: number; units: number }> = []
+    const data: Array<{ label: string; sales: number; netSales: number; units: number }> = []
 
     const start = new Date(currentRange.start)
     const end = new Date(currentRange.end)
@@ -205,11 +205,13 @@ export default function Reports() {
       const key = startOfDay(cursor).toISOString().slice(0, 10)
       const dayRows = report.dailyBreakdown.filter((entry) => entry.date === key)
       const dayValue = dayRows.reduce((sum, row) => sum + row.grossSales, 0)
+      const dayNetSales = dayRows.reduce((sum, row) => sum + row.netSales, 0)
       const dayUnits = dayRows.reduce((sum, row) => sum + row.transactions, 0)
 
       data.push({
         label: formatShortDate(cursor),
         sales: Number(dayValue.toFixed(2)),
+        netSales: Number(dayNetSales.toFixed(2)),
         units: dayUnits,
       })
     }
@@ -393,7 +395,7 @@ export default function Reports() {
             <div className="mb-5 flex items-start justify-between">
               <div>
                 <h2 className="font-semibold text-slate-900">Sales Trend</h2>
-                <p className="mt-1 text-xs text-slate-500">Daily gross sales in the selected period.</p>
+                <p className="mt-1 text-xs text-slate-500">Gross sales compared with net sales after discounts and returns.</p>
               </div>
               <CalendarDays className="h-5 w-5 text-slate-400" />
             </div>
@@ -405,7 +407,8 @@ export default function Reports() {
                   <XAxis dataKey="label" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
-                  <Bar dataKey="sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="sales" name="Gross Sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="netSales" name="Net Sales" fill={chartColors[1]} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -550,6 +553,139 @@ export default function Reports() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Sales Register</h2>
+              <p className="mt-1 text-xs text-slate-500">Sales invoices recorded during the selected reporting period.</p>
+            </div>
+            <p className="text-sm font-semibold text-slate-700">{report.salesRegister.length} invoice{report.salesRegister.length === 1 ? "" : "s"}</p>
+          </div>
+          {report.salesRegister.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Invoice</th>
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Customer</th>
+                    <th className="px-3 py-3 font-medium">Payment</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
+                    <th className="px-3 py-3 text-right font-medium">Lines</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross</th>
+                    <th className="px-3 py-3 text-right font-medium">Discount</th>
+                    <th className="px-3 py-3 text-right font-medium">VAT</th>
+                    <th className="px-3 py-3 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.salesRegister.slice(0, 25).map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.invoiceNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{new Date(row.date).toLocaleString("en-GB")}</td>
+                      <td className="px-3 py-3 text-slate-700">{row.customerName}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.paymentMethod}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.status}</td>
+                      <td className="px-3 py-3 text-right text-slate-600">{row.lineCount}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.grossSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.discounts)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.vat)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {report.salesRegister.length > 25 && (
+                <p className="pt-3 text-xs text-slate-500">Showing the latest 25 invoices. CSV and Excel exports include all invoices in the selected period.</p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No sales recorded in this period.</div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Product Performance</h2>
+              <p className="mt-1 text-xs text-slate-500">Units sold and returned, net sales and historical cost coverage by product.</p>
+            </div>
+          </div>
+          {report.productBreakdown.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Product</th>
+                    <th className="px-3 py-3 font-medium">Category</th>
+                    <th className="px-3 py-3 text-right font-medium">Sold</th>
+                    <th className="px-3 py-3 text-right font-medium">Returned</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
+                    <th className="px-3 py-3 text-right font-medium">Refunds</th>
+                    <th className="px-3 py-3 text-right font-medium">COGS</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.productBreakdown.map((row) => (
+                    <tr key={row.productId} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.name}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.category}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantitySold}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantityReturned}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.refunds)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.costsComplete ? money(row.cogs) : "Unavailable"}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{row.costsComplete ? money(row.grossProfit) : "Unavailable"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No product sales or returns recorded in this period.</div>
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="font-semibold text-slate-900">Category Performance</h2>
+            <p className="mt-1 text-xs text-slate-500">Net sales, returns and cost coverage grouped by product category.</p>
+          </div>
+          {report.categoryBreakdown?.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Category</th>
+                    <th className="px-3 py-3 text-right font-medium">Sold</th>
+                    <th className="px-3 py-3 text-right font-medium">Returned</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
+                    <th className="px-3 py-3 text-right font-medium">Refunds</th>
+                    <th className="px-3 py-3 text-right font-medium">COGS</th>
+                    <th className="px-3 py-3 text-right font-medium">Gross Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.categoryBreakdown.map((row) => (
+                    <tr key={row.category} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.category}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantitySold}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantityReturned}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.refunds)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.costsComplete ? money(row.cogs) : "Unavailable"}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{row.costsComplete ? money(row.grossProfit) : "Unavailable"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No category sales or returns recorded in this period.</div>
+          )}
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
