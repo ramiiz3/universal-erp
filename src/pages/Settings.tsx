@@ -48,7 +48,7 @@ const defaultSettings: SettingsData = {
   emirate: "",
   poBox: "",
   address: "",
-  phone: "",
+  phone: "+97156 217 1051",
   email: "",
   website: "",
   currency: "AED",
@@ -77,6 +77,9 @@ function loadSettings(): SettingsData {
       ...defaultSettings,
       ...parsed,
       businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || defaultSettings.businessName),
+      phone: !String(parsed.phone ?? "").trim() || String(parsed.phone).trim() === "067446775"
+        ? defaultSettings.phone
+        : String(parsed.phone).trim(),
       tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
       emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
       invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
