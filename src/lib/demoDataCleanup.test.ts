@@ -44,11 +44,51 @@ describe("built-in demo data cleanup", () => {
     expect(result.removedProducts).toBe(1)
     expect(result.removedInventoryLots).toBe(1)
     expect(result.removedCustomers).toBe(1)
+    expect(result.removedWarehouses).toBe(0)
     expect(result.data.products).toEqual([{ ...demoProduct, id: "REAL-1", name: "Company Product", sku: "C-1", barcode: "987" }])
     expect(result.data.inventoryLots).toEqual([])
     expect(result.data.customers).toEqual([{ ...demoCustomer, id: "REAL-C", name: "Company Customer", email: "accounts@company.test" }])
     expect(result.data.chartOfAccounts).toEqual([{ code: "1000", name: "Cash" }])
     expect(result.data.warehouses).toEqual([{ id: "WH-MAIN", name: "Main Warehouse" }])
+  })
+
+  it("removes the exact unused starter warehouse but keeps customized or referenced warehouses", () => {
+    const starterWarehouse = {
+      id: "WH-MAIN",
+      name: "Main Warehouse",
+      code: "MAIN",
+      type: "MAIN",
+      address: "",
+      manager: "",
+      phone: "",
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    const removable = removeBuiltInDemoData({
+      products: [],
+      inventoryLots: [],
+      customers: [],
+      warehouses: [starterWarehouse],
+    })
+    expect(removable.removedWarehouses).toBe(1)
+    expect(removable.data.warehouses).toEqual([])
+
+    const customized = removeBuiltInDemoData({
+      products: [],
+      inventoryLots: [],
+      customers: [],
+      warehouses: [{ ...starterWarehouse, address: "Company location" }],
+    })
+    expect(customized.removedWarehouses).toBe(0)
+
+    const referenced = removeBuiltInDemoData({
+      products: [],
+      inventoryLots: [],
+      customers: [],
+      warehouses: [starterWarehouse],
+      storageLocations: [{ id: "LOC-1", warehouseId: "WH-MAIN" }],
+    })
+    expect(referenced.removedWarehouses).toBe(0)
   })
 
   it("preserves records when a product identity has been changed", () => {
