@@ -46,7 +46,7 @@ const ALIASES: Record<ColumnKey, string[]> = {
   manufacturer: ["manufacturer", "brand", "maker"],
   description: ["description", "product description", "details"],
   unit: ["unit", "uom", "unit of measure", "base unit"],
-  purchasePrice: ["purchase price", "purchase cost", "cost price", "unit cost", "cost", "buy price"],
+  purchasePrice: ["purchase price", "purchase cost", "cost price", "buy price"],
   sellingPrice: ["selling price", "sale price", "retail price", "sales price", "s price", "mrp"],
   minimumStock: ["minimum stock", "min stock", "reorder level", "reorder point"],
   vatRate: ["vat", "vat rate", "tax", "tax rate", "vat percent"],
@@ -70,6 +70,25 @@ function mappedColumns(header: unknown[]) {
     const match = normalized.findIndex((value) => aliases.includes(value))
     if (match >= 0) mapping[key] = match
   }
+
+  // "Cost" and "Unit Cost" are ambiguous. In a stock sheet with batch,
+  // expiry or quantity columns they describe the lot's cost; otherwise they
+  // are the product's default purchase cost.
+  const genericCostIndex = normalized.findIndex((value) =>
+    value === "cost" || value === "unit cost",
+  )
+  if (genericCostIndex >= 0) {
+    const hasLotColumns =
+      mapping.batch !== undefined ||
+      mapping.expiry !== undefined ||
+      mapping.stockQuantity !== undefined
+    if (hasLotColumns && mapping.lotPurchasePrice === undefined) {
+      mapping.lotPurchasePrice = genericCostIndex
+    } else if (!hasLotColumns && mapping.purchasePrice === undefined) {
+      mapping.purchasePrice = genericCostIndex
+    }
+  }
+
   return mapping
 }
 
