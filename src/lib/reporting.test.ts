@@ -135,6 +135,7 @@ describe("reporting utilities", () => {
         costsUnavailableMessage: "",
       },
       returnBreakdown: [],
+      salesRegister: [],
       productBreakdown: [
         {
           productId: "P-1",
