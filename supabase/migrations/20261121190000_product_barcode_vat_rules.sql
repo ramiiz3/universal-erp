@@ -455,7 +455,7 @@ begin
       v_vat_rate := case
         when not v_product.vat_applicable then 0
         when v_product.vat_rate > 0 then v_product.vat_rate
-        else v_company.tax_rate
+        else case when v_company.tax_rate > 0 then v_company.tax_rate else 5 end
       end;
       v_gross := round(v_alloc_qty * v_price, 2);
       v_allocations := v_allocations || jsonb_build_array(jsonb_build_object(
