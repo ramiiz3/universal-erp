@@ -19,6 +19,7 @@ import {
   ERP_STORAGE_KEY,
 } from "../lib/erpBackup"
 import { readStoredData } from "../lib/erpStorage"
+import { removeBuiltInDemoData } from "../lib/demoDataCleanup"
 import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 import { linkPurchasesToSuppliers, normalizeSupplierRecords, validateSupplierInput, type Supplier, type SupplierInput } from "../lib/supplierManagement"
 import { applySupplierInvoicePayment, buildSupplierInvoice, type CreateSupplierInvoiceInput, type RecordSupplierInvoicePaymentInput, type SupplierInvoice } from "../lib/supplierInvoices"
@@ -416,175 +417,9 @@ type ERPContextValue = {
   cancelStockCount: (id: string) => void
 }
 
-const initialProducts: Product[] = [
-  {
-    id: "PROD-001",
-    name: "Panadol Extra",
-    category: "Pain Relief",
-    sku: "PAN-EXT-001",
-    barcode: "8964001234567",
-    purchasePrice: 10,
-    sellingPrice: 15,
-    minimumStock: 30,
-    vatRate: 5,
-    unit: "Pack",
-  },
-  {
-    id: "PROD-002",
-    name: "Vitamin C 1000mg",
-    category: "Vitamins",
-    sku: "VIT-C-001",
-    barcode: "8964001234568",
-    purchasePrice: 24,
-    sellingPrice: 32,
-    minimumStock: 25,
-    vatRate: 5,
-    unit: "Bottle",
-  },
-  {
-    id: "PROD-003",
-    name: "Cetaphil Cleanser",
-    category: "Skincare",
-    sku: "CET-CLN-001",
-    barcode: "8964001234569",
-    purchasePrice: 37,
-    sellingPrice: 49,
-    minimumStock: 20,
-    vatRate: 5,
-    unit: "Bottle",
-  },
-  {
-    id: "PROD-004",
-    name: "Nivea Moisturiser",
-    category: "Skincare",
-    sku: "NIV-MOI-001",
-    barcode: "8964001234570",
-    purchasePrice: 21,
-    sellingPrice: 28,
-    minimumStock: 20,
-    vatRate: 5,
-    unit: "Tube",
-  },
-  {
-    id: "PROD-005",
-    name: "Advil",
-    category: "Pain Relief",
-    sku: "ADV-001",
-    barcode: "8964001234571",
-    purchasePrice: 12,
-    sellingPrice: 18,
-    minimumStock: 20,
-    vatRate: 5,
-    unit: "Pack",
-  },
-  {
-    id: "PROD-006",
-    name: "Dove Shampoo",
-    category: "Hair Care",
-    sku: "DOV-SHA-001",
-    barcode: "8964001234572",
-    purchasePrice: 17,
-    sellingPrice: 24,
-    minimumStock: 15,
-    vatRate: 5,
-    unit: "Bottle",
-  },
-]
-
-const initialInventoryLots: InventoryLot[] = [
-  {
-    id: "LOT-001",
-    productId: "PROD-001",
-    batch: "PDX2451",
-    expiry: "2028-05-01",
-    quantity: 125,
-    purchasePrice: 10,
-  },
-  {
-    id: "LOT-002",
-    productId: "PROD-002",
-    batch: "VTC7742",
-    expiry: "2027-11-01",
-    quantity: 84,
-    purchasePrice: 24,
-  },
-  {
-    id: "LOT-003",
-    productId: "PROD-003",
-    batch: "CET9182",
-    expiry: "2029-02-01",
-    quantity: 67,
-    purchasePrice: 37,
-  },
-  {
-    id: "LOT-004",
-    productId: "PROD-004",
-    batch: "NIV5521",
-    expiry: "2028-08-01",
-    quantity: 41,
-    purchasePrice: 21,
-  },
-  {
-    id: "LOT-005",
-    productId: "PROD-005",
-    batch: "ADV3348",
-    expiry: "2027-07-01",
-    quantity: 12,
-    purchasePrice: 12,
-  },
-  {
-    id: "LOT-006",
-    productId: "PROD-006",
-    batch: "DOV7412",
-    expiry: "2028-03-01",
-    quantity: 0,
-    purchasePrice: 17,
-  },
-]
-
-const initialCustomers: Customer[] = [
-  {
-    id: "CUS-001",
-    name: "Ahmed Khan",
-    phone: "+971 50 123 4567",
-    email: "ahmed@example.com",
-    whatsapp: "+971501234567",
-    status: "Active",
-  },
-  {
-    id: "CUS-002",
-    name: "Sarah Ali",
-    phone: "+971 55 234 6789",
-    email: "sarah@example.com",
-    whatsapp: "+971552346789",
-    status: "Active",
-  },
-  {
-    id: "CUS-003",
-    name: "Mohammed Hassan",
-    phone: "+971 52 345 7890",
-    email: "mohammed@example.com",
-    whatsapp: "+971523457890",
-    status: "Active",
-  },
-  {
-    id: "CUS-004",
-    name: "Fatima Rahman",
-    phone: "+971 56 456 8901",
-    email: "fatima@example.com",
-    whatsapp: "+971564568901",
-    status: "Active",
-  },
-  {
-    id: "CUS-005",
-    name: "Omar Abdullah",
-    phone: "+971 58 567 9012",
-    email: "omar@example.com",
-    whatsapp: "+971585679012",
-    status: "Active",
-  },
-]
-
+const initialProducts: Product[] = []
+const initialInventoryLots: InventoryLot[] = []
+const initialCustomers: Customer[] = []
 const initialSales: Sale[] = []
 const initialPurchases: Purchase[] = []
 
@@ -685,23 +520,7 @@ function readLegacySuppliers(): Supplier[] {
   }
 }
 
-const DEFAULT_WAREHOUSE_ID = "WH-MAIN"
-
-const initialWarehouses: Warehouse[] = [
-  {
-    id: DEFAULT_WAREHOUSE_ID,
-    code: "MAIN",
-    name: "Main Warehouse",
-    type: "MAIN",
-    address: "",
-    manager: "",
-    phone: "",
-    active: true,
-    createdAt: "2026-01-01T00:00:00.000Z",
-  },
-]
-
-function createDemoStore(): StoredData {
+function createEmptyStore(): StoredData {
   return {
     chartOfAccounts: DEFAULT_CHART_OF_ACCOUNTS.map((account) => ({ ...account })),
     journalEntries: [],
@@ -718,7 +537,7 @@ function createDemoStore(): StoredData {
     customers: initialCustomers,
     sales: initialSales,
     purchases: initialPurchases,
-    warehouses: initialWarehouses,
+    warehouses: [],
     storageLocations: [],
     stockTransfers: [],
     stockCounts: [],
@@ -747,10 +566,7 @@ function migrateWarehouseData(data: StoredData): StoredData {
   )
   const purchases = linkPurchasesToSuppliers(data.purchases || [], suppliers)
 
-  const warehouses =
-    Array.isArray(raw.warehouses) && raw.warehouses.length
-      ? raw.warehouses
-      : initialWarehouses
+  const warehouses = Array.isArray(raw.warehouses) ? raw.warehouses : []
 
   const activeMain =
     warehouses.find((item) => item.active && item.type === "MAIN") ??
@@ -786,21 +602,54 @@ function migrateWarehouseData(data: StoredData): StoredData {
       warehouseId:
         lot.warehouseId && validIds.has(lot.warehouseId)
           ? lot.warehouseId
-          : activeMain.id,
+          : activeMain?.id,
     })),
   }
 }
 
 function loadStoredData() {
   try {
-    return readStoredData<StoredData>(
+    const result = readStoredData<StoredData>(
       localStorage,
       ERP_STORAGE_KEY,
-      createDemoStore,
+      createEmptyStore,
     )
+    if (result.error) return result
+
+    const cleanup = removeBuiltInDemoData(
+      result.data as unknown as Record<string, unknown>,
+    )
+    const removedRecords =
+      cleanup.removedProducts +
+      cleanup.removedInventoryLots +
+      cleanup.removedCustomers +
+      cleanup.removedWarehouses
+
+    if (removedRecords > 0 && result.raw !== null) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+      const backupRoot = `${ERP_STORAGE_KEY}-pre-demo-cleanup-${timestamp}`
+      let backupKey = backupRoot
+      let suffix = 1
+      while (localStorage.getItem(backupKey) !== null) {
+        backupKey = `${backupRoot}-${suffix++}`
+      }
+      try {
+        localStorage.setItem(backupKey, result.raw)
+      } catch (error) {
+        return {
+          ...result,
+          error: `Demo cleanup was not applied because a recoverable backup could not be saved. Free browser storage and reload. ${error instanceof Error ? error.message : String(error)}`,
+        }
+      }
+    }
+
+    return {
+      ...result,
+      data: cleanup.data as unknown as StoredData,
+    }
   } catch (error) {
     return {
-      data: createDemoStore(),
+      data: createEmptyStore(),
       raw: null,
       error: `Browser storage could not be accessed. ${error instanceof Error ? error.message : String(error)}`,
     }
