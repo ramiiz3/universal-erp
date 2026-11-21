@@ -104,13 +104,16 @@ function matchesOnlyKnownFields(record: Record<string, unknown>, allowedFields: 
   return Object.keys(record).every((field) => allowedFields.includes(field))
 }
 
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || value === ""
+}
+
 function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
-    "id", "name", "category", "sku", "barcode", "purchasePrice",
-    "sellingPrice", "minimumStock", "vatRate", "unit",
-  ])) return false
-  return record.id === expected.id
+  if (!record) return false
+
+  const exactIdentity =
+    record.id === expected.id
     && record.name === expected.name
     && record.sku === expected.sku
     && record.barcode === expected.barcode
@@ -120,17 +123,43 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
     && Number(record.minimumStock) === expected.minimumStock
     && Number(record.vatRate) === expected.vatRate
     && record.unit === expected.unit
-    && !record.description
-    && !record.manufacturer
-    && !record.brand
-    && !record.packagings
+
+  if (!exactIdentity) return false
+
+  // Permit only harmless fields added by later app versions. A company edit
+  // to the commercial identity, manufacturer, packaging or alternate barcode
+  // data makes this record ineligible for automatic cleanup.
+  const allowedFields = new Set([
+    "id", "name", "category", "sku", "barcode", "purchasePrice",
+    "sellingPrice", "minimumStock", "vatRate", "unit", "productType",
+    "subcategory", "brand", "manufacturer", "alternateBarcodes",
+    "description", "returnEligible", "status", "createdAt", "updatedAt",
+    "vatApplicable",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
+  return (record.productType === undefined || record.productType === "GOODS")
+    && isEmptyValue(record.subcategory)
+    && isEmptyValue(record.brand)
+    && isEmptyValue(record.manufacturer)
+    && isEmptyValue(record.description)
+    && (record.alternateBarcodes === undefined
+      || (Array.isArray(record.alternateBarcodes) && record.alternateBarcodes.length === 0))
+    && (record.returnEligible === undefined || record.returnEligible === false)
+    && (record.status === undefined || record.status === "ACTIVE")
+    && (record.vatApplicable === undefined || record.vatApplicable === true)
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
-    "id", "productId", "batch", "expiry", "quantity", "purchasePrice", "warehouseId",
-  ])) return false
+  if (!record) return false
+  const allowedFields = new Set([
+    "id", "productId", "batch", "expiry", "quantity", "purchasePrice",
+    "warehouseId", "locationId", "sellingPrice", "totalPurchaseValue",
+    "totalSellingValue", "createdAt", "updatedAt",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
   return record.id === expected.id
     && record.productId === expected.productId
     && record.batch === expected.batch
@@ -138,23 +167,39 @@ function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
     && Number(record.quantity) === expected.quantity
     && Number(record.purchasePrice) === expected.purchasePrice
     && (!record.warehouseId || record.warehouseId === "WH-MAIN")
-    && !record.locationId
-    && record.sellingPrice == null
-    && record.totalPurchaseValue == null
-    && record.totalSellingValue == null
+    && isEmptyValue(record.locationId)
+    && isEmptyValue(record.sellingPrice)
+    && isEmptyValue(record.totalPurchaseValue)
+    && isEmptyValue(record.totalSellingValue)
 }
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
+  if (!record) return false
+  const allowedFields = new Set([
     "id", "name", "phone", "email", "whatsapp", "status",
-  ])) return false
+    "createdAt", "updatedAt", "address", "notes", "customerType",
+    "taxRegistrationNumber", "creditLimit", "loyaltyPoints", "isActive",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
+  const hasOnlyEmptyOptionalData = [
+    record.address,
+    record.notes,
+    record.customerType,
+    record.taxRegistrationNumber,
+  ].every(isEmptyValue)
+    && (record.creditLimit === undefined || Number(record.creditLimit) === 0)
+    && (record.loyaltyPoints === undefined || Number(record.loyaltyPoints) === 0)
+    && (record.isActive === undefined || record.isActive === true)
+
   return record.id === expected.id
     && record.name === expected.name
     && record.phone === expected.phone
     && record.email === expected.email
     && record.whatsapp === expected.whatsapp
     && record.status === expected.status
+    && hasOnlyEmptyOptionalData
 }
 
 function containsReference(value: unknown, fields: ReadonlySet<string>, targetId: string): boolean {
