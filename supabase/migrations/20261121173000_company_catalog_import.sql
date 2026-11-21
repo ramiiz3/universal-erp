@@ -61,6 +61,7 @@ declare
   v_created_lots integer := 0;
   v_updated_lots integer := 0;
   v_imported_rows integer := 0;
+  v_opening_stock_quantity numeric := 0;
   v_result jsonb;
   v_cached private.company_catalog_import_requests%rowtype;
 begin
@@ -70,9 +71,10 @@ begin
   if p_company_id is null or p_request_id is null then
     raise exception using errcode = '22023', message = 'Company and import request identifiers are required.';
   end if;
-  if jsonb_typeof(p_rows) <> 'array'
-     or jsonb_array_length(p_rows) < 1
-     or jsonb_array_length(p_rows) > 1000 then
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception using errcode = '22023', message = 'Import rows must be a JSON array.';
+  end if;
+  if jsonb_array_length(p_rows) < 1 or jsonb_array_length(p_rows) > 1000 then
     raise exception using errcode = '22023', message = 'Import must contain between 1 and 1,000 validated rows.';
   end if;
   if not private.has_company_permission(p_company_id, 'manage_inventory') then
@@ -128,7 +130,7 @@ begin
     v_lot_purchase_price := coalesce(nullif(v_row ->> 'lotPurchasePrice', '')::numeric, v_purchase_price);
     v_lot_selling_price := nullif(v_row ->> 'lotSellingPrice', '')::numeric;
 
-    if v_name = '' or length(v_name) > 300 or length(v_unit) > 100 then
+    if v_name = '' or length(v_name) > 300 or length(v_category) > 160 or length(v_unit) > 100 or length(v_description) > 5000 then
       raise exception using errcode = '22023', message = 'Product name and unit are required and must be within the allowed length.';
     end if;
     if v_purchase_price < 0 or v_selling_price < 0 or v_minimum_stock < 0
@@ -140,7 +142,9 @@ begin
        or v_minimum_stock::text in ('NaN', 'Infinity', '-Infinity')
        or v_vat_rate::text in ('NaN', 'Infinity', '-Infinity')
        or v_stock_quantity::text in ('NaN', 'Infinity', '-Infinity')
-       or v_lot_purchase_price::text in ('NaN', 'Infinity', '-Infinity') then
+       or v_lot_purchase_price::text in ('NaN', 'Infinity', '-Infinity')
+       or (v_lot_selling_price is not null and v_lot_selling_price::text in ('NaN', 'Infinity', '-Infinity'))
+       or trunc(v_minimum_stock) <> v_minimum_stock then
       raise exception using errcode = '22023', message = 'Prices, quantities, minimum stock and VAT must be valid non-negative numbers.';
     end if;
     if v_stock_quantity > 0 and p_warehouse_id is null then
@@ -217,6 +221,7 @@ begin
     end if;
 
     if v_stock_quantity > 0 then
+      v_opening_stock_quantity := v_opening_stock_quantity + v_stock_quantity;
       select lots.id into v_lot_id
       from public.inventory_lots as lots
       where lots.company_id = p_company_id
@@ -272,10 +277,7 @@ begin
     'matchedProducts', v_matched_products,
     'createdLots', v_created_lots,
     'updatedLots', v_updated_lots,
-    'openingStockQuantity', coalesce((
-      select sum((row_value ->> 'stockQuantity')::numeric)
-      from jsonb_array_elements(p_rows) as row_value
-    ), 0)
+    'openingStockQuantity', v_opening_stock_quantity
   );
 
   insert into private.company_catalog_import_requests (
@@ -296,7 +298,7 @@ end;
 $$;
 
 revoke all on function public.import_company_catalog(uuid, uuid, jsonb, uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.import_company_catalog(uuid, uuid, jsonb, uuid)
   to authenticated;
 
