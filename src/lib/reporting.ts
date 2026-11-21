@@ -198,6 +198,13 @@ const endOfDay = (date: Date) => {
   return clone
 }
 
+const localDateKey = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 const safeNumber = (value: number | null | undefined) => {
   const result = Number(value ?? 0)
   return Number.isFinite(result) ? result : 0
@@ -471,7 +478,7 @@ export function buildReportDataset({
       : 0
 
     const saleDate = new Date(sale.createdAt)
-    const dayKey = startOfDay(saleDate).toISOString().slice(0, 10)
+    const dayKey = localDateKey(startOfDay(saleDate))
     const dayLabel = formatDisplayDate(startOfDay(saleDate))
 
     const dayRow = dailyMap.get(dayKey) ?? {
@@ -567,7 +574,7 @@ export function buildReportDataset({
 
   for (const record of inRangeReturns) {
     const returnDate = new Date(record.createdAt)
-    const dayKey = startOfDay(returnDate).toISOString().slice(0, 10)
+    const dayKey = localDateKey(startOfDay(returnDate))
     const dayLabel = formatDisplayDate(startOfDay(returnDate))
     const dayRow = dailyMap.get(dayKey) ?? {
       date: dayKey,
