@@ -82,6 +82,7 @@ function loadSettings(): SettingsData {
         : String(parsed.phone).trim(),
       tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
       emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
+      vatRate: Number(parsed.vatRate) > 0 ? String(parsed.vatRate) : "5",
       invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
         ? "Thank you for your business."
         : (parsed.invoiceFooter || defaultSettings.invoiceFooter),
