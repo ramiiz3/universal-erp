@@ -21,6 +21,19 @@ describe("cloud company catalog import preview", () => {
     })
   })
 
+  it("maps a generic Cost column to product purchase cost on product-only sheets", () => {
+    const result = previewCloudCatalogImport([
+      ["Product Name", "SKU", "Cost", "Selling Price"],
+      ["Product A", "A-1", "2.75", "4.5"],
+    ])
+    expect(result.issues).toEqual([])
+    expect(result.rows[0]).toMatchObject({
+      purchasePrice: 2.75,
+      lotPurchasePrice: 2.75,
+      stockQuantity: 0,
+    })
+  })
+
   it("preserves multiple opening-stock lots for the same product", () => {
     const result = previewCloudCatalogImport([
       ["Product Name", "Barcode", "Batch", "Expiry Date", "Qty", "Cost", "Lot Selling Price"],
@@ -32,6 +45,8 @@ describe("cloud company catalog import preview", () => {
     expect(result.stockRows).toBe(2)
     expect(result.totalStock).toBe(7.5)
     expect(result.rows.map((row) => row.expiry)).toEqual(["2027-06-01", "2028-07-15"])
+    expect(result.rows.map((row) => row.purchasePrice)).toEqual([0, 0])
+    expect(result.rows.map((row) => row.lotPurchasePrice)).toEqual([2, 2.25])
   })
 
   it("supports titled pharmacy stock sheets and DMY expiry values", () => {
