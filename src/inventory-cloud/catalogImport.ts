@@ -78,7 +78,7 @@ function numberValue(value: unknown, label: string, rowNumber: number): number {
   if (!text) return 0
   const parsed = Number(text.replace(/AED|د\.إ|%/gi, "").replace(/,/g, "").trim())
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${label} must be a non-negative number.`)
+    throw new Error(`Row ${rowNumber}: ${label} must be a non-negative number.`)
   }
   return parsed
 }
