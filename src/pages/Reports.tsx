@@ -16,7 +16,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -70,6 +69,7 @@ export default function Reports() {
     inventoryLots,
     sales,
     salesReturns,
+    customerPayments,
   } = useERP()
   const { theme } = useTheme()
   const darkMode = theme === "dark"
@@ -155,15 +155,33 @@ export default function Reports() {
   const paymentData = useMemo(() => {
     const cash = salesInRange.filter((sale) => sale.paymentMethod === "Cash").reduce((sum, sale) => sum + sale.total, 0)
     const card = salesInRange.filter((sale) => sale.paymentMethod === "Card").reduce((sum, sale) => sum + sale.total, 0)
-    const credit = salesInRange.filter((sale) => sale.paymentMethod === "Credit").reduce((sum, sale) => sum + sale.total, 0)
-    const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
+      const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
+    const customerCollections = customerPayments
+      .filter((payment) => {
+        const timestamp = new Date(payment.createdAt).getTime()
+        return timestamp >= currentRange.start.getTime() && timestamp <= currentRange.end.getTime()
+      })
+      .reduce((totals, payment) => {
+        totals[payment.method] = (totals[payment.method] ?? 0) + payment.amount
+        return totals
+      }, {} as Record<string, number>)
+    const refundsByMethod = salesReturns
+      .filter((record) => {
+        const timestamp = new Date(record.createdAt).getTime()
+        return timestamp >= currentRange.start.getTime() && timestamp <= currentRange.end.getTime()
+      })
+      .reduce((totals, record) => {
+        totals[record.refundMethod] = (totals[record.refundMethod] ?? 0) + record.refundTotal
+        return totals
+      }, {} as Record<string, number>)
 
+    // Credit invoices are not collections until a customer receipt is recorded.
+    // Refunds are netted against the actual refund method on the refund date.
     return [
-      { name: "Cash", value: Number(cash.toFixed(2)) },
-      { name: "Card", value: Number(card.toFixed(2)) },
-      { name: "Credit", value: Number(credit.toFixed(2)) },
-      { name: "Bank Transfer", value: Number(bankTransfer.toFixed(2)) },
-    ].filter((entry) => entry.value > 0)
+      { name: "Cash", value: Number((cash + (customerCollections.Cash ?? 0) - (refundsByMethod.Cash ?? 0)).toFixed(2)) },
+      { name: "Card", value: Number((card + (customerCollections.Card ?? 0) - (refundsByMethod.Card ?? 0)).toFixed(2)) },
+      { name: "Bank Transfer", value: Number((bankTransfer + (customerCollections["Bank Transfer"] ?? 0) - (refundsByMethod["Bank Transfer"] ?? 0)).toFixed(2)) },
+    ].filter((entry) => entry.value !== 0)
   }, [salesInRange])
 
   const topProducts = useMemo(
@@ -202,7 +220,6 @@ export default function Reports() {
     return data
   }, [currentRange, report.dailyBreakdown])
 
-  const paymentColors = chartColors
 
   const customRangeInvalid =
     rangeMode === "custom" &&
@@ -406,15 +423,13 @@ export default function Reports() {
             <div className="mt-4 h-[250px]">
               {paymentData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={paymentData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={88} paddingAngle={3}>
-                      {paymentData.map((_, index) => (
-                        <Cell key={`payment-${index}`} fill={paymentColors[index % paymentColors.length]} />
-                      ))}
-                    </Pie>
+                  <BarChart data={paymentData} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartGrid} />
+                    <XAxis dataKey="name" tick={{ fill: chartAxisText, fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: chartAxisText, fontSize: 10 }} tickLine={false} axisLine={false} />
                     <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
-                    <Legend />
-                  </PieChart>
+                    <Bar dataKey="value" name="Net collections" fill={chartColors[0]} radius={[5, 5, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-center text-sm text-slate-500">
@@ -457,8 +472,8 @@ export default function Reports() {
                         <span className="text-sm font-medium text-slate-800">{product.name}</span>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-900">{product.quantitySold} units</p>
-                        <p className="text-xs text-slate-500">{money(product.netSales)}</p>
+                        <p className="text-sm font-semibold text-slate-900">{product.quantitySold} sold · {product.quantityReturned} returned</p>
+                        <p className="text-xs text-slate-500">{money(product.netSales)} net sales · {money(product.refunds)} refunded</p>
                       </div>
                     </div>
                   ))}
@@ -571,7 +586,7 @@ export default function Reports() {
                     <tr key={row.id} className="border-b border-slate-100 last:border-0">
                       <td className="px-3 py-3 font-medium text-slate-800">{row.returnNumber}</td>
                       <td className="px-3 py-3 text-slate-600">{row.invoiceNumber}</td>
-                      <td className="px-3 py-3 text-slate-600">{row.date}</td>
+                      <td className="px-3 py-3 text-slate-600">{new Date(row.date).toLocaleString("en-GB")}</td>
                       <td className="px-3 py-3 text-slate-600">{row.customerName}</td>
                       <td className="px-3 py-3 text-slate-700">{row.productName}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{row.quantity}</td>
