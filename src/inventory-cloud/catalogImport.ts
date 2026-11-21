@@ -12,6 +12,7 @@ export type CloudCatalogImportRow = {
   sellingPrice: number
   minimumStock: number
   vatRate: number
+  vatApplicable: boolean
   batch: string
   expiry: string | null
   stockQuantity: number
@@ -50,6 +51,7 @@ const ALIASES: Record<ColumnKey, string[]> = {
   sellingPrice: ["selling price", "sale price", "retail price", "sales price", "s price", "mrp"],
   minimumStock: ["minimum stock", "min stock", "reorder level", "reorder point"],
   vatRate: ["vat", "vat rate", "tax", "tax rate", "vat percent"],
+  vatApplicable: ["vat applicable", "vat applicable yes no", "taxable", "is taxable", "vatable", "tax applicable"],
   batch: ["batch", "batch number", "lot", "lot number", "batch no"],
   expiry: ["expiry", "expiry date", "expiration", "expiration date", "exp date"],
   stockQuantity: ["stock quantity", "quantity", "qty", "on hand", "on-hand", "opening stock", "opening quantity", "available quantity"],
@@ -136,7 +138,7 @@ function keyFor(row: Omit<CloudCatalogImportRow, "rowNumber" | "productKey">) {
   return `name:${row.name.toLocaleLowerCase()}|${row.category.toLocaleLowerCase()}`
 }
 
-export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogImportPreview {
+export function previewCloudCatalogImport(sheetRows: unknown[][], defaultVatRate = 5): CloudCatalogImportPreview {
   const headerIndex = sheetRows.findIndex((row) =>
     mappedColumns(row).name !== undefined,
   )
@@ -188,7 +190,14 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
       const purchasePrice = numberValue(value(row, "purchasePrice"), "Purchase price", rowNumber)
       const sellingPrice = numberValue(value(row, "sellingPrice"), "Selling price", rowNumber)
       const minimumStock = numberValue(value(row, "minimumStock"), "Minimum stock", rowNumber)
-      const vatRate = numberValue(value(row, "vatRate"), "VAT rate", rowNumber)
+      const rawVatApplicable = String(value(row, "vatApplicable") ?? "").trim().toLocaleLowerCase()
+      const vatApplicable = ["no", "false", "0", "n", "exempt", "not applicable"].includes(rawVatApplicable)
+        ? false
+        : true
+      const rawVatRate = String(value(row, "vatRate") ?? "").trim()
+      const vatRate = vatApplicable
+        ? (rawVatRate ? numberValue(rawVatRate, "VAT rate", rowNumber) : numberValue(String(defaultVatRate), "Default VAT rate", rowNumber))
+        : 0
       if (vatRate > 100) throw new Error("VAT rate cannot exceed 100%.")
       const batch = String(value(row, "batch") ?? "").trim()
       const expiry = expiryValue(value(row, "expiry"))
@@ -204,7 +213,7 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
 
       const productFields = {
         name, sku, barcode, category, manufacturer, description, unit,
-        purchasePrice, sellingPrice, minimumStock, vatRate,
+        purchasePrice, sellingPrice, minimumStock, vatRate, vatApplicable,
       }
       const productKey = keyFor({
         ...productFields,
