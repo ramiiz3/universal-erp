@@ -227,7 +227,7 @@ export default function Products() {
       minimumStock: String(
         product.minimumStock,
       ),
-      vatRate: String(product.vatRate || getLegacyCompanyBarcodeProfile().vatRate || "5"),
+      vatRate: String(product.vatApplicable === false ? 0 : (product.vatRate || getLegacyCompanyBarcodeProfile().vatRate || "5")),
       vatApplicable: product.vatApplicable !== false,
       unit: product.unit,
       productType: product.productType || "GOODS",
