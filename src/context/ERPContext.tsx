@@ -76,6 +76,7 @@ export type Product = {
   sellingPrice: number
   minimumStock: number
   vatRate: number
+  vatApplicable?: boolean
   unit: string
   manufacturer?: string
 
@@ -2872,7 +2873,7 @@ export function ERPProvider({
           barcode: request.product.barcode,
           quantity: request.displayQuantity,
           unitPrice: request.displayUnitPrice,
-          vatRate: request.product.vatRate,
+          vatRate: request.product.vatApplicable === false ? 0 : request.product.vatRate,
           total: request.displayQuantity * request.displayUnitPrice,
           sellingUnit: request.sellingUnit,
           packageId: request.packageId,

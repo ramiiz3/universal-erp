@@ -169,7 +169,9 @@ export function estimateFefoSale(
       const unitPrice = lot.selling_price ?? product.selling_price
       const lineGross = roundMoney(quantity * unitPrice)
       subtotal += lineGross
-      const rate = product.vat_rate > 0 ? product.vat_rate : companyTaxRate
+      const rate = product.vat_applicable
+        ? (product.vat_rate > 0 ? product.vat_rate : (companyTaxRate > 0 ? companyTaxRate : 5))
+        : 0
       allocations.push({ gross: lineGross, vatRate: rate })
       remaining -= quantity
     }

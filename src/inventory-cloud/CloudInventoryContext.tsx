@@ -25,6 +25,7 @@ export type CloudProduct = {
   selling_price: number
   minimum_stock: number
   vat_rate: number
+  vat_applicable: boolean
   is_active: boolean
   created_at: string
   updated_at: string

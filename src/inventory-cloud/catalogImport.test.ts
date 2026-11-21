@@ -4,8 +4,8 @@ import { previewCloudCatalogImport } from "./catalogImport"
 describe("cloud company catalog import preview", () => {
   it("reads product catalog rows without requiring opening stock", () => {
     const result = previewCloudCatalogImport([
-      ["Product Name", "SKU", "Category", "Unit", "Purchase Price", "Selling Price", "VAT", "Minimum Stock"],
-      ["Product A", "A-1", "General", "Box", "3.50", "5", "5", "1.5"],
+      ["Product Name", "SKU", "Category", "Unit", "Purchase Price", "Selling Price", "VAT Applicable", "VAT", "Minimum Stock"],
+      ["Product A", "A-1", "General", "Box", "3.50", "5", "Yes", "5", "1.5"],
     ])
     expect(result.issues).toEqual([])
     expect(result.productCount).toBe(1)
@@ -16,6 +16,7 @@ describe("cloud company catalog import preview", () => {
       purchasePrice: 3.5,
       sellingPrice: 5,
       minimumStock: 1.5,
+      vatApplicable: true,
       stockQuantity: 0,
       expiry: null,
     })
@@ -60,6 +61,17 @@ describe("cloud company catalog import preview", () => {
     expect(result.rows[0]?.name).toBe("Medicine A")
     expect(result.rows[0]?.expiry).toBe("2027-06-15")
     expect(result.rows[0]?.stockQuantity).toBe(2)
+  })
+
+  it("keeps exempt medicines at zero VAT and uses the company rate for taxable products", () => {
+    const result = previewCloudCatalogImport([
+      ["Product Name", "SKU", "VAT Applicable", "VAT"],
+      ["Medicine A", "MED-001", "No", "5"],
+      ["Non-medicine B", "NONMED-01", "Yes", ""],
+    ], 5)
+    expect(result.issues).toEqual([])
+    expect(result.rows[0]).toMatchObject({ vatApplicable: false, vatRate: 0 })
+    expect(result.rows[1]).toMatchObject({ vatApplicable: true, vatRate: 5 })
   })
 
   it("preserves an explicit zero batch cost instead of defaulting it to product cost", () => {

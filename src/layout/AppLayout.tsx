@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { useTheme } from "../context/ThemeContext"
+import { getERPSettings } from "../lib/erpSettings"
 
 const navigation = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
@@ -33,6 +34,7 @@ const navigation = [
 export default function AppLayout() {
   const { theme, toggleTheme } = useTheme()
   const darkMode = theme === "dark"
+  const businessName = getERPSettings().businessName.trim() || "Company"
 
   return (
     <div>
@@ -45,7 +47,7 @@ export default function AppLayout() {
                   Universal<span className="text-emerald-600">ERP</span>
                 </div>
                 <div className="text-xs text-slate-500">
-                  Zaki Pharmacy
+                  {businessName}
                 </div>
               </div>
             </div>

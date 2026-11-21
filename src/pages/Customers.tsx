@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react"
 import { useERP, type Customer } from "../context/ERPContext"
+import { getERPSettings } from "../lib/erpSettings"
 
 type CustomerForm = {
   name: string
@@ -280,7 +281,7 @@ export default function Customers() {
     }
 
     const subject = encodeURIComponent(
-      `Message from Zaki Pharmacy`,
+      `Message from ${getERPSettings().businessName || "Company"}`,
     )
 
     const body = encodeURIComponent(
@@ -610,7 +611,7 @@ export default function Customers() {
                         name: event.target.value,
                       }))
                     }
-                    placeholder="e.g. Ahmed Khan"
+                    placeholder="Customer name"
                     className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   />
                 </div>
