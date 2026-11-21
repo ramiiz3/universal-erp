@@ -1,4 +1,5 @@
 import {
+  Barcode as BarcodeIcon,
   Edit3,
   Eye,
   Package,
@@ -8,6 +9,9 @@ import {
   X,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import BarcodePreview from "../components/BarcodePreview"
+import { buildCompanyProductBarcode } from "../lib/productBarcode"
+import { ERP_SETTINGS_STORAGE_KEY } from "../lib/erpStorageKeys"
 import { useERP, type Product } from "../context/ERPContext"
 import {
   getERPUnits,
@@ -29,6 +33,7 @@ const emptyForm = {
   sellingPrice: "",
   minimumStock: "",
   vatRate: "5",
+  vatApplicable: true,
   unit: "Pack",
   productType: "GOODS",
   subcategory: "",
@@ -38,6 +43,27 @@ const emptyForm = {
   description: "",
   status: "ACTIVE",
   returnEligible: "false",
+}
+
+type LegacyCompanyBarcodeProfile = {
+  businessName: string
+  phone: string
+  vatRate: string
+}
+
+function getLegacyCompanyBarcodeProfile(): LegacyCompanyBarcodeProfile {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ERP_SETTINGS_STORAGE_KEY) ?? "{}") as Partial<LegacyCompanyBarcodeProfile>
+    return {
+      businessName: typeof parsed.businessName === "string" && parsed.businessName.trim()
+        ? parsed.businessName.trim()
+        : "Zaki Pharmacy LLC",
+      phone: typeof parsed.phone === "string" ? parsed.phone : "",
+      vatRate: typeof parsed.vatRate === "string" ? parsed.vatRate : "5",
+    }
+  } catch {
+    return { businessName: "Zaki Pharmacy LLC", phone: "", vatRate: "5" }
+  }
 }
 
 function money(value: number) {
@@ -176,7 +202,12 @@ export default function Products() {
   }
 
   function openAdd() {
-    resetForm()
+    const companyProfile = getLegacyCompanyBarcodeProfile()
+    setForm({
+      ...emptyForm,
+      vatRate: companyProfile.vatRate || "5",
+      vatApplicable: true,
+    })
     setEditingProduct(null)
     setShowForm(true)
   }
@@ -196,7 +227,8 @@ export default function Products() {
       minimumStock: String(
         product.minimumStock,
       ),
-      vatRate: String(product.vatRate),
+      vatRate: String(product.vatRate || getLegacyCompanyBarcodeProfile().vatRate || "5"),
+      vatApplicable: product.vatApplicable !== false,
       unit: product.unit,
       productType: product.productType || "GOODS",
       subcategory: product.subcategory || "",
@@ -226,11 +258,18 @@ export default function Products() {
       return
     }
 
-    if (form.productType !== "SERVICE" && !form.barcode.trim()) {
-      window.alert(
-        "Barcode is required.",
-      )
-      return
+    let barcode = form.barcode.trim()
+    if (form.productType !== "SERVICE" && !barcode) {
+      try {
+        const profile = getLegacyCompanyBarcodeProfile()
+        barcode = buildCompanyProductBarcode(
+          profile,
+          `PRD${Date.now().toString(36).toUpperCase()}`,
+        )
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Save the company mobile number in Settings before generating barcodes.")
+        return
+      }
     }
 
     const productData: Omit<Product, "id"> =
@@ -240,7 +279,7 @@ export default function Products() {
           form.category.trim() ||
           "General",
         sku: form.sku.trim(),
-        barcode: form.barcode.trim(),
+        barcode,
         purchasePrice:
           Number(form.purchasePrice) || 0,
         sellingPrice:
@@ -248,7 +287,8 @@ export default function Products() {
         minimumStock:
           Number(form.minimumStock) || 0,
         vatRate:
-          Number(form.vatRate) || 0,
+          form.vatApplicable ? (Number(form.vatRate) || 0) : 0,
+        vatApplicable: form.vatApplicable,
         unit:
           form.unit.trim() || "Unit",
         productType: (form.productType || "GOODS") as Product["productType"],
@@ -532,7 +572,7 @@ export default function Products() {
                       </td>
 
                       <td className="px-5 py-4">
-                        {product.vatRate}%
+                        {product.vatApplicable === false ? "Not applicable" : `${product.vatRate}%`}
                       </td>
 
                       <td className="px-5 py-4">
@@ -687,7 +727,7 @@ export default function Products() {
 
                 <Detail
                   label="VAT"
-                  value={`${selectedProduct.vatRate}%`}
+                  value={selectedProduct.vatApplicable === false ? "Not applicable" : `${selectedProduct.vatRate}%`}
                 />
 
                 <Detail
@@ -803,17 +843,37 @@ export default function Products() {
                 }
               />
 
-              <Field
-                label="Barcode"
-                value={form.barcode}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    barcode: value,
-                  })
-                }
-                required
-              />
+              <div className="space-y-2">
+                <Field
+                  label="Barcode"
+                  value={form.barcode}
+                  onChange={(value) => setForm({ ...form, barcode: value })}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const profile = getLegacyCompanyBarcodeProfile()
+                        setForm((current) => ({
+                          ...current,
+                          barcode: buildCompanyProductBarcode(
+                            profile,
+                            `PRD${Date.now().toString(36).toUpperCase()}`,
+                          ),
+                        }))
+                      } catch (error) {
+                        window.alert(error instanceof Error ? error.message : "Save the company mobile number in Settings first.")
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                  >
+                    <BarcodeIcon size={15} /> Generate Code 128
+                  </button>
+                  <span className="self-center text-xs text-slate-500">Company name · mobile · unique product code</span>
+                </div>
+                <BarcodePreview value={form.barcode} />
+              </div>
 
               <Field
                 label="Purchase Price"
@@ -851,17 +911,30 @@ export default function Products() {
                 type="number"
               />
 
-              <Field
-                label="VAT Rate"
-                value={form.vatRate}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    vatRate: value,
-                  })
-                }
-                type="number"
-              />
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={form.vatApplicable}
+                    onChange={(event) => setForm((current) => ({
+                      ...current,
+                      vatApplicable: event.target.checked,
+                      vatRate: event.target.checked
+                        ? (current.vatRate === "0" ? (getLegacyCompanyBarcodeProfile().vatRate || "5") : current.vatRate)
+                        : "0",
+                    }))}
+                  />
+                  VAT applicable to this product
+                </label>
+                <Field
+                  label="VAT Rate (%)"
+                  value={form.vatRate}
+                  onChange={(value) => setForm({ ...form, vatRate: value })}
+                  type="number"
+                  disabled={!form.vatApplicable}
+                />
+                <p className="text-xs text-slate-500">Untick for VAT-exempt products such as eligible medicines. Exempt products are charged 0%.</p>
+              </div>
 
               <label className="space-y-2">
                 <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Base Unit of Measure</span>
@@ -1012,12 +1085,14 @@ function Field({
   onChange,
   type = "text",
   required = false,
+  disabled = false,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   type?: string
   required?: boolean
+  disabled?: boolean
 }) {
   return (
     <label className="space-y-2">
