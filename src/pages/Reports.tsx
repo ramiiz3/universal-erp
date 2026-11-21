@@ -15,6 +15,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -354,15 +355,15 @@ export default function Reports() {
               <div className="rounded-xl bg-violet-50 p-2 text-violet-700"><Package className="h-4 w-4" /></div>
             </div>
             <p className="mt-3 text-2xl font-semibold text-slate-900">{money(report.summary.cogs)}</p>
-            <p className="mt-1 text-xs text-slate-500">Historical cost on verified sales only</p>
+            <p className="mt-1 text-xs text-slate-500">Verified historical costs only</p>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Gross Profit</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(report.summary.grossProfit)}</p>
-            <p className="mt-1 text-xs text-slate-500">Margin {report.summary.grossMargin.toFixed(1)}%</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">{report.summary.costsUnavailableCount > 0 ? "Incomplete" : money(report.summary.grossProfit)}</p>
+            <p className="mt-1 text-xs text-slate-500">{report.summary.costsUnavailableCount > 0 ? "Historical cost data is missing for some sales or returns" : `Margin ${report.summary.grossMargin.toFixed(1)}%`}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -409,6 +410,7 @@ export default function Reports() {
                   <Tooltip formatter={(value) => `AED ${Number(value).toFixed(2)}`} contentStyle={chartTooltipStyle} />
                   <Bar dataKey="sales" name="Gross Sales" fill={chartColors[0]} radius={[6, 6, 0, 0]} />
                   <Bar dataKey="netSales" name="Net Sales" fill={chartColors[1]} radius={[6, 6, 0, 0]} />
+                  <Legend />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -576,6 +578,7 @@ export default function Reports() {
                     <th className="px-3 py-3 text-right font-medium">Lines</th>
                     <th className="px-3 py-3 text-right font-medium">Gross</th>
                     <th className="px-3 py-3 text-right font-medium">Discount</th>
+                    <th className="px-3 py-3 text-right font-medium">Net Sales</th>
                     <th className="px-3 py-3 text-right font-medium">VAT</th>
                     <th className="px-3 py-3 text-right font-medium">Total</th>
                   </tr>
@@ -591,6 +594,7 @@ export default function Reports() {
                       <td className="px-3 py-3 text-right text-slate-600">{row.lineCount}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(row.grossSales)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(row.discounts)}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{money(row.netSales)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(row.vat)}</td>
                       <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.total)}</td>
                     </tr>
@@ -711,6 +715,7 @@ export default function Reports() {
                     <th className="px-3 py-3 font-medium">Product</th>
                     <th className="px-3 py-3 text-right font-medium">Qty</th>
                     <th className="px-3 py-3 font-medium">Method</th>
+                    <th className="px-3 py-3 font-medium">Reason</th>
                     <th className="px-3 py-3 text-right font-medium">Refund</th>
                   </tr>
                 </thead>
@@ -724,6 +729,7 @@ export default function Reports() {
                       <td className="px-3 py-3 text-slate-700">{row.productName}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{row.quantity}</td>
                       <td className="px-3 py-3 text-slate-600">{row.refundMethod}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.reason}</td>
                       <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.refundAmount)}</td>
                     </tr>
                   ))}
