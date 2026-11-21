@@ -91,6 +91,57 @@ describe("built-in demo data cleanup", () => {
     expect(referenced.removedWarehouses).toBe(0)
   })
 
+  it("removes starter records that only gained harmless fields during app migrations", () => {
+    const migratedProduct = {
+      ...demoProduct,
+      productType: "GOODS",
+      subcategory: "",
+      brand: "",
+      manufacturer: "",
+      description: "",
+      alternateBarcodes: [],
+      returnEligible: false,
+      status: "ACTIVE",
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+      vatApplicable: true,
+    }
+    const migratedLot = {
+      ...demoLot,
+      warehouseId: "WH-MAIN",
+      locationId: null,
+      sellingPrice: null,
+      totalPurchaseValue: null,
+      totalSellingValue: null,
+      createdAt: "2026-02-01T00:00:00.000Z",
+    }
+    const migratedCustomer = {
+      ...demoCustomer,
+      address: "",
+      notes: "",
+      customerType: "",
+      taxRegistrationNumber: "",
+      creditLimit: 0,
+      loyaltyPoints: 0,
+      isActive: true,
+      createdAt: "2026-02-01T00:00:00.000Z",
+    }
+    const result = removeBuiltInDemoData({
+      products: [migratedProduct],
+      inventoryLots: [migratedLot],
+      customers: [migratedCustomer],
+      sales: [],
+      inventoryMovements: [],
+    })
+
+    expect(result.removedProducts).toBe(1)
+    expect(result.removedInventoryLots).toBe(1)
+    expect(result.removedCustomers).toBe(1)
+    expect(result.data.products).toEqual([])
+    expect(result.data.inventoryLots).toEqual([])
+    expect(result.data.customers).toEqual([])
+  })
+
   it("preserves records when a product identity has been changed", () => {
     const result = removeBuiltInDemoData({
       products: [{ ...demoProduct, sku: "NEW-SKU" }],
