@@ -40,12 +40,12 @@ type SettingsData = {
 }
 
 const defaultSettings: SettingsData = {
-  businessName: "Zaki Pharmacy",
-  tagline: "A Family Healthcare Destination",
+  businessName: "Zaki Pharmacy LLC",
+  tagline: "",
   tradeLicenseNumber: "",
   taxNumber: "",
   country: "United Arab Emirates",
-  emirate: "Dubai",
+  emirate: "",
   poBox: "",
   address: "",
   phone: "",
@@ -55,7 +55,7 @@ const defaultSettings: SettingsData = {
   vatRate: "5",
   invoicePrefix: "INV",
   invoiceFooter:
-    "Thank you for choosing Zaki Pharmacy.",
+    "Thank you for your business.",
   vatRegistered: true,
   payment: {
     cash: true,
@@ -149,7 +149,7 @@ export default function Settings() {
           </div>
 
           <p className="mt-1 text-sm text-slate-500">
-            Zaki Pharmacy — Dubai business, tax, invoice and payment settings.
+            Manage company profile, tax, invoice and payment settings.
           </p>
         </div>
 
@@ -175,7 +175,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Zaki Pharmacy's official business details.
+                      The company's official business details.
                     </p>
                   </div>
                 </div>
@@ -386,7 +386,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      UAE VAT configuration for Zaki Pharmacy.
+                      UAE VAT configuration for this company.
                     </p>
                   </div>
                 </div>
@@ -474,7 +474,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Configure Zaki Pharmacy invoice presentation.
+                      Configure company invoice presentation.
                     </p>
                   </div>
                 </div>
