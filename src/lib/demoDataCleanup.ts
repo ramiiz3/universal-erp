@@ -54,7 +54,7 @@ const BUILT_IN_CUSTOMERS: BuiltInDemoCustomer[] = [
 ]
 
 const PRODUCT_REFERENCE_FIELDS = new Set(["productId", "product_id", "sourceProductId", "source_product_id", "productIds", "product_ids"])
-const LOT_REFERENCE_FIELDS = new Set(["lotId", "lot_id", "sourceLotId", "source_lot_id", "lotIds", "lot_ids"])
+const LOT_REFERENCE_FIELDS = new Set(["lotId", "lot_id", "sourceLotId", "source_lot_id", "destinationLotId", "destination_lot_id", "inventoryLotId", "inventory_lot_id", "stockLotId", "stock_lot_id", "lotIds", "lot_ids"])
 const CUSTOMER_REFERENCE_FIELDS = new Set(["customerId", "customer_id", "customerIds", "customer_ids"])
 
 function asRecord(value: unknown): Record<string, unknown> | null {
