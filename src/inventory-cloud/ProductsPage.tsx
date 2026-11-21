@@ -402,7 +402,7 @@ export default function ProductsPage() {
                     <td className="p-3">{product.sku || "—"}<div className="text-xs text-slate-500">{product.barcode || "—"}</div></td>
                     <td className="p-3">{product.category || "Uncategorized"}</td>
                     <td className="p-3">{Number(product.selling_price).toFixed(2)} {activeCompany?.currency}</td>
-                    <td className="p-3">{product.vat_applicable ? `${Number(product.vat_rate || activeCompany?.taxRate || 0)}%` : "Not applicable"}</td>
+                    <td className="p-3">{product.vat_applicable ? `${Number(product.vat_rate || getDefaultCompanyVatRate(activeCompany?.taxRate))}%` : "Not applicable"}</td>
                     <td className="p-3">{stock} {product.unit}</td>
                     <td className="p-3">{product.is_active ? "Active" : "Archived"}</td>
                     <td className="p-3">
