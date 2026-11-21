@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
-import { Link, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom"
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import {
   Building2,
   LogOut,
@@ -12,7 +12,6 @@ import {
   Users,
 } from "lucide-react"
 import { useAuth } from "./AuthProvider"
-import { LoginPage } from "./AuthPages"
 import { supabase } from "../lib/supabase"
 import type { CompanyMembership } from "./AuthProvider"
 import { useTheme } from "../context/ThemeContext"
@@ -67,24 +66,57 @@ function SetupNotice() {
   )
 }
 
+function useAutoActivateSingleCompany() {
+  const {
+    user,
+    memberships,
+    activeCompany,
+    activeCompanyLoading,
+    activeCompanyError,
+    activateCompany,
+  } = useAuth()
+  const companyIds = useMemo(
+    () => [...new Set(memberships.map((membership) => membership.companyId))],
+    [memberships],
+  )
+
+  useEffect(() => {
+    if (!user || activeCompany || activeCompanyLoading || activeCompanyError || companyIds.length !== 1) return
+    void activateCompany(companyIds[0])
+  }, [user?.id, activeCompany, activeCompanyLoading, activeCompanyError, companyIds, activateCompany])
+
+  return { activeCompany, activeCompanyLoading, activeCompanyError, companyCount: companyIds.length }
+}
+
 function WorkspaceGuard() {
   const { configured, loading, user } = useAuth()
+  const { activeCompany, activeCompanyLoading, activeCompanyError, companyCount } = useAutoActivateSingleCompany()
   if (!configured) return <SetupNotice />
   if (loading) {
     return <main className="grid min-h-screen place-items-center text-sm text-slate-600">Checking authenticated session…</main>
   }
-  if (!user) return <Navigate to="/auth/login" replace state={{ from: "/workspace" }} />
+  if (!user) return <Navigate to="/auth/login" replace state={{ from: "/workspace/dashboard" }} />
+  if (activeCompany) return <Navigate to="/workspace/dashboard" replace />
+  if (activeCompanyLoading || (companyCount === 1 && !activeCompanyError)) {
+    return <main className="grid min-h-screen place-items-center text-sm text-slate-600">Opening your company dashboard…</main>
+  }
   return <WorkspaceHome />
 }
 
 function InventoryWorkspaceGuard() {
   const { configured, loading, user } = useAuth()
+  const location = useLocation()
+  const { activeCompany, activeCompanyLoading, activeCompanyError, companyCount } = useAutoActivateSingleCompany()
   if (!configured) return <SetupNotice />
   if (loading) {
     return <main className="grid min-h-screen place-items-center text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-200">Checking authenticated session…</main>
   }
-  if (!user) return <Navigate to="/auth/login" replace state={{ from: "/workspace/products" }} />
-  return <Outlet />
+  if (!user) return <Navigate to="/auth/login" replace state={{ from: `${location.pathname}${location.search}` }} />
+  if (activeCompany) return <Outlet />
+  if (activeCompanyLoading || (companyCount === 1 && !activeCompanyError)) {
+    return <main className="grid min-h-screen place-items-center text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-200">Opening your company workspace…</main>
+  }
+  return <Navigate to="/workspace" replace />
 }
 
 function CreateCompanyForm({ onCreated }: { onCreated: (companyId: string) => void }) {
@@ -806,9 +838,10 @@ function WorkspaceAIAssistant() {
 
 export default function WorkspaceRoutes() {
   const { configured, loading, user } = useAuth()
+  const location = useLocation()
   if (!configured) return <SetupNotice />
   if (loading) return <main className="grid min-h-screen place-items-center text-sm text-slate-600">Checking authenticated session…</main>
-  if (!user) return <LoginPage />
+  if (!user) return <Navigate to="/auth/login" replace state={{ from: `${location.pathname}${location.search}` }} />
   return (
     <Routes>
       <Route index element={<WorkspaceGuard />} />

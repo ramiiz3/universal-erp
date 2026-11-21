@@ -50,7 +50,7 @@ export default function App() {
           <Route path="/auth/invite/:token" element={<InvitationPage />} />
           <Route path="/workspace/*" element={<WorkspaceRoutes />} />
           <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
-            <Route path="/" element={<Navigate to="/workspace" replace />} />
+            <Route path="/" element={<Navigate to="/workspace/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/pos" element={<POS />} />
             <Route path="/sales" element={<Sales />} />

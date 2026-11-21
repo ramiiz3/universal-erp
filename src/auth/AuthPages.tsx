@@ -61,7 +61,7 @@ export function LoginPage() {
   const requestedReturnTo = (location.state as { from?: string } | null)?.from
   const returnTo = requestedReturnTo?.startsWith("/") && !requestedReturnTo.startsWith("//")
     ? requestedReturnTo
-    : "/workspace"
+    : "/workspace/dashboard"
 
   if (loading) return <AuthFrame><p className="text-sm text-slate-600">Checking sign-in session…</p></AuthFrame>
   if (user) return <Navigate to={returnTo} replace />
