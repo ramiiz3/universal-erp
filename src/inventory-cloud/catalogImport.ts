@@ -146,6 +146,12 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
   sheetRows.slice(headerIndex + 1).forEach((row, index) => {
     const rowNumber = headerIndex + index + 2
     if (!row.some((cell) => String(cell ?? "").trim() !== "")) return
+    if (records.length >= 1000) {
+      if (!issues.some((issue) => issue.message.includes("1,000 row limit"))) {
+        issues.push({ rowNumber, message: "The company import supports a maximum of 1,000 data rows per upload." })
+      }
+      return
+    }
     try {
       const name = String(value(row, "name") ?? "").trim()
       if (!name) throw new Error("Product Name is required.")
@@ -155,6 +161,11 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
       const manufacturer = String(value(row, "manufacturer") ?? "").trim()
       const description = String(value(row, "description") ?? "").trim()
       const unit = String(value(row, "unit") ?? "").trim() || "each"
+      if (name.length > 300) throw new Error("Product Name cannot exceed 300 characters.")
+      if (category.length > 160) throw new Error("Category cannot exceed 160 characters.")
+      if (unit.length > 100) throw new Error("Unit cannot exceed 100 characters.")
+      if (description.length > 5000) throw new Error("Description cannot exceed 5,000 characters.")
+      if (barcode.length > 128) throw new Error("Barcode cannot exceed 128 characters.")
       const purchasePrice = numberValue(value(row, "purchasePrice"), "Purchase price", rowNumber)
       const sellingPrice = numberValue(value(row, "sellingPrice"), "Selling price", rowNumber)
       const minimumStock = numberValue(value(row, "minimumStock"), "Minimum stock", rowNumber)
