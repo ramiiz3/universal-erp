@@ -10,6 +10,7 @@ export type ProductInput = {
   sellingPrice: string
   minimumStock: string
   vatRate: string
+  vatApplicable: boolean
 }
 
 export type ProductWrite = {
@@ -24,6 +25,7 @@ export type ProductWrite = {
   selling_price: number
   minimum_stock: number
   vat_rate: number
+  vat_applicable: boolean
 }
 
 export type ReceiptInput = {
@@ -55,7 +57,9 @@ export function buildProductWrite(input: ProductInput): ProductWrite {
   const name = input.name.trim()
   if (!name) throw new Error("Product name is required.")
   if (!input.unit.trim()) throw new Error("Unit of measurement is required.")
-  const vatRate = numberValue(input.vatRate, "VAT rate", 0)
+  const vatRate = input.vatApplicable
+    ? numberValue(input.vatRate, "VAT rate", 0)
+    : 0
   if (vatRate > 100) throw new Error("VAT rate cannot exceed 100%.")
   return {
     name,
@@ -69,6 +73,7 @@ export function buildProductWrite(input: ProductInput): ProductWrite {
     selling_price: numberValue(input.sellingPrice, "Selling price", 0),
     minimum_stock: numberValue(input.minimumStock, "Minimum stock", 0),
     vat_rate: vatRate,
+    vat_applicable: input.vatApplicable,
   }
 }
 
