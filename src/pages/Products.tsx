@@ -1113,7 +1113,8 @@ function Field({
             event.target.value,
           )
         }
-        className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+        disabled={disabled}
+        className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
       />
     </label>
   )
