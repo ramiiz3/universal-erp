@@ -36,7 +36,7 @@ export type CloudCatalogImportPreview = {
 
 type ColumnKey =
   | "name" | "sku" | "barcode" | "category" | "manufacturer" | "description"
-  | "unit" | "purchasePrice" | "sellingPrice" | "minimumStock" | "vatRate"
+  | "unit" | "purchasePrice" | "sellingPrice" | "minimumStock" | "vatRate" | "vatApplicable"
   | "batch" | "expiry" | "stockQuantity" | "lotPurchasePrice" | "lotSellingPrice"
 
 const ALIASES: Record<ColumnKey, string[]> = {
