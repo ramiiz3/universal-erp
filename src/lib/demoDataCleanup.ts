@@ -41,21 +41,21 @@ type BuiltInDemoCustomer = {
 }
 
 const BUILT_IN_PRODUCTS: BuiltInDemoProduct[] = [
-  { id: "PROD-001", name: "Panadol Extra", sku: "PAN-EXT-001", barcode: "8964001234567" },
-  { id: "PROD-002", name: "Vitamin C 1000mg", sku: "VIT-C-001", barcode: "8964001234568" },
-  { id: "PROD-003", name: "Cetaphil Cleanser", sku: "CET-CLN-001", barcode: "8964001234569" },
-  { id: "PROD-004", name: "Nivea Moisturiser", sku: "NIV-MOI-001", barcode: "8964001234570" },
-  { id: "PROD-005", name: "Advil", sku: "ADV-001", barcode: "8964001234571" },
-  { id: "PROD-006", name: "Dove Shampoo", sku: "DOV-SHA-001", barcode: "8964001234572" },
+  { id: "PROD-001", name: "Panadol Extra", sku: "PAN-EXT-001", barcode: "8964001234567", category: "Pain Relief", purchasePrice: 10, sellingPrice: 15, minimumStock: 30, vatRate: 5, unit: "Pack" },
+  { id: "PROD-002", name: "Vitamin C 1000mg", sku: "VIT-C-001", barcode: "8964001234568", category: "Vitamins", purchasePrice: 24, sellingPrice: 32, minimumStock: 25, vatRate: 5, unit: "Bottle" },
+  { id: "PROD-003", name: "Cetaphil Cleanser", sku: "CET-CLN-001", barcode: "8964001234569", category: "Skincare", purchasePrice: 37, sellingPrice: 49, minimumStock: 20, vatRate: 5, unit: "Bottle" },
+  { id: "PROD-004", name: "Nivea Moisturiser", sku: "NIV-MOI-001", barcode: "8964001234570", category: "Skincare", purchasePrice: 21, sellingPrice: 28, minimumStock: 20, vatRate: 5, unit: "Tube" },
+  { id: "PROD-005", name: "Advil", sku: "ADV-001", barcode: "8964001234571", category: "Pain Relief", purchasePrice: 12, sellingPrice: 18, minimumStock: 20, vatRate: 5, unit: "Pack" },
+  { id: "PROD-006", name: "Dove Shampoo", sku: "DOV-SHA-001", barcode: "8964001234572", category: "Hair Care", purchasePrice: 17, sellingPrice: 24, minimumStock: 15, vatRate: 5, unit: "Bottle" },
 ]
 
 const BUILT_IN_LOTS: BuiltInDemoLot[] = [
-  { id: "LOT-001", productId: "PROD-001", batch: "PDX2451", expiry: "2028-05-01", purchasePrice: 10 },
-  { id: "LOT-002", productId: "PROD-002", batch: "VTC7742", expiry: "2027-11-01", purchasePrice: 24 },
-  { id: "LOT-003", productId: "PROD-003", batch: "CET9182", expiry: "2029-02-01", purchasePrice: 37 },
-  { id: "LOT-004", productId: "PROD-004", batch: "NIV5521", expiry: "2028-08-01", purchasePrice: 21 },
-  { id: "LOT-005", productId: "PROD-005", batch: "ADV3348", expiry: "2027-07-01", purchasePrice: 12 },
-  { id: "LOT-006", productId: "PROD-006", batch: "DOV7412", expiry: "2028-03-01", purchasePrice: 17 },
+  { id: "LOT-001", productId: "PROD-001", batch: "PDX2451", expiry: "2028-05-01", quantity: 125, purchasePrice: 10 },
+  { id: "LOT-002", productId: "PROD-002", batch: "VTC7742", expiry: "2027-11-01", quantity: 84, purchasePrice: 24 },
+  { id: "LOT-003", productId: "PROD-003", batch: "CET9182", expiry: "2029-02-01", quantity: 67, purchasePrice: 37 },
+  { id: "LOT-004", productId: "PROD-004", batch: "NIV5521", expiry: "2028-08-01", quantity: 41, purchasePrice: 21 },
+  { id: "LOT-005", productId: "PROD-005", batch: "ADV3348", expiry: "2027-07-01", quantity: 12, purchasePrice: 12 },
+  { id: "LOT-006", productId: "PROD-006", batch: "DOV7412", expiry: "2028-03-01", quantity: 0, purchasePrice: 17 },
 ]
 
 const BUILT_IN_WAREHOUSES: BuiltInDemoWarehouse[] = [
@@ -73,12 +73,12 @@ const BUILT_IN_WAREHOUSES: BuiltInDemoWarehouse[] = [
 ]
 
 const BUILT_IN_CUSTOMERS: BuiltInDemoCustomer[] = [
-  { id: "CUS-001", name: "Ahmed Khan", phone: "+971 50 123 4567", email: "ahmed@example.com" },
-  { id: "CUS-002", name: "Sarah Ali", phone: "+971 55 234 6789", email: "sarah@example.com" },
-  { id: "CUS-003", name: "Mohammed Hassan", phone: "+971 52 345 7890", email: "mohammed@example.com" },
-  { id: "CUS-004", name: "Fatima Rahman", phone: "+971 56 456 8901", email: "fatima@example.com" },
-  { id: "CUS-005", name: "Omar Abdullah", phone: "+971 58 567 9012", email: "omar@example.com" },
-]
+  { id: "CUS-001", name: "Ahmed Khan", phone: "+971 50 123 4567", email: "ahmed@example.com", whatsapp: "+971501234567", status: "Active" },
+  { id: "CUS-002", name: "Sarah Ali", phone: "+971 55 234 6789", email: "sarah@example.com", whatsapp: "+971552346789", status: "Active" },
+  { id: "CUS-003", name: "Mohammed Hassan", phone: "+971 52 345 7890", email: "mohammed@example.com", whatsapp: "+971523457890", status: "Active" },
+  { id: "CUS-004", name: "Fatima Rahman", phone: "+971 56 456 8901", email: "fatima@example.com", whatsapp: "+971564568901", status: "Active" },
+  { id: "CUS-005", name: "Omar Abdullah", phone: "+971 58 567 9012", email: "omar@example.com", whatsapp: "+971585679012", status: "Active" },
+
 
 const PRODUCT_REFERENCE_FIELDS = new Set(["productId", "product_id", "sourceProductId", "source_product_id", "productIds", "product_ids"])
 const LOT_REFERENCE_FIELDS = new Set(["lotId", "lot_id", "sourceLotId", "source_lot_id", "destinationLotId", "destination_lot_id", "inventoryLotId", "inventory_lot_id", "stockLotId", "stock_lot_id", "lotIds", "lot_ids"])
@@ -97,6 +97,16 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
     && record.name === expected.name
     && record.sku === expected.sku
     && record.barcode === expected.barcode
+    && record.category === expected.category
+    && Number(record.purchasePrice) === expected.purchasePrice
+    && Number(record.sellingPrice) === expected.sellingPrice
+    && Number(record.minimumStock) === expected.minimumStock
+    && Number(record.vatRate) === expected.vatRate
+    && record.unit === expected.unit
+    && !record.description
+    && !record.manufacturer
+    && !record.brand
+    && !record.packagings
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
@@ -105,7 +115,13 @@ function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
     && record.productId === expected.productId
     && record.batch === expected.batch
     && record.expiry === expected.expiry
+    && Number(record.quantity) === expected.quantity
     && Number(record.purchasePrice) === expected.purchasePrice
+    && (!record.warehouseId || record.warehouseId === "WH-MAIN")
+    && !record.locationId
+    && record.sellingPrice == null
+    && record.totalPurchaseValue == null
+    && record.totalSellingValue == null
 }
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
@@ -114,6 +130,8 @@ function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean
     && record.name === expected.name
     && record.phone === expected.phone
     && record.email === expected.email
+    && record.whatsapp === expected.whatsapp
+    && record.status === expected.status
 }
 
 function containsReference(value: unknown, fields: ReadonlySet<string>, targetId: string): boolean {
