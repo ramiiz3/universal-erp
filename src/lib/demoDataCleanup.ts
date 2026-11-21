@@ -311,7 +311,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
         && record.phone === expectedWarehouse.phone
         && record.active === expectedWarehouse.active
         && record.createdAt === expectedWarehouse.createdAt
-        && isEmptyValue(record.updatedAt)
+        && (record.updatedAt === undefined || typeof record.updatedAt === "string")
     })
     if (!warehouse) continue
     const hasBusinessReferences = isReferencedOutside(
