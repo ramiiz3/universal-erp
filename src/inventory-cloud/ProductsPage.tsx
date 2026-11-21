@@ -385,7 +385,7 @@ export default function ProductsPage() {
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-              <tr><th className="p-3">Product</th><th className="p-3">SKU / Barcode</th><th className="p-3">Category</th><th className="p-3">Default price</th><th className="p-3">Stock</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr>
+              <tr><th className="p-3">Product</th><th className="p-3">SKU / Barcode</th><th className="p-3">Category</th><th className="p-3">Default price</th><th className="p-3">VAT</th><th className="p-3">Stock</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr>
             </thead>
             <tbody>
               {visibleProducts.map((product) => {
@@ -396,6 +396,7 @@ export default function ProductsPage() {
                     <td className="p-3">{product.sku || "—"}<div className="text-xs text-slate-500">{product.barcode || "—"}</div></td>
                     <td className="p-3">{product.category || "Uncategorized"}</td>
                     <td className="p-3">{Number(product.selling_price).toFixed(2)} {activeCompany?.currency}</td>
+                    <td className="p-3">{product.vat_applicable ? `${Number(product.vat_rate || activeCompany?.taxRate || 0)}%` : "Not applicable"}</td>
                     <td className="p-3">{stock} {product.unit}</td>
                     <td className="p-3">{product.is_active ? "Active" : "Archived"}</td>
                     <td className="p-3">
@@ -407,7 +408,7 @@ export default function ProductsPage() {
                   </tr>
                 )
               })}
-              {!visibleProducts.length && <tr><td colSpan={7} className="p-8 text-center text-sm text-slate-500">No products match these filters.</td></tr>}
+              {!visibleProducts.length && <tr><td colSpan={8} className="p-8 text-center text-sm text-slate-500">No products match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
