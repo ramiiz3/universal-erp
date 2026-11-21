@@ -77,6 +77,11 @@ function loadSettings(): SettingsData {
       ...defaultSettings,
       ...parsed,
       businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || defaultSettings.businessName),
+      tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
+      emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
+      invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
+        ? "Thank you for your business."
+        : (parsed.invoiceFooter || defaultSettings.invoiceFooter),
       payment: {
         ...defaultSettings.payment,
         ...(parsed.payment || {}),
