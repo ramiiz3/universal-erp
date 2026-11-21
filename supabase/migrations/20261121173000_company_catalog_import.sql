@@ -144,7 +144,7 @@ begin
        or v_stock_quantity::text in ('NaN', 'Infinity', '-Infinity')
        or v_lot_purchase_price::text in ('NaN', 'Infinity', '-Infinity')
        or (v_lot_selling_price is not null and v_lot_selling_price::text in ('NaN', 'Infinity', '-Infinity'))
-       or trunc(v_minimum_stock) <> v_minimum_stock then
+       then
       raise exception using errcode = '22023', message = 'Prices, quantities, minimum stock and VAT must be valid non-negative numbers.';
     end if;
     if v_stock_quantity > 0 and p_warehouse_id is null then
