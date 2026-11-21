@@ -170,7 +170,6 @@ export function previewCloudCatalogImport(sheetRows: unknown[][]): CloudCatalogI
       const sellingPrice = numberValue(value(row, "sellingPrice"), "Selling price", rowNumber)
       const minimumStock = numberValue(value(row, "minimumStock"), "Minimum stock", rowNumber)
       const vatRate = numberValue(value(row, "vatRate"), "VAT rate", rowNumber)
-      if (minimumStock > 0 && !Number.isInteger(minimumStock)) throw new Error("Minimum stock must be a whole number.")
       if (vatRate > 100) throw new Error("VAT rate cannot exceed 100%.")
       const batch = String(value(row, "batch") ?? "").trim()
       const expiry = expiryValue(value(row, "expiry"))
