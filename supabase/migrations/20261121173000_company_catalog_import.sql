@@ -43,7 +43,7 @@ returns jsonb
 language plpgsql
 security invoker
 set search_path = ''
-as $
+as $catalog_import$
 declare
   v_user_id uuid := (select auth.uid());
   v_row jsonb;
@@ -298,7 +298,7 @@ begin
 
   return v_result;
 end;
-$$;
+$catalog_import$;
 
 revoke all on function public.import_company_catalog(uuid, uuid, jsonb, uuid)
   from public, anon, authenticated;
