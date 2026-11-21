@@ -37,8 +37,13 @@ const PRODUCT_FIELDS: { key: keyof ProductInput; label: string; type?: string }[
   { key: "minimumStock", label: "Low-stock threshold", type: "number" },
 ]
 
+function getDefaultCompanyVatRate(rate?: number | null) {
+  return Number.isFinite(rate) && Number(rate) > 0 ? Number(rate) : 5
+}
+
 function formFor(product?: CloudProduct, defaultVatRate = 5): ProductInput {
   if (!product) return { ...EMPTY_PRODUCT, vatRate: String(defaultVatRate), vatApplicable: true }
+  const vatApplicable = product.vat_applicable !== false
   return {
     name: product.name,
     sku: product.sku,
@@ -50,8 +55,8 @@ function formFor(product?: CloudProduct, defaultVatRate = 5): ProductInput {
     purchasePrice: String(product.purchase_price),
     sellingPrice: String(product.selling_price),
     minimumStock: String(product.minimum_stock),
-    vatRate: String(product.vat_rate || defaultVatRate),
-    vatApplicable: product.vat_applicable !== false,
+    vatRate: String(vatApplicable ? (product.vat_rate || defaultVatRate) : 0),
+    vatApplicable,
   }
 }
 
@@ -65,7 +70,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<CloudProduct | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [details, setDetails] = useState<CloudProduct | null>(null)
-  const [form, setForm] = useState<ProductInput>({ ...EMPTY_PRODUCT, vatRate: String(activeCompany?.taxRate ?? 5) })
+  const [form, setForm] = useState<ProductInput>({ ...EMPTY_PRODUCT, vatRate: String(getDefaultCompanyVatRate(activeCompany?.taxRate)) })
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState("")
   const [message, setMessage] = useState("")
@@ -150,13 +155,14 @@ export default function ProductsPage() {
         workbook.Sheets[firstSheet],
         { header: 1, raw: false, defval: "", blankrows: false },
       )
-      const preview = previewCloudCatalogImport(rows, activeCompany?.taxRate ?? 5)
+      const preview = previewCloudCatalogImport(rows, getDefaultCompanyVatRate(activeCompany?.taxRate))
       const productsWithoutBarcode = new Map<string, string>()
       const rowsWithBarcodes = preview.rows.map((row) => {
         if (row.barcode) return row
         if (!productsWithoutBarcode.has(row.productKey)) {
-          const suffix = row.sku.trim().length >= 6
-            ? row.sku
+          const normalizedSku = row.sku.replace(/[^a-z0-9]/gi, "")
+          const suffix = normalizedSku.length >= 6
+            ? normalizedSku
             : globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8)
           productsWithoutBarcode.set(row.productKey, buildCompanyProductBarcode({
             companyName: activeCompany?.legalName || activeCompany?.companyName || "",
@@ -256,7 +262,7 @@ export default function ProductsPage() {
 
   function startEdit(product: CloudProduct) {
     setEditing(product)
-    setForm(formFor(product, activeCompany?.taxRate ?? 5))
+    setForm(formFor(product, getDefaultCompanyVatRate(activeCompany?.taxRate)))
     setPageError("")
     setShowForm(true)
   }
