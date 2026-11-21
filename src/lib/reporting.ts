@@ -72,6 +72,21 @@ export type ReportSalesReturn = {
   refundTotal: number
 }
 
+export type ReportSalesRegisterRow = {
+  id: string
+  invoiceNumber: string
+  date: string
+  customerName: string
+  paymentMethod: string
+  status: string
+  lineCount: number
+  grossSales: number
+  discounts: number
+  netSales: number
+  vat: number
+  total: number
+}
+
 export type ReportReturnBreakdownRow = {
   id: string
   returnNumber: string
@@ -162,6 +177,7 @@ export type ReportDataset = {
   generatedAt: string
   range?: ReportDateRange
   summary: SummaryMetrics
+  salesRegister: ReportSalesRegisterRow[]
   productBreakdown: ProductBreakdownRow[]
   categoryBreakdown?: CategoryBreakdownRow[]
   dailyBreakdown: DailyBreakdownRow[]
@@ -418,6 +434,24 @@ export function buildReportDataset({
   if (summary.costsUnavailableCount > 0) {
     summary.costsUnavailableMessage = `${summary.costsUnavailableCount} sale/return transaction(s) have unavailable historical cost data, so gross profit is incomplete.`
   }
+
+  const salesRegister: ReportSalesRegisterRow[] = inRangeSales
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map((sale) => ({
+      id: sale.id,
+      invoiceNumber: sale.invoiceNumber,
+      date: sale.createdAt,
+      customerName: sale.customerName,
+      paymentMethod: sale.paymentMethod,
+      status: sale.status,
+      lineCount: sale.items.length,
+      grossSales: moneyRound(safeNumber(sale.subtotal)),
+      discounts: moneyRound(safeNumber(sale.discount)),
+      netSales: moneyRound(safeNumber(sale.subtotal) - safeNumber(sale.discount)),
+      vat: moneyRound(safeNumber(sale.vat)),
+      total: moneyRound(safeNumber(sale.total)),
+    }))
 
   const productMap = new Map<string, ProductBreakdownRow>()
   const categoryMap = new Map<string, CategoryBreakdownRow>()
@@ -698,6 +732,7 @@ export function buildReportDataset({
       vatCollected: moneyRound(summary.vatCollected),
       refunds: moneyRound(summary.refunds),
     },
+    salesRegister,
     productBreakdown,
     categoryBreakdown,
     dailyBreakdown,
@@ -731,6 +766,35 @@ export function exportReportCsv(report: ReportDataset) {
     ["costsUnavailableCount", report.summary.costsUnavailableCount],
     ["costsUnavailableMessage", report.summary.costsUnavailableMessage],
     ["salesReturnCount", report.returnBreakdown.length],
+  ]
+
+  const salesRegisterRows = [
+    [
+      "invoiceNumber",
+      "date",
+      "customerName",
+      "paymentMethod",
+      "status",
+      "lineCount",
+      "grossSales",
+      "discounts",
+      "netSales",
+      "vat",
+      "total",
+    ],
+    ...report.salesRegister.map((row) => [
+      row.invoiceNumber,
+      row.date,
+      row.customerName,
+      row.paymentMethod,
+      row.status,
+      row.lineCount,
+      row.grossSales,
+      row.discounts,
+      row.netSales,
+      row.vat,
+      row.total,
+    ]),
   ]
 
   const productRows = [
@@ -802,6 +866,9 @@ export function exportReportCsv(report: ReportDataset) {
   const rows = [
     ["SUMMARY"],
     ...summaryRows,
+    [],
+    ["SALES REGISTER"],
+    ...salesRegisterRows,
     [],
     ["PRODUCT BREAKDOWN"],
     ...productRows,
@@ -898,12 +965,14 @@ export async function exportReportWorkbook(report: ReportDataset) {
     { metric: "salesReturnCount", value: report.returnBreakdown.length },
   ])
 
+  const salesRegisterSheet = XLSX.utils.json_to_sheet(report.salesRegister)
   const productSheet = XLSX.utils.json_to_sheet(report.productBreakdown)
   const categorySheet = XLSX.utils.json_to_sheet(categoryBreakdown)
   const dailySheet = XLSX.utils.json_to_sheet(report.dailyBreakdown)
   const returnsSheet = XLSX.utils.json_to_sheet(report.returnBreakdown)
 
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary")
+  XLSX.utils.book_append_sheet(workbook, salesRegisterSheet, "Sales Register")
   XLSX.utils.book_append_sheet(workbook, productSheet, "Product Breakdown")
   XLSX.utils.book_append_sheet(workbook, categorySheet, "Category Breakdown")
   XLSX.utils.book_append_sheet(workbook, dailySheet, "Daily Breakdown")
