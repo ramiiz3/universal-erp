@@ -529,7 +529,7 @@ export default function ProductsPage() {
                     ...current,
                     vatApplicable: event.target.checked,
                     vatRate: event.target.checked
-                      ? (current.vatRate === "0" ? String(activeCompany?.taxRate ?? 5) : current.vatRate)
+                      ? (current.vatRate === "0" ? String(getDefaultCompanyVatRate(activeCompany?.taxRate)) : current.vatRate)
                       : "0",
                   }))} />
                   VAT applicable to this product
