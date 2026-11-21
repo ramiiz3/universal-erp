@@ -129,6 +129,9 @@ export default function ProductsPage() {
     setImportDuplicates([])
     setImportFileName(file.name)
     try {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("Import file must be 10 MB or smaller.")
+      }
       const isCsv = file.name.toLowerCase().endsWith(".csv")
       if (!isCsv && !/\.(xls|xlsx)$/i.test(file.name)) {
         throw new Error("Choose an .xls, .xlsx or .csv file.")
