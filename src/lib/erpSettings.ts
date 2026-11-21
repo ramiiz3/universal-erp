@@ -36,7 +36,7 @@ export const DEFAULT_ERP_SETTINGS: ERPSettings = {
   emirate: "",
   poBox: "",
   address: "",
-  phone: "",
+  phone: "+97156 217 1051",
   email: "",
   website: "",
   currency: "AED",
@@ -68,6 +68,9 @@ export function getERPSettings(): ERPSettings {
       ...DEFAULT_ERP_SETTINGS,
       ...parsed,
       businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || DEFAULT_ERP_SETTINGS.businessName),
+      phone: !String(parsed.phone ?? "").trim() || String(parsed.phone).trim() === "067446775"
+        ? DEFAULT_ERP_SETTINGS.phone
+        : String(parsed.phone).trim(),
       tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
       emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
       invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
