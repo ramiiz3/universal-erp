@@ -76,6 +76,7 @@ function loadSettings(): SettingsData {
     return {
       ...defaultSettings,
       ...parsed,
+      businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || defaultSettings.businessName),
       payment: {
         ...defaultSettings.payment,
         ...(parsed.payment || {}),
