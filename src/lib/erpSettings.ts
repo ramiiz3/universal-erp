@@ -28,12 +28,12 @@ export type ERPSettings = {
 }
 
 export const DEFAULT_ERP_SETTINGS: ERPSettings = {
-  businessName: "Zaki Pharmacy",
-  tagline: "A Family Healthcare Destination",
+  businessName: "Zaki Pharmacy LLC",
+  tagline: "",
   tradeLicenseNumber: "",
   taxNumber: "",
   country: "United Arab Emirates",
-  emirate: "Dubai",
+  emirate: "",
   poBox: "",
   address: "",
   phone: "",
@@ -43,7 +43,7 @@ export const DEFAULT_ERP_SETTINGS: ERPSettings = {
   vatRate: "5",
   invoicePrefix: "INV",
   invoiceFooter:
-    "Thank you for choosing Zaki Pharmacy.",
+    "Thank you for your business.",
   vatRegistered: true,
   payment: {
     cash: true,
