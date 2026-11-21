@@ -44,6 +44,7 @@ function formatDate(value: string) {
 }
 
 export default function Purchasing() {
+  const businessName = getERPSettings().businessName.trim() || "Company"
   const navigate = useNavigate()
 
   const { products, purchases, createPurchase, warehouses, storageLocations, suppliers } = useERP()
@@ -1051,7 +1052,7 @@ export default function Purchasing() {
                 <div className="border-b border-slate-200 bg-[#17221D] px-6 py-5 text-white">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xl font-semibold">Zaki Pharmacy LLC</p>
+                      <p className="text-xl font-semibold">{businessName}</p>
                       <p className="mt-1 text-xs text-white/70">Purchase Record / سجل شراء</p>
                     </div>
 
