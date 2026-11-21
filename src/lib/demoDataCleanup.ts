@@ -265,7 +265,16 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
       if (!record || !matchesOnlyKnownFields(record, [
         "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt", "updatedAt",
       ])) return false
-      return record.id === expectedWarehouse.id && record.code === expectedWarehouse.code
+      return record.id === expectedWarehouse.id
+        && record.name === expectedWarehouse.name
+        && record.code === expectedWarehouse.code
+        && record.type === expectedWarehouse.type
+        && record.address === expectedWarehouse.address
+        && record.manager === expectedWarehouse.manager
+        && record.phone === expectedWarehouse.phone
+        && record.active === expectedWarehouse.active
+        && record.createdAt === expectedWarehouse.createdAt
+        && (record.updatedAt == null || typeof record.updatedAt === "string")
     })
     if (!warehouse) continue
     const hasBusinessReferences = isReferencedOutside(
