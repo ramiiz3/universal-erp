@@ -142,6 +142,29 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.customers).toEqual([])
   })
 
+  it("removes a starter warehouse with only a migrated updatedAt field", () => {
+    const starterWarehouse = {
+      id: "WH-MAIN",
+      name: "Main Warehouse",
+      code: "MAIN",
+      type: "MAIN",
+      address: "",
+      manager: "",
+      phone: "",
+      active: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    }
+    const result = removeBuiltInDemoData({
+      products: [],
+      inventoryLots: [],
+      customers: [],
+      warehouses: [starterWarehouse],
+    })
+    expect(result.removedWarehouses).toBe(1)
+    expect(result.data.warehouses).toEqual([])
+  })
+
   it("preserves records when a product identity has been changed", () => {
     const result = removeBuiltInDemoData({
       products: [{ ...demoProduct, sku: "NEW-SKU" }],
