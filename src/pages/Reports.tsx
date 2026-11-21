@@ -203,7 +203,7 @@ export default function Reports() {
     const end = new Date(currentRange.end)
 
     for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-      const key = startOfDay(cursor).toISOString().slice(0, 10)
+      const key = formatDateInput(startOfDay(cursor))
       const dayRows = report.dailyBreakdown.filter((entry) => entry.date === key)
       const dayValue = dayRows.reduce((sum, row) => sum + row.grossSales, 0)
       const dayNetSales = dayRows.reduce((sum, row) => sum + row.netSales, 0)
