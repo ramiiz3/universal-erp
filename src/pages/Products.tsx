@@ -59,7 +59,7 @@ function getLegacyCompanyBarcodeProfile(): LegacyCompanyBarcodeProfile {
         ? (parsed.businessName.trim() === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : parsed.businessName.trim())
         : "Zaki Pharmacy LLC",
       phone: typeof parsed.phone === "string" ? parsed.phone : "",
-      vatRate: typeof parsed.vatRate === "string" ? parsed.vatRate : "5",
+      vatRate: Number(parsed.vatRate) > 0 ? String(parsed.vatRate) : "5",
     }
   } catch {
     return { businessName: "Zaki Pharmacy LLC", phone: "", vatRate: "5" }
