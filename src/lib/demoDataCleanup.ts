@@ -121,9 +121,10 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
 
   if (!exactIdentity) return false
 
-  // Permit only harmless fields added by later app versions. A company edit
-  // to the commercial identity, manufacturer, packaging or alternate barcode
-  // data makes this record ineligible for automatic cleanup.
+  // Match the original starter record by its stable local ID, SKU, barcode,
+  // name and unit. Business transactions are checked separately below before
+  // anything is removed. Values such as prices and on-hand quantities may have
+  // been changed during demo testing, but remain demo rows without activity.
   const allowedFields = new Set([
     "id", "name", "category", "sku", "barcode", "purchasePrice",
     "sellingPrice", "minimumStock", "vatRate", "unit", "productType",
