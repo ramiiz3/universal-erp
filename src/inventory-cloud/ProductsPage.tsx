@@ -255,7 +255,7 @@ export default function ProductsPage() {
 
   function startCreate() {
     setEditing(null)
-    setForm({ ...EMPTY_PRODUCT, vatRate: String(activeCompany?.taxRate ?? 5), vatApplicable: true })
+    setForm({ ...EMPTY_PRODUCT, vatRate: String(getDefaultCompanyVatRate(activeCompany?.taxRate)), vatApplicable: true })
     setPageError("")
     setShowForm(true)
   }
