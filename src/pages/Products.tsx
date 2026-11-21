@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import BarcodePreview from "../components/BarcodePreview"
-import { buildCompanyProductBarcode } from "../lib/productBarcode"
+import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { ERP_SETTINGS_STORAGE_KEY } from "../lib/erpStorageKeys"
 import { useERP, type Product } from "../context/ERPContext"
 import {
@@ -56,7 +56,7 @@ function getLegacyCompanyBarcodeProfile(): LegacyCompanyBarcodeProfile {
     const parsed = JSON.parse(localStorage.getItem(ERP_SETTINGS_STORAGE_KEY) ?? "{}") as Partial<LegacyCompanyBarcodeProfile>
     return {
       businessName: typeof parsed.businessName === "string" && parsed.businessName.trim()
-        ? parsed.businessName.trim()
+        ? (parsed.businessName.trim() === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : parsed.businessName.trim())
         : "Zaki Pharmacy LLC",
       phone: typeof parsed.phone === "string" ? parsed.phone : "",
       vatRate: typeof parsed.vatRate === "string" ? parsed.vatRate : "5",
@@ -262,10 +262,7 @@ export default function Products() {
     if (form.productType !== "SERVICE" && !barcode) {
       try {
         const profile = getLegacyCompanyBarcodeProfile()
-        barcode = buildCompanyProductBarcode(
-          profile,
-          `PRD${Date.now().toString(36).toUpperCase()}`,
-        )
+        barcode = generateCompanyProductBarcode(profile)
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Save the company mobile number in Settings before generating barcodes.")
         return
@@ -857,10 +854,7 @@ export default function Products() {
                         const profile = getLegacyCompanyBarcodeProfile()
                         setForm((current) => ({
                           ...current,
-                          barcode: buildCompanyProductBarcode(
-                            profile,
-                            `PRD${Date.now().toString(36).toUpperCase()}`,
-                          ),
+                          barcode: generateCompanyProductBarcode(profile),
                         }))
                       } catch (error) {
                         window.alert(error instanceof Error ? error.message : "Save the company mobile number in Settings first.")
