@@ -131,7 +131,7 @@ begin
     v_lot_selling_price := nullif(v_row ->> 'lotSellingPrice', '')::numeric;
 
     if v_name = '' or length(v_name) > 300 or length(v_category) > 160 or length(v_unit) > 100 or length(v_description) > 5000 then
-      raise exception using errcode = '22023', message = 'Product name and unit are required and must be within the allowed length.';
+      raise exception using errcode = '22023', message = 'Product name, category, unit or description is missing or exceeds the allowed length.';
     end if;
     if v_purchase_price < 0 or v_selling_price < 0 or v_minimum_stock < 0
        or v_vat_rate < 0 or v_vat_rate > 100
@@ -246,6 +246,11 @@ begin
         );
         update public.inventory_lots
         set selling_price = coalesce(v_lot_selling_price, selling_price),
+            total_purchase_value = quantity * purchase_price,
+            total_selling_value = case
+              when coalesce(v_lot_selling_price, selling_price) is null then null
+              else quantity * coalesce(v_lot_selling_price, selling_price)
+            end,
             updated_at = now()
         where id = v_lot_id and company_id = p_company_id;
         v_updated_lots := v_updated_lots + 1;
