@@ -145,6 +145,19 @@ describe("cloud transaction validation", () => {
     expect(estimate).toEqual({ subtotal: 9.25, vat: 0.46, total: 9.71, shortProducts: [] })
   })
 
+  it("defaults taxable zero-rate products to five percent when the company rate is unset", () => {
+    const estimate = estimateFefoSale(
+      [{ ...product, vat_applicable: true, vat_rate: 0 }],
+      [lot({ quantity: 2, selling_price: 10 })],
+      [{ productId: product.id, quantity: 2 }],
+      "warehouse-a",
+      0,
+      0,
+      "2026-06-01",
+    )
+    expect(estimate).toEqual({ subtotal: 20, vat: 1, total: 21, shortProducts: [] })
+  })
+
   it("does not apply company VAT to products marked VAT-exempt", () => {
     const estimate = estimateFefoSale(
       [{ ...product, vat_applicable: false, vat_rate: 0 }],
