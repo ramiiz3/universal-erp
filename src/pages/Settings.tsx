@@ -298,7 +298,7 @@ export default function Settings() {
 
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Phone
+                    Mobile Number (used for barcode generation)
                   </label>
 
                   <input
@@ -309,7 +309,7 @@ export default function Settings() {
                         event.target.value,
                       )
                     }
-                    placeholder="+971..."
+                    placeholder="Include country code, e.g. +971 50 123 4567"
                     className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-[#2F9E63] focus:ring-2 focus:ring-[#2F9E63]/15"
                   />
                 </div>
