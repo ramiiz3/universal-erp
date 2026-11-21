@@ -39,7 +39,7 @@ type ColumnKey =
   | "batch" | "expiry" | "stockQuantity" | "lotPurchasePrice" | "lotSellingPrice"
 
 const ALIASES: Record<ColumnKey, string[]> = {
-  name: ["product name", "product", "item name", "item", "medicine", "name", "description of goods"],
+  name: ["product name", "product", "item name", "item description", "item", "medicine", "name", "description of goods"],
   sku: ["sku", "item code", "product code", "stock code", "code"],
   barcode: ["barcode", "bar code", "ean", "upc"],
   category: ["category", "product category", "group"],
