@@ -100,9 +100,17 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+function matchesOnlyKnownFields(record: Record<string, unknown>, allowedFields: readonly string[]): boolean {
+  return Object.keys(record).every((field) => allowedFields.includes(field))
+}
+
 function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
-  return record?.id === expected.id
+  if (!record || !matchesOnlyKnownFields(record, [
+    "id", "name", "category", "sku", "barcode", "purchasePrice",
+    "sellingPrice", "minimumStock", "vatRate", "unit",
+  ])) return false
+  return record.id === expected.id
     && record.name === expected.name
     && record.sku === expected.sku
     && record.barcode === expected.barcode
@@ -120,7 +128,10 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
   const record = asRecord(value)
-  return record?.id === expected.id
+  if (!record || !matchesOnlyKnownFields(record, [
+    "id", "productId", "batch", "expiry", "quantity", "purchasePrice", "warehouseId",
+  ])) return false
+  return record.id === expected.id
     && record.productId === expected.productId
     && record.batch === expected.batch
     && record.expiry === expected.expiry
@@ -135,7 +146,10 @@ function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
   const record = asRecord(value)
-  return record?.id === expected.id
+  if (!record || !matchesOnlyKnownFields(record, [
+    "id", "name", "phone", "email", "whatsapp", "status",
+  ])) return false
+  return record.id === expected.id
     && record.name === expected.name
     && record.phone === expected.phone
     && record.email === expected.email
@@ -246,7 +260,10 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   for (const expectedWarehouse of BUILT_IN_WAREHOUSES) {
     const warehouse = warehouses.find((item) => {
       const record = asRecord(item)
-      return record?.id === expectedWarehouse.id
+      if (!record || !matchesOnlyKnownFields(record, [
+        "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt",
+      ])) return false
+      return record.id === expectedWarehouse.id
         && record.name === expectedWarehouse.name
         && record.code === expectedWarehouse.code
         && record.type === expectedWarehouse.type
