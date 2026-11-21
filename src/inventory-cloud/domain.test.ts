@@ -19,6 +19,7 @@ const productInput: ProductInput = {
   sellingPrice: "4.5",
   minimumStock: "3.25",
   vatRate: "5",
+  vatApplicable: true,
 }
 
 describe("company inventory workflows", () => {
@@ -35,6 +36,7 @@ describe("company inventory workflows", () => {
       selling_price: 4.5,
       minimum_stock: 3.25,
       vat_rate: 5,
+      vat_applicable: true,
     })
     expect(buildProductWrite({ ...productInput, manufacturer: "" }).manufacturer).toBeNull()
   })
@@ -43,6 +45,17 @@ describe("company inventory workflows", () => {
     expect(() => buildProductWrite({ ...productInput, name: " " })).toThrow("Product name")
     expect(() => buildProductWrite({ ...productInput, vatRate: "101" })).toThrow("cannot exceed")
     expect(() => buildProductWrite({ ...productInput, purchasePrice: "-1" })).toThrow("Purchase cost")
+  })
+
+  it("stores non-applicable products at zero VAT and preserves their exemption flag", () => {
+    expect(buildProductWrite({ ...productInput, vatApplicable: false })).toMatchObject({
+      vat_rate: 0,
+      vat_applicable: false,
+    })
+    expect(buildProductWrite({ ...productInput, vatApplicable: true, vatRate: "5" })).toMatchObject({
+      vat_rate: 5,
+      vat_applicable: true,
+    })
   })
 
   it("preserves fractional lot quantities, lot-specific pricing, and expiry", () => {
