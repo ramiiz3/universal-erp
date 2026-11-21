@@ -69,6 +69,7 @@ export default function Reports() {
     products,
     inventoryLots,
     sales,
+    salesReturns,
   } = useERP()
   const { theme } = useTheme()
   const darkMode = theme === "dark"
@@ -100,6 +101,7 @@ export default function Reports() {
     () =>
       buildReportDataset({
         sales,
+        salesReturns,
         products,
         period: currentRange,
         title: "UniversalERP Report",
@@ -117,7 +119,7 @@ export default function Reports() {
   )
 
   const totalDiscount = salesInRange.reduce((sum, sale) => sum + sale.discount, 0)
-  const totalVat = salesInRange.reduce((sum, sale) => sum + sale.vat, 0)
+  const totalVat = report.summary.vatCollected
   const totalUnitsSold = salesInRange.reduce(
     (sum, sale) => sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
     0,
@@ -154,11 +156,13 @@ export default function Reports() {
     const cash = salesInRange.filter((sale) => sale.paymentMethod === "Cash").reduce((sum, sale) => sum + sale.total, 0)
     const card = salesInRange.filter((sale) => sale.paymentMethod === "Card").reduce((sum, sale) => sum + sale.total, 0)
     const credit = salesInRange.filter((sale) => sale.paymentMethod === "Credit").reduce((sum, sale) => sum + sale.total, 0)
+    const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
 
     return [
       { name: "Cash", value: Number(cash.toFixed(2)) },
       { name: "Card", value: Number(card.toFixed(2)) },
       { name: "Credit", value: Number(credit.toFixed(2)) },
+      { name: "Bank Transfer", value: Number(bankTransfer.toFixed(2)) },
     ].filter((entry) => entry.value > 0)
   }, [salesInRange])
 
@@ -534,6 +538,58 @@ export default function Reports() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Sales Returns</h2>
+              <p className="mt-1 text-xs text-slate-500">Refunds recorded during the selected reporting period.</p>
+            </div>
+            <p className="text-sm font-semibold text-slate-700">
+              {report.returnBreakdown.length} item line{report.returnBreakdown.length === 1 ? "" : "s"} · {money(report.summary.refunds)} refunded
+            </p>
+          </div>
+
+          {report.returnBreakdown.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3 font-medium">Return</th>
+                    <th className="px-3 py-3 font-medium">Invoice</th>
+                    <th className="px-3 py-3 font-medium">Date</th>
+                    <th className="px-3 py-3 font-medium">Customer</th>
+                    <th className="px-3 py-3 font-medium">Product</th>
+                    <th className="px-3 py-3 text-right font-medium">Qty</th>
+                    <th className="px-3 py-3 font-medium">Method</th>
+                    <th className="px-3 py-3 text-right font-medium">Refund</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.returnBreakdown.slice(0, 10).map((row) => (
+                    <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-3 font-medium text-slate-800">{row.returnNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.invoiceNumber}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.date}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.customerName}</td>
+                      <td className="px-3 py-3 text-slate-700">{row.productName}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{row.quantity}</td>
+                      <td className="px-3 py-3 text-slate-600">{row.refundMethod}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-900">{money(row.refundAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {report.returnBreakdown.length > 10 && (
+                <p className="pt-3 text-xs text-slate-500">Showing the latest 10 item lines. The CSV and Excel exports include all matching returns.</p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              No sales returns recorded in this period.
+            </div>
+          )}
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
