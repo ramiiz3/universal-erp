@@ -14,15 +14,17 @@ import {
 } from "lucide-react"
 import { useERP, type Sale } from "../context/ERPContext"
 import { takePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
+import { getERPSettings } from "../lib/erpSettings"
 
-const PHARMACY_NAME = "Zaki Pharmacy LLC"
-const PHARMACY_ADDRESS = "Shop No. 3, Nuaimeya 1, Ajman"
-const PHARMACY_PHONE = "Tel: 067446775"
-const PHARMACY_TRN = "TRN: 105461855600003"
-const PHARMACY_ARABIC_NAME = "صيدلية زاكي ذ.م.م"
-const PHARMACY_ARABIC_ADDRESS = "محل رقم 3، النعيمية 1، عجمان"
-const PHARMACY_ARABIC_PHONE = "هاتف: 067446775"
-const PHARMACY_ARABIC_TRN = "الرقم الضريبي: 105461855600003"
+const invoiceProfile = getERPSettings()
+const PHARMACY_NAME = invoiceProfile.businessName.trim() || "Company"
+const PHARMACY_ADDRESS = invoiceProfile.address.trim()
+const PHARMACY_PHONE = invoiceProfile.phone.trim() ? "Tel: " + invoiceProfile.phone.trim() : ""
+const PHARMACY_TRN = invoiceProfile.taxNumber.trim() ? "TRN: " + invoiceProfile.taxNumber.trim() : ""
+const PHARMACY_ARABIC_NAME = ""
+const PHARMACY_ARABIC_ADDRESS = ""
+const PHARMACY_ARABIC_PHONE = ""
+const PHARMACY_ARABIC_TRN = ""
 
 type PrintFormat = "80mm" | "58mm"
 
