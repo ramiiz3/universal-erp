@@ -271,7 +271,7 @@ export default function AI() {
                     "Show today's sales.",
                     "Which products are low in stock?",
                     "Which products are expiring soon?",
-                    "Find Ahmed Khan's invoices.",
+                    "Find a customer's invoices.",
                   ].map(
                     (suggestion) => (
                       <button
