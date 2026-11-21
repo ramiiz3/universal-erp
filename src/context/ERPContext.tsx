@@ -520,23 +520,7 @@ function readLegacySuppliers(): Supplier[] {
   }
 }
 
-const DEFAULT_WAREHOUSE_ID = "WH-MAIN"
-
-const initialWarehouses: Warehouse[] = [
-  {
-    id: DEFAULT_WAREHOUSE_ID,
-    code: "MAIN",
-    name: "Main Warehouse",
-    type: "MAIN",
-    address: "",
-    manager: "",
-    phone: "",
-    active: true,
-    createdAt: "2026-01-01T00:00:00.000Z",
-  },
-]
-
-function createDemoStore(): StoredData {
+function createEmptyStore(): StoredData {
   return {
     chartOfAccounts: DEFAULT_CHART_OF_ACCOUNTS.map((account) => ({ ...account })),
     journalEntries: [],
@@ -553,7 +537,7 @@ function createDemoStore(): StoredData {
     customers: initialCustomers,
     sales: initialSales,
     purchases: initialPurchases,
-    warehouses: initialWarehouses,
+    warehouses: [],
     storageLocations: [],
     stockTransfers: [],
     stockCounts: [],
@@ -582,10 +566,7 @@ function migrateWarehouseData(data: StoredData): StoredData {
   )
   const purchases = linkPurchasesToSuppliers(data.purchases || [], suppliers)
 
-  const warehouses =
-    Array.isArray(raw.warehouses) && raw.warehouses.length
-      ? raw.warehouses
-      : initialWarehouses
+  const warehouses = Array.isArray(raw.warehouses) ? raw.warehouses : []
 
   const activeMain =
     warehouses.find((item) => item.active && item.type === "MAIN") ??
@@ -621,7 +602,7 @@ function migrateWarehouseData(data: StoredData): StoredData {
       warehouseId:
         lot.warehouseId && validIds.has(lot.warehouseId)
           ? lot.warehouseId
-          : activeMain.id,
+          : activeMain?.id,
     })),
   }
 }
@@ -631,7 +612,7 @@ function loadStoredData() {
     const result = readStoredData<StoredData>(
       localStorage,
       ERP_STORAGE_KEY,
-      createDemoStore,
+      createEmptyStore,
     )
     if (result.error) return result
 
@@ -667,7 +648,7 @@ function loadStoredData() {
     }
   } catch (error) {
     return {
-      data: createDemoStore(),
+      data: createEmptyStore(),
       raw: null,
       error: `Browser storage could not be accessed. ${error instanceof Error ? error.message : String(error)}`,
     }
