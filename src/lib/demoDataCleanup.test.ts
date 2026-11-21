@@ -105,6 +105,24 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.inventoryLots).toEqual([companyLot])
   })
 
+  it("preserves bundled lots referenced as destination lots in transfers", () => {
+    const result = removeBuiltInDemoData({
+      products: [demoProduct],
+      inventoryLots: [demoLot],
+      customers: [],
+      stockTransfers: [{
+        items: [{
+          productId: "PROD-005",
+          sourceLotId: "another-lot",
+          receipts: [{ destinationLotId: "LOT-005", quantity: 2 }],
+        }],
+      }],
+    })
+
+    expect(result.removedProducts).toBe(0)
+    expect(result.removedInventoryLots).toBe(0)
+  })
+
   it("is idempotent", () => {
     const first = removeBuiltInDemoData({
       products: [demoProduct],
