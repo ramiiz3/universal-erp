@@ -42,6 +42,51 @@ export type ReportSale = {
   items: ReportSaleItem[]
 }
 
+export type ReportSalesReturnItem = {
+  id: string
+  saleItemId: string
+  productId: string
+  productName: string
+  quantity: number
+  baseQuantity: number
+  subtotalAmount: number
+  discountAmount: number
+  vatAmount: number
+  refundAmount: number
+  allocations: { lotId: string; batch: string; expiry: string; quantity: number }[]
+}
+
+export type ReportSalesReturn = {
+  id: string
+  returnNumber: string
+  saleId: string
+  invoiceNumber: string
+  customerName: string
+  createdAt: string
+  refundMethod: string
+  reason: string
+  items: ReportSalesReturnItem[]
+  subtotalAmount: number
+  discountAmount: number
+  vatAmount: number
+  refundTotal: number
+}
+
+export type ReportReturnBreakdownRow = {
+  id: string
+  returnNumber: string
+  invoiceNumber: string
+  saleId: string
+  date: string
+  customerName: string
+  productName: string
+  quantity: number
+  refundMethod: string
+  reason: string
+  refundAmount: number
+  vatAmount: number
+}
+
 export type ReportDateRange = {
   mode: ReportRangeMode
   start: Date
@@ -111,6 +156,7 @@ export type ReportDataset = {
   productBreakdown: ProductBreakdownRow[]
   categoryBreakdown?: CategoryBreakdownRow[]
   dailyBreakdown: DailyBreakdownRow[]
+  returnBreakdown: ReportReturnBreakdownRow[]
 }
 
 const moneyRound = (value: number) => Number(Number.isFinite(value) ? value.toFixed(2) : 0)
@@ -235,18 +281,56 @@ const getSalesInRange = (sales: ReportSale[], range: ReportDateRange) =>
     return timestamp >= range.start.getTime() && timestamp <= range.end.getTime()
   })
 
+const getReturnsInRange = (returns: ReportSalesReturn[], range: ReportDateRange) =>
+  returns.filter((record) => {
+    const timestamp = new Date(record.createdAt).getTime()
+    return Number.isFinite(timestamp) &&
+      timestamp >= range.start.getTime() &&
+      timestamp <= range.end.getTime()
+  })
+
+function getReliableReturnedCost(
+  sale: ReportSale | undefined,
+  returnItem: ReportSalesReturnItem,
+): number | null {
+  if (!sale || sale.items.some((item) => !item.costSnapshot || !Number.isFinite(item.costSnapshot.cogs))) {
+    return null
+  }
+
+  const saleItem = sale.items.find((item) => item.id === returnItem.saleItemId)
+  if (!saleItem?.costSnapshot) return null
+
+  let total = 0
+  for (const allocation of returnItem.allocations) {
+    const lotCost = saleItem.costSnapshot.lotAllocations.find((item) => item.lotId === allocation.lotId)
+    const unitCost = lotCost?.unitCost ?? saleItem.costSnapshot.unitCost
+    if (!Number.isFinite(unitCost) || unitCost < 0 || !Number.isFinite(allocation.quantity) || allocation.quantity < 0) {
+      return null
+    }
+    total += allocation.quantity * unitCost
+  }
+  return moneyRound(total)
+}
+
 export function buildReportDataset({
   sales,
+  salesReturns = [],
   period,
   title = "ERP Report",
   products,
 }: {
   sales: ReportSale[]
+  salesReturns?: ReportSalesReturn[]
   period: ReportDateRange
   title?: string
   products?: { id: string; category?: string }[]
 }): ReportDataset {
+  // Pending invoices are credit sales, not drafts. They remain part of sales revenue.
+  // Fully refunded invoices also remain in their original sale period; the refund is
+  // recognised separately on the date the return/refund was recorded.
   const inRangeSales = getSalesInRange(sales, period)
+  const inRangeReturns = getReturnsInRange(salesReturns, period)
+  const salesById = new Map(sales.map((sale) => [sale.id, sale]))
 
   const summary: SummaryMetrics = {
     grossSales: 0,
@@ -298,11 +382,32 @@ export function buildReportDataset({
     }
   }
 
-  summary.grossProfit = grossProfitFromReliableData
+  let returnedGrossProfitAdjustment = 0
+  for (const record of inRangeReturns) {
+    summary.refunds += safeNumber(record.refundTotal)
+    summary.netSales -= Math.max(0, safeNumber(record.subtotalAmount) - safeNumber(record.discountAmount))
+    summary.vatCollected -= safeNumber(record.vatAmount)
+
+    const originalSale = salesById.get(record.saleId)
+    for (const returnItem of record.items) {
+      const netRefund = Math.max(0, safeNumber(returnItem.subtotalAmount) - safeNumber(returnItem.discountAmount))
+      const returnedCost = getReliableReturnedCost(originalSale, returnItem)
+      if (returnedCost === null) {
+        summary.costsUnavailableCount += 1
+        continue
+      }
+
+      // Returned stock re-enters inventory, reversing its original historical COGS.
+      summary.cogs -= returnedCost
+      returnedGrossProfitAdjustment += netRefund - returnedCost
+    }
+  }
+
+  summary.grossProfit = grossProfitFromReliableData - returnedGrossProfitAdjustment
   summary.grossMargin = summary.netSales > 0 ? (summary.grossProfit / summary.netSales) * 100 : 0
 
   if (summary.costsUnavailableCount > 0) {
-    summary.costsUnavailableMessage = `${summary.costsUnavailableCount} transaction(s) have unavailable historical cost data, so gross profit is incomplete.`
+    summary.costsUnavailableMessage = `${summary.costsUnavailableCount} sale/return transaction(s) have unavailable historical cost data, so gross profit is incomplete.`
   }
 
   const productMap = new Map<string, ProductBreakdownRow>()
@@ -446,6 +551,23 @@ export function buildReportDataset({
       }
     })
 
+  const returnBreakdown: ReportReturnBreakdownRow[] = inRangeReturns
+    .flatMap((record) => record.items.map((item) => ({
+      id: item.id,
+      returnNumber: record.returnNumber,
+      invoiceNumber: record.invoiceNumber,
+      saleId: record.saleId,
+      date: formatDisplayDate(new Date(record.createdAt)),
+      customerName: record.customerName,
+      productName: item.productName,
+      quantity: item.quantity,
+      refundMethod: record.refundMethod,
+      reason: record.reason,
+      refundAmount: moneyRound(item.refundAmount),
+      vatAmount: moneyRound(item.vatAmount),
+    })))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
   return {
     title,
     periodLabel: period.label,
@@ -465,6 +587,7 @@ export function buildReportDataset({
     productBreakdown,
     categoryBreakdown,
     dailyBreakdown,
+    returnBreakdown,
   }
 }
 
@@ -493,6 +616,7 @@ export function exportReportCsv(report: ReportDataset) {
     ["transactionCount", report.summary.transactionCount],
     ["costsUnavailableCount", report.summary.costsUnavailableCount],
     ["costsUnavailableMessage", report.summary.costsUnavailableMessage],
+    ["salesReturnCount", report.returnBreakdown.length],
   ]
 
   const productRows = [
@@ -584,6 +708,34 @@ export function exportReportCsv(report: ReportDataset) {
       row.vatCollected,
       row.transactions,
     ]),
+    [],
+    ["SALES RETURNS"],
+    [
+      "returnNumber",
+      "invoiceNumber",
+      "saleId",
+      "date",
+      "customerName",
+      "productName",
+      "quantity",
+      "refundMethod",
+      "reason",
+      "refundAmount",
+      "vatAmount",
+    ],
+    ...report.returnBreakdown.map((row) => [
+      row.returnNumber,
+      row.invoiceNumber,
+      row.saleId,
+      row.date,
+      row.customerName,
+      row.productName,
+      row.quantity,
+      row.refundMethod,
+      row.reason,
+      row.refundAmount,
+      row.vatAmount,
+    ]),
   ]
 
   return rows
@@ -616,11 +768,13 @@ export async function exportReportWorkbook(report: ReportDataset) {
   const productSheet = XLSX.utils.json_to_sheet(report.productBreakdown)
   const categorySheet = XLSX.utils.json_to_sheet(categoryBreakdown)
   const dailySheet = XLSX.utils.json_to_sheet(report.dailyBreakdown)
+  const returnsSheet = XLSX.utils.json_to_sheet(report.returnBreakdown)
 
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary")
   XLSX.utils.book_append_sheet(workbook, productSheet, "Product Breakdown")
   XLSX.utils.book_append_sheet(workbook, categorySheet, "Category Breakdown")
   XLSX.utils.book_append_sheet(workbook, dailySheet, "Daily Breakdown")
+  XLSX.utils.book_append_sheet(workbook, returnsSheet, "Sales Returns")
 
   return workbook
 }
