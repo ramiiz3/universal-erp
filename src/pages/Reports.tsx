@@ -15,9 +15,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -155,7 +152,7 @@ export default function Reports() {
   const paymentData = useMemo(() => {
     const cash = salesInRange.filter((sale) => sale.paymentMethod === "Cash").reduce((sum, sale) => sum + sale.total, 0)
     const card = salesInRange.filter((sale) => sale.paymentMethod === "Card").reduce((sum, sale) => sum + sale.total, 0)
-      const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
+    const bankTransfer = salesInRange.filter((sale) => sale.paymentMethod === "Bank Transfer").reduce((sum, sale) => sum + sale.total, 0)
     const customerCollections = customerPayments
       .filter((payment) => {
         const timestamp = new Date(payment.createdAt).getTime()
@@ -182,7 +179,7 @@ export default function Reports() {
       { name: "Card", value: Number((card + (customerCollections.Card ?? 0) - (refundsByMethod.Card ?? 0)).toFixed(2)) },
       { name: "Bank Transfer", value: Number((bankTransfer + (customerCollections["Bank Transfer"] ?? 0) - (refundsByMethod["Bank Transfer"] ?? 0)).toFixed(2)) },
     ].filter((entry) => entry.value !== 0)
-  }, [salesInRange])
+  }, [salesInRange, customerPayments, salesReturns, currentRange])
 
   const topProducts = useMemo(
     () =>
@@ -416,8 +413,8 @@ export default function Reports() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div>
-              <h2 className="font-semibold text-slate-900">Payment Mix</h2>
-              <p className="mt-1 text-xs text-slate-500">Sales by payment method.</p>
+              <h2 className="font-semibold text-slate-900">Payment Collections</h2>
+              <p className="mt-1 text-xs text-slate-500">Cash, card and bank receipts less refunds recorded in this period.</p>
             </div>
 
             <div className="mt-4 h-[250px]">
