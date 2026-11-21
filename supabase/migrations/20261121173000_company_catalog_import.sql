@@ -6,7 +6,7 @@ begin;
 
 create schema if not exists private;
 
-create table if not exists private.company_catalog_import_requests (
+create table if not exists public.company_catalog_import_requests (
   company_id uuid not null references public.companies(id) on delete cascade,
   request_id uuid not null,
   created_by uuid not null references auth.users(id) on delete cascade,
@@ -15,8 +15,23 @@ create table if not exists private.company_catalog_import_requests (
   primary key (company_id, request_id)
 );
 
-alter table private.company_catalog_import_requests enable row level security;
-revoke all on private.company_catalog_import_requests from public, anon, authenticated;
+alter table public.company_catalog_import_requests enable row level security;
+revoke all on public.company_catalog_import_requests from public, anon;
+grant select, insert on public.company_catalog_import_requests to authenticated;
+
+create policy "Inventory managers can read their company import receipts"
+on public.company_catalog_import_requests for select to authenticated
+using (
+  created_by = (select auth.uid())
+  and private.has_company_permission(company_id, 'manage_inventory')
+);
+
+create policy "Inventory managers can register company imports"
+on public.company_catalog_import_requests for insert to authenticated
+with check (
+  created_by = (select auth.uid())
+  and private.has_company_permission(company_id, 'manage_inventory')
+);
 
 create or replace function public.import_company_catalog(
   p_company_id uuid,
@@ -26,9 +41,9 @@ create or replace function public.import_company_catalog(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = ''
-as $$
+as $
 declare
   v_user_id uuid := (select auth.uid());
   v_row jsonb;
@@ -63,7 +78,7 @@ declare
   v_imported_rows integer := 0;
   v_opening_stock_quantity numeric := 0;
   v_result jsonb;
-  v_cached private.company_catalog_import_requests%rowtype;
+  v_cached public.company_catalog_import_requests%rowtype;
 begin
   if v_user_id is null then
     raise exception using errcode = '28000', message = 'Authentication required.';
@@ -85,7 +100,7 @@ begin
   -- when a browser retries the same request after a network interruption.
   perform pg_advisory_xact_lock(hashtextextended(p_company_id::text || ':catalog-import', 0));
   select * into v_cached
-  from private.company_catalog_import_requests
+  from public.company_catalog_import_requests
   where company_id = p_company_id and request_id = p_request_id;
   if found then
     if v_cached.created_by <> v_user_id then
@@ -232,8 +247,7 @@ begin
         and lots.expiry is not distinct from v_expiry
         and lots.purchase_price = v_lot_purchase_price
       order by lots.created_at, lots.id
-      limit 1
-      for update;
+      limit 1;
 
       if v_lot_id is not null then
         perform public.record_inventory_movement(
@@ -244,15 +258,6 @@ begin
           'Opening stock imported',
           jsonb_build_object('source', 'company_catalog_import', 'request_id', p_request_id)
         );
-        update public.inventory_lots
-        set selling_price = coalesce(v_lot_selling_price, selling_price),
-            total_purchase_value = quantity * purchase_price,
-            total_selling_value = case
-              when coalesce(v_lot_selling_price, selling_price) is null then null
-              else quantity * coalesce(v_lot_selling_price, selling_price)
-            end,
-            updated_at = now()
-        where id = v_lot_id and company_id = p_company_id;
         v_updated_lots := v_updated_lots + 1;
       else
         v_lot_id := public.create_inventory_lot_with_opening_stock(
@@ -285,17 +290,10 @@ begin
     'openingStockQuantity', v_opening_stock_quantity
   );
 
-  insert into private.company_catalog_import_requests (
+  insert into public.company_catalog_import_requests (
     company_id, request_id, created_by, result
   ) values (
     p_company_id, p_request_id, v_user_id, v_result
-  );
-
-  insert into public.audit_logs (
-    company_id, branch_id, actor_id, action, entity_type, details
-  ) values (
-    p_company_id, v_warehouse_branch_id, v_user_id, 'catalog.imported',
-    'product_catalog', jsonb_build_object('request_id', p_request_id, 'result', v_result)
   );
 
   return v_result;
@@ -307,6 +305,8 @@ revoke all on function public.import_company_catalog(uuid, uuid, jsonb, uuid)
 grant execute on function public.import_company_catalog(uuid, uuid, jsonb, uuid)
   to authenticated;
 
+comment on table public.company_catalog_import_requests is
+  'Idempotency receipts for company catalog imports. Rows are restricted to the importing company manager.';
 comment on function public.import_company_catalog(uuid, uuid, jsonb, uuid) is
   'Imports company-scoped products and optional opening inventory in one transaction. Matches products by barcode/SKU/name-category, never overwrites existing master data, and records opening movements. Idempotent by company and request UUID.';
 
