@@ -3,6 +3,7 @@ export type DemoCleanupResult<T extends Record<string, unknown>> = {
   removedProducts: number
   removedInventoryLots: number
   removedCustomers: number
+  removedWarehouses: number
 }
 
 type BuiltInDemoProduct = {
@@ -18,6 +19,18 @@ type BuiltInDemoLot = {
   batch: string
   expiry: string
   purchasePrice: number
+}
+
+type BuiltInDemoWarehouse = {
+  id: string
+  name: string
+  code: string
+  type: string
+  address: string
+  manager: string
+  phone: string
+  active: boolean
+  createdAt: string
 }
 
 type BuiltInDemoCustomer = {
@@ -45,6 +58,20 @@ const BUILT_IN_LOTS: BuiltInDemoLot[] = [
   { id: "LOT-006", productId: "PROD-006", batch: "DOV7412", expiry: "2028-03-01", purchasePrice: 17 },
 ]
 
+const BUILT_IN_WAREHOUSES: BuiltInDemoWarehouse[] = [
+  {
+    id: "WH-MAIN",
+    name: "Main Warehouse",
+    code: "MAIN",
+    type: "MAIN",
+    address: "",
+    manager: "",
+    phone: "",
+    active: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+]
+
 const BUILT_IN_CUSTOMERS: BuiltInDemoCustomer[] = [
   { id: "CUS-001", name: "Ahmed Khan", phone: "+971 50 123 4567", email: "ahmed@example.com" },
   { id: "CUS-002", name: "Sarah Ali", phone: "+971 55 234 6789", email: "sarah@example.com" },
@@ -56,6 +83,7 @@ const BUILT_IN_CUSTOMERS: BuiltInDemoCustomer[] = [
 const PRODUCT_REFERENCE_FIELDS = new Set(["productId", "product_id", "sourceProductId", "source_product_id", "productIds", "product_ids"])
 const LOT_REFERENCE_FIELDS = new Set(["lotId", "lot_id", "sourceLotId", "source_lot_id", "destinationLotId", "destination_lot_id", "inventoryLotId", "inventory_lot_id", "stockLotId", "stock_lot_id", "lotIds", "lot_ids"])
 const CUSTOMER_REFERENCE_FIELDS = new Set(["customerId", "customer_id", "customerIds", "customer_ids"])
+const WAREHOUSE_REFERENCE_FIELDS = new Set(["warehouseId", "warehouse_id", "sourceWarehouseId", "source_warehouse_id", "destinationWarehouseId", "destination_warehouse_id", "warehouseIds", "warehouse_ids"])
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -186,10 +214,41 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     customers: customers.filter((item) => !removableCustomerIds.has(String(asRecord(item)?.id ?? ""))),
   } as T
 
+  const warehouses = Array.isArray(source.warehouses) ? source.warehouses : []
+  const removableWarehouseIds = new Set<string>()
+  for (const expectedWarehouse of BUILT_IN_WAREHOUSES) {
+    const warehouse = warehouses.find((item) => {
+      const record = asRecord(item)
+      return record?.id === expectedWarehouse.id
+        && record.name === expectedWarehouse.name
+        && record.code === expectedWarehouse.code
+        && record.type === expectedWarehouse.type
+        && record.address === expectedWarehouse.address
+        && record.manager === expectedWarehouse.manager
+        && record.phone === expectedWarehouse.phone
+        && record.active === expectedWarehouse.active
+        && record.createdAt === expectedWarehouse.createdAt
+    })
+    if (!warehouse) continue
+    const hasBusinessReferences = isReferencedOutside(
+      next,
+      WAREHOUSE_REFERENCE_FIELDS,
+      expectedWarehouse.id,
+      new Set(["warehouses"]),
+    )
+    if (!hasBusinessReferences) removableWarehouseIds.add(expectedWarehouse.id)
+  }
+
+  const finalData = {
+    ...next,
+    warehouses: warehouses.filter((item) => !removableWarehouseIds.has(String(asRecord(item)?.id ?? ""))),
+  } as T
+
   return {
-    data: next,
+    data: finalData,
     removedProducts: removableProductIds.size,
     removedInventoryLots: removableLotIds.size,
     removedCustomers: removableCustomerIds.size,
+    removedWarehouses: removableWarehouseIds.size,
   }
 }
