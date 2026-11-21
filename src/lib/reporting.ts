@@ -328,7 +328,8 @@ function getReliableReturnedCost(
   let total = 0
   for (const allocation of returnItem.allocations) {
     const lotCost = saleItem.costSnapshot.lotAllocations.find((item) => item.lotId === allocation.lotId)
-    const unitCost = lotCost?.unitCost ?? saleItem.costSnapshot.unitCost
+    if (!lotCost) return null
+    const unitCost = lotCost.unitCost
     if (!Number.isFinite(unitCost) || unitCost < 0 || !Number.isFinite(allocation.quantity) || allocation.quantity < 0) {
       return null
     }
@@ -414,11 +415,12 @@ export function buildReportDataset({
     summary.vatCollected -= safeNumber(record.vatAmount)
 
     const originalSale = salesById.get(record.saleId)
+    let returnCostUnavailable = false
     for (const returnItem of record.items) {
       const netRefund = Math.max(0, safeNumber(returnItem.subtotalAmount) - safeNumber(returnItem.discountAmount))
       const returnedCost = getReliableReturnedCost(originalSale, returnItem)
       if (returnedCost === null) {
-        summary.costsUnavailableCount += 1
+        returnCostUnavailable = true
         continue
       }
 
@@ -426,6 +428,7 @@ export function buildReportDataset({
       summary.cogs -= returnedCost
       returnedGrossProfitAdjustment += netRefund - returnedCost
     }
+    if (returnCostUnavailable) summary.costsUnavailableCount += 1
   }
 
   summary.grossProfit = grossProfitFromReliableData - returnedGrossProfitAdjustment
