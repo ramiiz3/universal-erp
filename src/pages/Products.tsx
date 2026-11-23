@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react"
 import BarcodePreview from "../components/BarcodePreview"
 import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { getERPSettings } from "../lib/erpSettings"
+import { isBuiltInDemoProduct } from "../lib/demoDataCleanup"
 import { useERP, type Product } from "../context/ERPContext"
 import {
   getERPUnits,
@@ -86,6 +87,11 @@ export default function Products() {
 
   const [selectedProduct, setSelectedProduct] =
     useState<Product | null>(null)
+
+  const [barcodeProduct, setBarcodeProduct] =
+    useState<Product | null>(null)
+  const [barcodeValue, setBarcodeValue] = useState("")
+  const [barcodeError, setBarcodeError] = useState("")
 
   const [form, setForm] = useState(emptyForm)
 
@@ -335,32 +341,68 @@ export default function Products() {
   }
 
   function handleDelete(product: Product) {
-    const stock = getProductStock(
-      product.id,
-    )
+    const stock = getProductStock(product.id)
+    const isDemoProduct = isBuiltInDemoProduct(product)
 
-    if (stock > 0) {
+    if (stock > 0 && !isDemoProduct) {
       window.alert(
-        `${product.name} still has ${stock} units in inventory. Stock must be cleared or adjusted before the product can be deleted.`,
+        `${product.name} still has ${stock} units in inventory. Adjust or write off the stock before deleting this product.`,
       )
       return
     }
 
-    if (
-      !window.confirm(
-        `Delete ${product.name}?`,
-      )
-    ) {
+    const confirmation = isDemoProduct && stock > 0
+      ? `Delete the unused demo product "${product.name}" and its ${stock} units of bundled demo stock? This is allowed only when no sales, purchases or transfers reference it.`
+      : `Delete ${product.name}?`
+
+    if (!window.confirm(confirmation)) return
+
+    try {
+      deleteProduct(product.id)
+      if (selectedProduct?.id === product.id) setSelectedProduct(null)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function openBarcodeGenerator(product: Product) {
+    setBarcodeProduct(product)
+    setBarcodeValue(product.barcode || "")
+    setBarcodeError("")
+  }
+
+  function generateBarcodeForProduct() {
+    if (!barcodeProduct) return
+    try {
+      setBarcodeValue(generateCompanyProductBarcode(getLegacyCompanyBarcodeProfile()))
+      setBarcodeError("")
+    } catch (error) {
+      setBarcodeError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function saveGeneratedBarcode() {
+    if (!barcodeProduct) return
+    const nextBarcode = barcodeValue.trim()
+    if (!nextBarcode) {
+      setBarcodeError("Generate a barcode or enter a value first.")
       return
     }
 
-    deleteProduct(product.id)
-
-    if (
-      selectedProduct?.id === product.id
-    ) {
-      setSelectedProduct(null)
+    const duplicate = products.some((product) =>
+      product.id !== barcodeProduct.id &&
+      [product.barcode, ...(product.alternateBarcodes ?? [])]
+        .some((value) => value.trim().toLowerCase() === nextBarcode.toLowerCase()),
+    )
+    if (duplicate) {
+      setBarcodeError("This barcode is already assigned to another product.")
+      return
     }
+
+    const { id, ...productData } = barcodeProduct
+    updateProduct(id, { ...productData, barcode: nextBarcode })
+    setBarcodeProduct({ ...barcodeProduct, barcode: nextBarcode })
+    setBarcodeError("")
   }
 
   return (
@@ -372,7 +414,7 @@ export default function Products() {
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Manage the product master, pricing, barcode and stock rules.
+            Manage products and stock. Use the barcode icon in each product row to view or generate its barcode.
           </p>
         </div>
 
@@ -570,11 +612,21 @@ export default function Products() {
                         <div className="flex justify-end gap-1">
                           <button
                             type="button"
+                            onClick={() => openBarcodeGenerator(product)}
+                            title="View or generate barcode"
+                            aria-label={`View or generate barcode for ${product.name}`}
+                            className="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/30"
+                          >
+                            <BarcodeIcon size={17} />
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() =>
-                              setSelectedProduct(
-                                product,
-                              )
+                              setSelectedProduct(product)
                             }
+                            title="View product details"
+                            aria-label={`View ${product.name}`}
                             className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                           >
                             <Eye
@@ -631,6 +683,71 @@ export default function Products() {
           </table>
         </div>
       </div>
+
+      {barcodeProduct && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold">Product Barcode</h3>
+                <p className="text-sm text-slate-500">{barcodeProduct.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBarcodeProduct(null)}
+                className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                aria-label="Close barcode generator"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <label className="block text-sm font-medium">
+                Barcode value
+                <input
+                  value={barcodeValue}
+                  onChange={(event) => setBarcodeValue(event.target.value)}
+                  className="mt-1 h-11 w-full rounded-xl border bg-white px-3 font-mono text-sm dark:border-slate-700 dark:bg-slate-950"
+                  placeholder="Generate a barcode or enter one"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={generateBarcodeForProduct}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
+              >
+                <BarcodeIcon size={16} /> Generate Code 128
+              </button>
+              <BarcodePreview value={barcodeValue} />
+              {barcodeError && (
+                <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                  {barcodeError}
+                </p>
+              )}
+              <p className="text-xs text-slate-500">
+                Internal format: company name · company mobile · unique product code
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t p-4 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setBarcodeProduct(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={saveGeneratedBarcode}
+                disabled={!barcodeValue.trim() || barcodeValue.trim() === (barcodeProduct.barcode || "")}
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Save Barcode
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
