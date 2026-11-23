@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
 import {
   AlertTriangle,
-  Banknote,
   CalendarCheck,
   CheckCircle2,
   Download,
@@ -54,6 +53,7 @@ export default function DailyRegister() {
 
   const [openingCash, setOpeningCash] = useState("")
   const [openedBy, setOpenedBy] = useState("")
+  const [closedBy, setClosedBy] = useState("")
   const [countedCash, setCountedCash] = useState("")
   const [closingNotes, setClosingNotes] = useState("")
   const [movementKind, setMovementKind] = useState<"IN" | "OUT">("OUT")
@@ -109,7 +109,7 @@ export default function DailyRegister() {
     if (!window.confirm("Close this day's register? New POS sales and cash transactions will be blocked until the next day's register is opened.")) return
 
     try {
-      const closed = closeDailyRegister({ countedCash: cashValue, notes: closingNotes })
+      const closed = closeDailyRegister({ countedCash: cashValue, closedBy, notes: closingNotes })
       try {
         const backup = validateERPBackup(createERPBackup(localStorage))
         downloadJsonFile(`zaky-pharmacy-backup-${closed.businessDate}.json`, backup)
@@ -119,6 +119,7 @@ export default function DailyRegister() {
       }
       setCountedCash("")
       setClosingNotes("")
+      setClosedBy("")
     } catch (closeError) {
       setError(closeError instanceof Error ? closeError.message : "Could not close the day.")
     }
@@ -204,7 +205,7 @@ export default function DailyRegister() {
             {summary && (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <h2 className="mb-2 font-semibold">Today's sales</h2>
+                  <h2 className="mb-2 font-semibold">Sales · {openRegister.businessDate}</h2>
                   <Metric label={`Sales transactions (${summary.salesCount})`} value={summary.sales.total} strong />
                   <Metric label="Cash sales" value={summary.sales.cash} />
                   <Metric label="Card sales" value={summary.sales.card} />
@@ -273,10 +274,13 @@ export default function DailyRegister() {
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm dark:border-amber-900 dark:bg-slate-900">
-                <div className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-amber-600" /><h2 className="font-semibold">Close today's register</h2></div>
+                <div className="flex items-center gap-2"><LockKeyhole className="h-5 w-5 text-amber-600" /><h2 className="font-semibold">Close register · {openRegister.businessDate}</h2></div>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Count all physical cash in the drawer and enter the actual amount. The ERP compares it with expected cash and records any difference.</p>
                 <label className="mt-4 block text-sm font-medium">Actual cash counted (AED)
                   <input type="number" min="0" step="0.01" value={countedCash} onChange={(event) => setCountedCash(event.target.value)} placeholder="Count the drawer and enter the amount" className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                </label>
+                <label className="mt-3 block text-sm font-medium">Closed by (optional)
+                  <input value={closedBy} onChange={(event) => setClosedBy(event.target.value)} placeholder="Cashier name" className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 </label>
                 <label className="mt-3 block text-sm font-medium">Closing notes (optional)
                   <textarea value={closingNotes} onChange={(event) => setClosingNotes(event.target.value)} rows={3} placeholder="Explain any shortage, surplus or other note" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
