@@ -14,7 +14,8 @@
     "test:security": "npm run test:db:security && npm run test:storage:security",
     "api:start": "node server/index.mjs",
     "api:test": "node --test server/tests/*.test.mjs",
-    "db:migrate": "node server/migrate.mjs"
+    "db:migrate": "node server/migrate.mjs",
+    "db:test:isolation": "node scripts/test-multi-tenant-isolation.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
