@@ -1,3 +1,6 @@
+import { ERP_UNITS_STORAGE_KEY } from "./erpUnits"
+import { PRODUCT_CATEGORIES_STORAGE_KEY } from "./productCategories"
+
 export const ERP_STORAGE_KEY = "universal-erp-demo-store"
 export const ERP_SETTINGS_STORAGE_KEY = "universal-erp-settings"
 export const ERP_SUPPLIERS_STORAGE_KEY = "universal-erp-suppliers"
@@ -11,4 +14,6 @@ export const ERP_BACKUP_STORAGE_KEYS = [
   ERP_SUPPLIERS_STORAGE_KEY,
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
+  ERP_UNITS_STORAGE_KEY,
+  PRODUCT_CATEGORIES_STORAGE_KEY,
 ] as const
