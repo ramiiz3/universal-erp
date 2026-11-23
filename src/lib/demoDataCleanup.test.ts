@@ -102,6 +102,7 @@ describe("built-in demo data cleanup", () => {
       alternateBarcodes: [],
       returnEligible: false,
       status: "ACTIVE",
+      packagings: [{ id: "DEMO-PACK", name: "Demo Pack", conversionFactor: 1, unit: "Pack", barcode: "" }],
       createdAt: "2026-02-01T00:00:00.000Z",
       updatedAt: "2026-02-01T00:00:00.000Z",
       vatApplicable: true,
@@ -131,12 +132,20 @@ describe("built-in demo data cleanup", () => {
       inventoryLots: [migratedLot],
       customers: [migratedCustomer],
       sales: [],
-      inventoryMovements: [],
+      inventoryMovements: [{
+        id: "MOV-DEMO-1",
+        type: "OPENING",
+        productId: "PROD-005",
+        lotId: "LOT-005",
+        quantity: 12,
+        reason: "Demo opening stock",
+      }],
     })
 
     expect(result.removedProducts).toBe(1)
     expect(result.removedInventoryLots).toBe(1)
     expect(result.removedCustomers).toBe(1)
+    expect(result.removedInventoryMovements).toBe(1)
     expect(result.data.products).toEqual([])
     expect(result.data.inventoryLots).toEqual([])
     expect(result.data.customers).toEqual([])
@@ -179,7 +188,7 @@ describe("built-in demo data cleanup", () => {
   })
 
   it("removes demo records after harmless name, price, status or stock edits", () => {
-    const changedProduct = { ...demoProduct, name: "Updated demo item", sellingPrice: 19 }
+    const changedProduct = { ...demoProduct, name: "Updated demo item", sellingPrice: 19, barcode: "NEW-DEMO-BARCODE" }
     const changedLot = { ...demoLot, quantity: 13, expiry: "2028-01-01" }
     const changedCustomer = { ...demoCustomer, name: "Updated demo customer", status: "Inactive" as const }
     const result = removeBuiltInDemoData({
@@ -196,6 +205,7 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.products).toEqual([])
     expect(result.data.inventoryLots).toEqual([])
     expect(result.data.customers).toEqual([])
+    expect(result.data.inventoryMovements).toEqual([])
   })
 
   it("preserves demo-looking records referenced by business activity", () => {
