@@ -208,23 +208,180 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.inventoryMovements).toEqual([])
   })
 
-  it("preserves demo-looking records referenced by business activity", () => {
+  it("removes a sale composed only of bundled demo products and its dependent receipts", () => {
+    const demoSale = {
+      id: "SALE-DEMO-1",
+      invoiceNumber: "INV-DEMO-1",
+      customerId: "CUS-001",
+      customerName: "Ahmed Khan",
+      createdAt: "2026-11-20T12:00:00.000Z",
+      paymentMethod: "Cash",
+      subtotal: 15,
+      discount: 0,
+      vat: 0.75,
+      total: 15.75,
+      status: "Paid",
+      items: [{
+        id: "SALE-LINE-1",
+        productId: "PROD-005",
+        name: "Advil",
+        quantity: 1,
+        batchAllocations: [{
+          lotId: "LOT-005",
+          batch: "ADV3348",
+          expiry: "2027-07-01",
+          quantity: 1,
+        }],
+      }],
+    }
+    const demoReturn = {
+      id: "RETURN-DEMO-1",
+      saleId: "SALE-DEMO-1",
+      items: [{ productId: "PROD-005", quantity: 1 }],
+    }
+    const demoPayment = {
+      id: "PAYMENT-DEMO-1",
+      customerId: "CUS-001",
+      amount: 15.75,
+      allocations: [{ saleId: "SALE-DEMO-1", amount: 15.75 }],
+    }
     const result = removeBuiltInDemoData({
       products: [demoProduct],
       inventoryLots: [demoLot],
       customers: [demoCustomer],
-      sales: [{
-        items: [{ productId: "PROD-005", lotId: "LOT-005" }],
-        customerId: "CUS-001",
+      sales: [demoSale],
+      salesReturns: [demoReturn],
+      customerPayments: [demoPayment],
+      inventoryMovements: [{
+        id: "MOV-DEMO-1",
+        productId: "PROD-005",
+        lotId: "LOT-005",
+        type: "SALE",
+        quantity: -1,
       }],
     })
 
+    expect(result.removedSales).toBe(1)
+    expect(result.removedSalesReturns).toBe(1)
+    expect(result.removedCustomerPayments).toBe(1)
+    expect(result.removedProducts).toBe(1)
+    expect(result.removedInventoryLots).toBe(1)
+    expect(result.removedCustomers).toBe(1)
+    expect(result.data.sales).toEqual([])
+    expect(result.data.salesReturns).toEqual([])
+    expect(result.data.customerPayments).toEqual([])
+    expect(result.data.products).toEqual([])
+    expect(result.data.inventoryLots).toEqual([])
+    expect(result.data.customers).toEqual([])
+  })
+
+  it("keeps the genuine part of a customer receipt when its other allocation is a demo sale", () => {
+    const demoSale = {
+      id: "SALE-DEMO-PARTIAL",
+      items: [{
+        productId: "PROD-005",
+        batchAllocations: [{ lotId: "LOT-005" }],
+      }],
+    }
+    const payment = {
+      id: "PAYMENT-MIXED",
+      customerId: "CUSTOMER-REAL",
+      amount: 30,
+      allocations: [
+        { saleId: "SALE-DEMO-PARTIAL", amount: 10 },
+        { saleId: "SALE-GENUINE", amount: 20 },
+      ],
+    }
+    const result = removeBuiltInDemoData({
+      products: [demoProduct],
+      inventoryLots: [demoLot],
+      customers: [],
+      sales: [demoSale],
+      customerPayments: [payment],
+    })
+
+    expect(result.removedSales).toBe(1)
+    expect(result.removedCustomerPayments).toBe(0)
+    expect(result.data.customerPayments).toEqual([{
+      ...payment,
+      amount: 20,
+      allocations: [{ saleId: "SALE-GENUINE", amount: 20 }],
+    }])
+  })
+
+  it("preserves demo products when a sale includes a genuine product", () => {
+    const genuineProduct = {
+      ...demoProduct,
+      id: "COMPANY-PRODUCT-1",
+      name: "Company Medicine",
+      sku: "COMPANY-SKU-1",
+      barcode: "COMPANY-123",
+    }
+    const mixedSale = {
+      id: "SALE-MIXED-1",
+      items: [
+        { productId: "PROD-005", batchAllocations: [{ lotId: "LOT-005" }] },
+        { productId: "COMPANY-PRODUCT-1", batchAllocations: [] },
+      ],
+    }
+    const result = removeBuiltInDemoData({
+      products: [demoProduct, genuineProduct],
+      inventoryLots: [demoLot],
+      customers: [],
+      sales: [mixedSale],
+    })
+
+    expect(result.removedSales).toBe(0)
     expect(result.removedProducts).toBe(0)
-    expect(result.removedInventoryLots).toBe(0)
-    expect(result.removedCustomers).toBe(0)
+    expect(result.data.sales).toHaveLength(1)
+    expect(result.data.products).toHaveLength(2)
+  })
+
+  it("preserves genuine sales and other demo products when deleting one selected demo product", () => {
+    const otherDemoProduct = {
+      ...demoProduct,
+      id: "PROD-006",
+      name: "Dove Shampoo",
+      sku: "DOV-SHA-001",
+      barcode: "8964001234572",
+    }
+    const selectedSale = {
+      id: "SALE-SELECTED-DEMO",
+      items: [{ productId: "PROD-005", batchAllocations: [{ lotId: "LOT-005" }] }],
+    }
+    const otherSale = {
+      id: "SALE-OTHER-DEMO",
+      items: [{ productId: "PROD-006", batchAllocations: [{ lotId: "LOT-006" }] }],
+    }
+    const result = removeBuiltInDemoData({
+      products: [demoProduct, otherDemoProduct],
+      inventoryLots: [demoLot, { ...demoLot, id: "LOT-006", productId: "PROD-006", batch: "DOV7412" }],
+      customers: [],
+      sales: [selectedSale, otherSale],
+    }, { onlyProductId: "PROD-005" })
+
+    expect(result.removedSales).toBe(1)
+    expect(result.data.sales).toEqual([otherSale])
+    expect(result.removedProducts).toBe(1)
+    expect(result.data.products).toEqual([otherDemoProduct])
+  })
+
+  it("preserves demo-looking records referenced by stock transfers or purchases", () => {
+    const result = removeBuiltInDemoData({
+      products: [demoProduct],
+      inventoryLots: [demoLot],
+      customers: [],
+      sales: [],
+      purchases: [{
+        id: "PURCHASE-1",
+        items: [{ productId: "PROD-005" }],
+      }],
+    })
+
+    expect(result.removedSales).toBe(0)
+    expect(result.removedProducts).toBe(0)
     expect(result.data.products).toHaveLength(1)
     expect(result.data.inventoryLots).toHaveLength(1)
-    expect(result.data.customers).toHaveLength(1)
   })
 
   it("keeps a starter product that now has a company lot but removes its unused bundled lot", () => {
