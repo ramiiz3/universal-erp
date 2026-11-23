@@ -132,7 +132,7 @@ export function calculateDailyRegisterSummary(input: {
 
   for (const invoice of input.supplierInvoices) {
     for (const payment of invoice.payments ?? []) {
-      if (!occurredOn(payment.paymentDate || payment.createdAt, input.businessDate)) continue
+      if (!occurredOn(payment.createdAt || payment.paymentDate, input.businessDate)) continue
       addAmount(supplierPayments, payment.method, payment.amount)
     }
   }
