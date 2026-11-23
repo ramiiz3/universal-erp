@@ -931,14 +931,13 @@ export default function POS() {
                 type="button"
                 onClick={handleCompleteSale}
                 disabled={
-                  !registerOpenToday ||
                   cart.length === 0 ||
                   saleAllocationPreview.unallocated.length > 0
                 }
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <CheckCircle2 className="h-5 w-5" />
-                {registerOpenToday ? "Complete Sale" : "Open Daily Register First"}
+                Complete Sale
               </button>
             </div>
           </aside>
