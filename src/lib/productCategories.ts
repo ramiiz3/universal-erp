@@ -106,6 +106,7 @@ export function getProductCategories(
       PRODUCT_CATEGORIES_STORAGE_KEY,
       JSON.stringify(categories),
     )
+    dispatchERPCloudSync()
   }
 
   return categories
