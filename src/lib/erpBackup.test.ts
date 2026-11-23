@@ -16,6 +16,8 @@ import {
   validateERPBackup,
 } from "./erpBackup"
 import { readStoredData } from "./erpStorage"
+import { ERP_UNITS_STORAGE_KEY } from "./erpUnits"
+import { PRODUCT_CATEGORIES_STORAGE_KEY } from "./productCategories"
 
 class MemoryStorage {
   private readonly values = new Map<string, string>()
@@ -77,6 +79,8 @@ function populatedStorage() {
   storage.setItem(ERP_SETTINGS_STORAGE_KEY, JSON.stringify({ businessName: "Example" }))
   storage.setItem(ERP_OWNER_PROFILE_STORAGE_KEY, JSON.stringify({ name: "Owner" }))
   storage.setItem(ERP_READ_NOTIFICATIONS_STORAGE_KEY, JSON.stringify(["low-stock-P-1"]))
+  storage.setItem(ERP_UNITS_STORAGE_KEY, JSON.stringify([{ id: "unit-pack", name: "Pack", symbol: "pack", active: true }]))
+  storage.setItem(PRODUCT_CATEGORIES_STORAGE_KEY, JSON.stringify([{ id: "cat-medicine", name: "Medicine", subcategories: ["OTC"], active: true }]))
   storage.setItem("universal-erp-theme", "dark")
   storage.setItem("custom-erp-extra", "opaque raw value")
   storage.setItem("sb-localhost-auth-token", JSON.stringify({
@@ -95,7 +99,7 @@ describe("full ERP backup and restore", () => {
     const backup = createERPBackup(storage, new Date("2026-11-03T10:00:00.000Z"), "1.2.3")
 
     expect(backup.format).toBe(ERP_BACKUP_FORMAT)
-    expect(backup.schemaVersion).toBe(2)
+    expect(backup.schemaVersion).toBe(3)
     expect(backup.createdAt).toBe("2026-11-03T10:00:00.000Z")
     expect(backup.appVersion).toBe("1.2.3")
     expect(backup.entries.map((entry) => entry.key)).toEqual([...ERP_BACKUP_STORAGE_KEYS].sort())
@@ -114,7 +118,7 @@ describe("full ERP backup and restore", () => {
       expect(serialized).not.toContain(excludedValue)
     }
     expect(backup.counts).toEqual({
-      storageKeys: 5,
+      storageKeys: 7,
       products: 1,
       inventoryLots: 1,
       stockMovements: 1,
@@ -126,6 +130,8 @@ describe("full ERP backup and restore", () => {
       settingsRecords: 1,
       ownerProfileRecords: 1,
       readNotificationRecords: 1,
+      productCategoryRecords: 1,
+      unitDefinitionRecords: 1,
       otherStorageKeys: 0,
     })
   })
@@ -180,6 +186,42 @@ describe("full ERP backup and restore", () => {
     expect(current.getItem("unrelated-browser-setting")).toBe("keep me")
   })
 
+  it("preserves custom categories and units when restoring a schema v2 backup", () => {
+    const source = populatedStorage()
+    const currentV3 = createERPBackup(source)
+    const legacyEntries = currentV3.entries.filter(
+      (entry) => entry.key !== ERP_UNITS_STORAGE_KEY &&
+        entry.key !== PRODUCT_CATEGORIES_STORAGE_KEY,
+    )
+    const legacyCounts = { ...currentV3.counts }
+    delete (legacyCounts as Partial<typeof legacyCounts>).productCategoryRecords
+    delete (legacyCounts as Partial<typeof legacyCounts>).unitDefinitionRecords
+    const legacyV2 = {
+      ...currentV3,
+      schemaVersion: 2,
+      entries: legacyEntries,
+      counts: legacyCounts,
+    }
+
+    const compatible = parseERPBackup(JSON.stringify(legacyV2))
+    expect(compatible.schemaVersion).toBe(3)
+    expect(compatible.legacyMissingKeys).toEqual(
+      expect.arrayContaining([ERP_UNITS_STORAGE_KEY, PRODUCT_CATEGORIES_STORAGE_KEY]),
+    )
+    expect(getBackupDataWarnings(compatible).join(" ")).toContain("will be preserved")
+
+    const current = populatedStorage()
+    const unitsBefore = current.getItem(ERP_UNITS_STORAGE_KEY)
+    const categoriesBefore = current.getItem(PRODUCT_CATEGORIES_STORAGE_KEY)
+    const preview = previewERPBackupRestore(current, compatible)
+    expect(preview.removedKeys).not.toContain(ERP_UNITS_STORAGE_KEY)
+    expect(preview.removedKeys).not.toContain(PRODUCT_CATEGORIES_STORAGE_KEY)
+
+    restoreERPBackup(current, compatible, true)
+    expect(current.getItem(ERP_UNITS_STORAGE_KEY)).toBe(unitsBefore)
+    expect(current.getItem(PRODUCT_CATEGORIES_STORAGE_KEY)).toBe(categoriesBefore)
+  })
+
   it("normalizes legacy v1 backups and reports excluded browser keys before restore", () => {
     const oldStorage = populatedStorage()
     const allOldEntries = Array.from({ length: oldStorage.length }, (_, index) => {
@@ -215,8 +257,16 @@ describe("full ERP backup and restore", () => {
     }
 
     const compatible = parseERPBackup(JSON.stringify(legacy))
-    expect(compatible.schemaVersion).toBe(2)
-    expect(compatible.entries.map((entry) => entry.key)).toEqual([...ERP_BACKUP_STORAGE_KEYS].sort())
+    expect(compatible.schemaVersion).toBe(3)
+    expect(compatible.entries.map((entry) => entry.key)).toEqual([
+      ERP_STORAGE_KEY,
+      ERP_SETTINGS_STORAGE_KEY,
+      ERP_SUPPLIERS_STORAGE_KEY,
+      ERP_OWNER_PROFILE_STORAGE_KEY,
+    ].sort())
+    expect(compatible.legacyMissingKeys).toContain(ERP_READ_NOTIFICATIONS_STORAGE_KEY)
+    expect(compatible.legacyMissingKeys).toContain(ERP_UNITS_STORAGE_KEY)
+    expect(compatible.legacyMissingKeys).toContain(PRODUCT_CATEGORIES_STORAGE_KEY)
     expect(compatible.legacyExcludedKeys).toContain("sb-localhost-auth-token")
     expect(getBackupDataWarnings(compatible).join(" ")).toContain(
       "non-ERP browser keys that were not imported",
@@ -224,9 +274,15 @@ describe("full ERP backup and restore", () => {
 
     const current = populatedStorage()
     const authSession = current.getItem("sb-localhost-auth-token")
+    const unitsBefore = current.getItem(ERP_UNITS_STORAGE_KEY)
+    const categoriesBefore = current.getItem(PRODUCT_CATEGORIES_STORAGE_KEY)
+    const notificationsBefore = current.getItem(ERP_READ_NOTIFICATIONS_STORAGE_KEY)
     restoreERPBackup(current, compatible, true)
     expect(current.getItem("sb-localhost-auth-token")).toBe(authSession)
     expect(current.getItem("unrelated-browser-setting")).toBe("keep me")
+    expect(current.getItem(ERP_UNITS_STORAGE_KEY)).toBe(unitsBefore)
+    expect(current.getItem(PRODUCT_CATEGORIES_STORAGE_KEY)).toBe(categoriesBefore)
+    expect(current.getItem(ERP_READ_NOTIFICATIONS_STORAGE_KEY)).toBe(notificationsBefore)
   })
 
   it("rolls back the original storage snapshot when a restore write fails", () => {
