@@ -77,7 +77,7 @@ noted.
   invitation for an existing or future Supabase user. It returns a one-time
   seven-day link for the owner to share; email delivery is not configured yet.
 - POST /api/v1/invitations/accept — the invited user accepts the link after
-  signing in with the same email address.
+  signing in with the same confirmed email address.
 - GET /api/v1/companies/:companyId/records/:entityType — list company records
   (maximum 500 per request).
 - GET /api/v1/companies/:companyId/records/:entityType/:recordId — read a
