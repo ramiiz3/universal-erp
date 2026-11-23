@@ -199,7 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activateCompany = useCallback(async (companyId: string) => {
     const requestId = ++membershipRequestRef.current
-    dispatchCompany({ type: "begin" })
+    const preserveActive = companyStateRef.current.activeCompany?.companyId === companyId
+    dispatchCompany({ type: "begin", preserveActive })
     if (!companyId || !supabase || !session?.user) {
       dispatchCompany({
         type: "deny",
