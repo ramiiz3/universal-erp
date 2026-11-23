@@ -102,6 +102,7 @@ describe("built-in demo data cleanup", () => {
       alternateBarcodes: [],
       returnEligible: false,
       status: "ACTIVE",
+      packagings: [{ id: "DEMO-PACK", name: "Demo Pack", conversionFactor: 1, unit: "Pack", barcode: "" }],
       createdAt: "2026-02-01T00:00:00.000Z",
       updatedAt: "2026-02-01T00:00:00.000Z",
       vatApplicable: true,
@@ -131,12 +132,20 @@ describe("built-in demo data cleanup", () => {
       inventoryLots: [migratedLot],
       customers: [migratedCustomer],
       sales: [],
-      inventoryMovements: [],
+      inventoryMovements: [{
+        id: "MOV-DEMO-1",
+        type: "OPENING",
+        productId: "PROD-005",
+        lotId: "LOT-005",
+        quantity: 12,
+        reason: "Demo opening stock",
+      }],
     })
 
     expect(result.removedProducts).toBe(1)
     expect(result.removedInventoryLots).toBe(1)
     expect(result.removedCustomers).toBe(1)
+    expect(result.removedInventoryMovements).toBe(1)
     expect(result.data.products).toEqual([])
     expect(result.data.inventoryLots).toEqual([])
     expect(result.data.customers).toEqual([])
@@ -178,8 +187,8 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.inventoryLots).toHaveLength(1)
   })
 
-  it("removes demo records after harmless name, price, status or stock edits", () => {
-    const changedProduct = { ...demoProduct, name: "Updated demo item", sellingPrice: 19 }
+  it("removes demo records after name, price, stock or barcode edits", () => {
+    const changedProduct = { ...demoProduct, name: "Updated demo item", sellingPrice: 19, barcode: "NEW-DEMO-BARCODE" }
     const changedLot = { ...demoLot, quantity: 13, expiry: "2028-01-01" }
     const changedCustomer = { ...demoCustomer, name: "Updated demo customer", status: "Inactive" as const }
     const result = removeBuiltInDemoData({
@@ -196,6 +205,7 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.products).toEqual([])
     expect(result.data.inventoryLots).toEqual([])
     expect(result.data.customers).toEqual([])
+    expect(result.data.inventoryMovements).toEqual([])
   })
 
   it("preserves demo-looking records referenced by business activity", () => {
@@ -255,6 +265,51 @@ describe("built-in demo data cleanup", () => {
 
     expect(result.removedProducts).toBe(0)
     expect(result.removedInventoryLots).toBe(0)
+  })
+
+  it("deletes only the selected demo product and preserves company warehouses and customers", () => {
+    const otherProduct = {
+      ...demoProduct,
+      id: "REAL-PRODUCT-1",
+      name: "Company Product",
+      sku: "REAL-SKU-1",
+      barcode: "REAL-BARCODE-1",
+    }
+    const warehouse = {
+      id: "WH-COMPANY",
+      name: "Company Warehouse",
+      code: "COMPANY",
+      type: "MAIN",
+      address: "Company address",
+      manager: "Manager",
+      phone: "971500000000",
+      active: true,
+      createdAt: "2026-11-01T00:00:00.000Z",
+    }
+    const result = removeBuiltInDemoData({
+      products: [demoProduct, otherProduct],
+      inventoryLots: [demoLot],
+      customers: [demoCustomer],
+      warehouses: [warehouse],
+      sales: [],
+      purchases: [],
+      inventoryMovements: [{
+        id: "MOV-DEMO-1",
+        type: "OPENING",
+        productId: "PROD-005",
+        lotId: "LOT-005",
+        quantity: 12,
+      }],
+    }, { onlyProductId: "PROD-005" })
+
+    expect(result.removedProducts).toBe(1)
+    expect(result.removedInventoryLots).toBe(1)
+    expect(result.removedCustomers).toBe(0)
+    expect(result.removedWarehouses).toBe(0)
+    expect(result.data.products).toEqual([otherProduct])
+    expect(result.data.customers).toEqual([demoCustomer])
+    expect(result.data.warehouses).toEqual([warehouse])
+    expect(result.data.inventoryMovements).toEqual([])
   })
 
   it("is idempotent", () => {

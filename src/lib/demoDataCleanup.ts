@@ -4,6 +4,7 @@ export type DemoCleanupResult<T extends Record<string, unknown>> = {
   removedInventoryLots: number
   removedCustomers: number
   removedWarehouses: number
+  removedInventoryMovements: number
 }
 
 type BuiltInDemoProduct = {
@@ -108,47 +109,25 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
   if (!record) return false
 
-  const allowedFields = new Set([
-    "id", "name", "category", "sku", "barcode", "purchasePrice",
-    "sellingPrice", "minimumStock", "vatRate", "unit", "productType",
-    "subcategory", "brand", "manufacturer", "alternateBarcodes",
-    "description", "returnEligible", "status", "createdAt", "updatedAt",
-    "vatApplicable",
-  ])
-  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
-
-  // Seed identity is the stable legacy ID plus SKU and barcode. Editable
-  // descriptions, names, prices, VAT and stock levels do not turn a demo seed
-  // into a genuine company product. Business references are checked separately.
+  // Product master fields evolve (for example, packagings were added later).
+  // The original legacy ID and SKU remain the stable demo fingerprint.
   return record.id === expected.id
     && record.sku === expected.sku
-    && record.barcode === expected.barcode
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
   const record = asRecord(value)
   if (!record) return false
-  const allowedFields = new Set([
-    "id", "productId", "batch", "expiry", "quantity", "purchasePrice",
-    "warehouseId", "locationId", "sellingPrice", "totalPurchaseValue",
-    "totalSellingValue", "createdAt", "updatedAt",
-  ])
-  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
 
+  // Quantity, expiry, warehouse and batch details can change during demo
+  // testing; the bundled lot ID and product link are the stable fingerprint.
   return record.id === expected.id
     && record.productId === expected.productId
-    && record.batch === expected.batch
 }
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
   const record = asRecord(value)
   if (!record) return false
-  const allowedFields = new Set([
-    "id", "name", "phone", "email", "whatsapp", "status",
-    "createdAt", "updatedAt", "address", "notes", "customerType",
-    "taxRegistrationNumber", "creditLimit", "loyaltyPoints", "isActive",
-  ])
-  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
 
   return record.id === expected.id
     && record.email === expected.email
@@ -187,8 +166,13 @@ function isReferencedOutside(
  * original demo store. Records involved in business activity or changed from
  * their bundled identity are retained.
  */
+export function isBuiltInDemoProduct(value: unknown): boolean {
+  return BUILT_IN_PRODUCTS.some((expected) => matchesProduct(value, expected))
+}
+
 export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   source: T,
+  options: { onlyProductId?: string } = {},
 ): DemoCleanupResult<T> {
   const products = Array.isArray(source.products) ? source.products : []
   const lots = Array.isArray(source.inventoryLots) ? source.inventoryLots : []
@@ -197,6 +181,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   const removableProductIds = new Set<string>()
 
   for (const expectedProduct of BUILT_IN_PRODUCTS) {
+    if (options.onlyProductId && expectedProduct.id !== options.onlyProductId) continue
     const product = products.find((item) => matchesProduct(item, expectedProduct))
     if (!product) continue
 
@@ -205,7 +190,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
       source,
       PRODUCT_REFERENCE_FIELDS,
       productId,
-      new Set(["products", "inventoryLots"]),
+      new Set(["products", "inventoryLots", "inventoryMovements"]),
     )
     if (hasBusinessReferences) continue
 
@@ -221,7 +206,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
         source,
         LOT_REFERENCE_FIELDS,
         lotId,
-        new Set(["inventoryLots"]),
+        new Set(["inventoryLots", "inventoryMovements"]),
       )
       if (!hasLotReferences) removableLotIds.add(lotId)
     }
@@ -234,7 +219,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   }
 
   const removableCustomerIds = new Set<string>()
-  for (const expectedCustomer of BUILT_IN_CUSTOMERS) {
+  for (const expectedCustomer of options.onlyProductId ? [] : BUILT_IN_CUSTOMERS) {
     const customer = customers.find((item) => matchesCustomer(item, expectedCustomer))
     if (!customer) continue
     const hasBusinessReferences = isReferencedOutside(
@@ -251,11 +236,19 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     products: products.filter((item) => !removableProductIds.has(String(asRecord(item)?.id ?? ""))),
     inventoryLots: lots.filter((item) => !removableLotIds.has(String(asRecord(item)?.id ?? ""))),
     customers: customers.filter((item) => !removableCustomerIds.has(String(asRecord(item)?.id ?? ""))),
+    ...(Array.isArray(source.inventoryMovements) ? {
+      inventoryMovements: source.inventoryMovements.filter((movement) => {
+        const record = asRecord(movement)
+        return !record
+          || (!removableProductIds.has(String(record.productId ?? ""))
+            && !removableLotIds.has(String(record.lotId ?? "")))
+      }),
+    } : {}),
   } as T
 
   const warehouses = Array.isArray(source.warehouses) ? source.warehouses : []
   const removableWarehouseIds = new Set<string>()
-  for (const expectedWarehouse of BUILT_IN_WAREHOUSES) {
+  for (const expectedWarehouse of options.onlyProductId ? [] : BUILT_IN_WAREHOUSES) {
     const warehouse = warehouses.find((item) => {
       const record = asRecord(item)
       if (!record || !matchesOnlyKnownFields(record, [
@@ -287,11 +280,15 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     warehouses: warehouses.filter((item) => !removableWarehouseIds.has(String(asRecord(item)?.id ?? ""))),
   } as T
 
+  const originalMovements = Array.isArray(source.inventoryMovements) ? source.inventoryMovements : []
+  const remainingMovements = Array.isArray(finalData.inventoryMovements) ? finalData.inventoryMovements : originalMovements
+
   return {
     data: finalData,
     removedProducts: removableProductIds.size,
     removedInventoryLots: removableLotIds.size,
     removedCustomers: removableCustomerIds.size,
     removedWarehouses: removableWarehouseIds.size,
+    removedInventoryMovements: originalMovements.length - remainingMovements.length,
   }
 }

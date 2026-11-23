@@ -19,7 +19,7 @@ import {
   ERP_STORAGE_KEY,
 } from "../lib/erpBackup"
 import { readStoredData } from "../lib/erpStorage"
-import { removeBuiltInDemoData } from "../lib/demoDataCleanup"
+import { isBuiltInDemoProduct, removeBuiltInDemoData } from "../lib/demoDataCleanup"
 import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 import { linkPurchasesToSuppliers, normalizeSupplierRecords, validateSupplierInput, type Supplier, type SupplierInput } from "../lib/supplierManagement"
 import { applySupplierInvoicePayment, buildSupplierInvoice, type CreateSupplierInvoiceInput, type RecordSupplierInvoicePaymentInput, type SupplierInvoice } from "../lib/supplierInvoices"
@@ -624,7 +624,8 @@ function loadStoredData() {
       cleanup.removedProducts +
       cleanup.removedInventoryLots +
       cleanup.removedCustomers +
-      cleanup.removedWarehouses
+      cleanup.removedWarehouses +
+      cleanup.removedInventoryMovements
 
     if (removedRecords > 0 && result.raw !== null) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
@@ -1854,11 +1855,50 @@ export function ERPProvider({
   }
 
   function deleteProduct(id: string) {
+    const product = store.products.find((item) => item.id === id)
+    if (!product) return
+
+    if (isBuiltInDemoProduct(product)) {
+      const cleanup = removeBuiltInDemoData(
+        store as unknown as Record<string, unknown>,
+        { onlyProductId: id },
+      )
+      if (cleanup.removedProducts === 0) {
+        throw new Error(
+          "This starter product is linked to business activity or has non-demo inventory. Review its sales, purchases, transfers and stock records before deleting it.",
+        )
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+      const backupRoot = `${ERP_STORAGE_KEY}-pre-demo-delete-${timestamp}`
+      let backupKey = backupRoot
+      let suffix = 1
+      while (localStorage.getItem(backupKey) !== null) {
+        backupKey = `${backupRoot}-${suffix++}`
+      }
+      const rawStore = localStorage.getItem(ERP_STORAGE_KEY) ?? JSON.stringify(store)
+      try {
+        localStorage.setItem(backupKey, rawStore)
+      } catch (error) {
+        throw new Error(
+          `The demo product was not deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+
+      persistStore(cleanup.data as unknown as StoredData)
+      return
+    }
+
+    const stock = getProductStock(id)
+    if (stock > 0) {
+      throw new Error(
+        `${product.name} still has ${stock} units in inventory. Adjust or write off the stock before deleting this product.`,
+      )
+    }
+
     persistStore({
       ...store,
-      products: store.products.filter(
-        (item) => item.id !== id,
-      ),
+      products: store.products.filter((item) => item.id !== id),
     })
   }
 
