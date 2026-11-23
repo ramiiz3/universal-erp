@@ -194,6 +194,7 @@ export function createApp({ pool, authenticate, frontendOrigin = "" }) {
 
       if (request.method === "POST" && pathname === "/api/v1/invitations/accept") {
         const body = await readJson(request);
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("Invitation details must be a JSON object."), { status: 400 });
         const rawToken = typeof body.token === "string" ? body.token : "";
         if (rawToken.length < 32 || rawToken.length > 200) throw Object.assign(new Error("Invitation token is invalid."), { status: 400 });
         const tokenHash = createHash("sha256").update(rawToken).digest("hex");
@@ -216,6 +217,7 @@ export function createApp({ pool, authenticate, frontendOrigin = "" }) {
         if (!UUID_RE.test(companyId)) return send(response, 400, { error: "Company identifier is invalid." });
         if (request.method !== "POST") return send(response, 405, { error: "Method not allowed." });
         const body = await readJson(request);
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw Object.assign(new Error("Invitation details must be a JSON object."), { status: 400 });
         const email = normalizeEmail(body.email);
         const role = body.role;
         if (!email) throw Object.assign(new Error("Enter a valid employee email address."), { status: 400 });
