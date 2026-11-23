@@ -10,8 +10,10 @@ describe("daily cash register", () => {
   const timestamp = new Date(2026, 10, 23, 14, 30, 0).toISOString()
   const nextDay = new Date(2026, 10, 24, 9, 0, 0).toISOString()
 
-  it("formats business dates using the workstation's local calendar", () => {
-    expect(getBusinessDate(new Date(2026, 10, 23, 23, 59))).toBe(businessDate)
+  it("formats business dates using the pharmacy business timezone", () => {
+    expect(getBusinessDate(new Date("2026-11-23T19:59:00.000Z"))).toBe("2026-11-23")
+    expect(getBusinessDate(new Date("2026-11-23T20:00:00.000Z"))).toBe("2026-11-24")
+    expect(getBusinessDate(new Date("2026-11-23T20:00:00.000Z"), "Asia/Kolkata")).toBe("2026-11-24")
   })
 
   it("reconciles cash sales, credit collections, refunds, supplier payments and cash movements", () => {
