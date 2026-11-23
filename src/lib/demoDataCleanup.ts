@@ -5,6 +5,9 @@ export type DemoCleanupResult<T extends Record<string, unknown>> = {
   removedCustomers: number
   removedWarehouses: number
   removedInventoryMovements: number
+  removedSales: number
+  removedSalesReturns: number
+  removedCustomerPayments: number
 }
 
 type BuiltInDemoProduct = {
@@ -177,6 +180,93 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   const products = Array.isArray(source.products) ? source.products : []
   const lots = Array.isArray(source.inventoryLots) ? source.inventoryLots : []
   const customers = Array.isArray(source.customers) ? source.customers : []
+  const allSeedProductIds = new Set(
+    BUILT_IN_PRODUCTS
+      .filter((expected) =>
+        (!options.onlyProductId || expected.id === options.onlyProductId)
+          ? products.some((item) => matchesProduct(item, expected))
+          : products.some((item) => matchesProduct(item, expected)),
+      )
+      .map((expected) => expected.id),
+  )
+  const allSeedLotIds = new Set(
+    BUILT_IN_LOTS
+      .filter((expected) =>
+        lots.some((item) => matchesLot(item, expected)),
+      )
+      .map((expected) => expected.id),
+  )
+
+  // The original demo product and its initial stock were often used for a
+  // first POS test. That sale then kept the demo product alive forever because
+  // the old cleanup correctly protected every referenced product. Remove a
+  // sale only when every line belongs to an unchanged bundled demo product
+  // and every explicit lot allocation belongs to the bundled demo lots.
+  const sourceSales = Array.isArray(source.sales) ? source.sales : []
+  const removableSaleIds = new Set<string>()
+  for (const sale of sourceSales) {
+    const record = asRecord(sale)
+    const items = record && Array.isArray(record.items) ? record.items : []
+    if (!record || typeof record.id !== "string" || !record.id || items.length === 0) continue
+
+    const containsOnlyBundledDemoItems = items.every((value) => {
+      const item = asRecord(value)
+      if (!item || !allSeedProductIds.has(String(item.productId ?? ""))) return false
+      const allocations = Array.isArray(item.batchAllocations) ? item.batchAllocations : []
+      return allocations.every((allocationValue) => {
+        const allocation = asRecord(allocationValue)
+        return Boolean(allocation)
+          && allSeedLotIds.has(String(allocation?.lotId ?? ""))
+      })
+    })
+
+    if (containsOnlyBundledDemoItems) removableSaleIds.add(record.id)
+  }
+
+  const sourceSalesReturns = Array.isArray(source.salesReturns) ? source.salesReturns : []
+  const retainedSalesReturns = sourceSalesReturns.filter((record) =>
+    !removableSaleIds.has(String(asRecord(record)?.saleId ?? "")),
+  )
+  const removedSalesReturns = sourceSalesReturns.length - retainedSalesReturns.length
+
+  const sourceCustomerPayments = Array.isArray(source.customerPayments) ? source.customerPayments : []
+  const retainedCustomerPayments: unknown[] = []
+  let removedCustomerPayments = 0
+  for (const payment of sourceCustomerPayments) {
+    const record = asRecord(payment)
+    const allocations = record && Array.isArray(record.allocations) ? record.allocations : []
+    const remainingAllocations = allocations.filter((allocation) =>
+      !removableSaleIds.has(String(asRecord(allocation)?.saleId ?? "")),
+    )
+    if (remainingAllocations.length === allocations.length) {
+      retainedCustomerPayments.push(payment)
+      continue
+    }
+    if (remainingAllocations.length === 0) {
+      removedCustomerPayments += 1
+      continue
+    }
+    const remainingAmount = remainingAllocations.reduce((sum, allocation) => {
+      const value = Number(asRecord(allocation)?.amount ?? 0)
+      return sum + (Number.isFinite(value) ? value : 0)
+    }, 0)
+    retainedCustomerPayments.push({
+      ...record,
+      allocations: remainingAllocations,
+      amount: Math.round((remainingAmount + Number.EPSILON) * 100) / 100,
+    })
+  }
+
+  const retainedSales = sourceSales.filter((sale) =>
+    !removableSaleIds.has(String(asRecord(sale)?.id ?? "")),
+  )
+  const referenceSource = {
+    ...source,
+    sales: retainedSales,
+    salesReturns: retainedSalesReturns,
+    customerPayments: retainedCustomerPayments,
+  } as T
+
   const removableLotIds = new Set<string>()
   const removableProductIds = new Set<string>()
 
@@ -187,7 +277,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
 
     const productId = expectedProduct.id
     const hasBusinessReferences = isReferencedOutside(
-      source,
+      referenceSource,
       PRODUCT_REFERENCE_FIELDS,
       productId,
       new Set(["products", "inventoryLots", "inventoryMovements"]),
@@ -203,7 +293,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
       const lotId = String(asRecord(seedLot)?.id ?? "")
       if (!lotId) continue
       const hasLotReferences = isReferencedOutside(
-        source,
+        referenceSource,
         LOT_REFERENCE_FIELDS,
         lotId,
         new Set(["inventoryLots", "inventoryMovements"]),
@@ -223,7 +313,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     const customer = customers.find((item) => matchesCustomer(item, expectedCustomer))
     if (!customer) continue
     const hasBusinessReferences = isReferencedOutside(
-      source,
+      referenceSource,
       CUSTOMER_REFERENCE_FIELDS,
       expectedCustomer.id,
       new Set(["customers"]),
@@ -232,7 +322,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
   }
 
   const next = {
-    ...source,
+    ...referenceSource,
     products: products.filter((item) => !removableProductIds.has(String(asRecord(item)?.id ?? ""))),
     inventoryLots: lots.filter((item) => !removableLotIds.has(String(asRecord(item)?.id ?? ""))),
     customers: customers.filter((item) => !removableCustomerIds.has(String(asRecord(item)?.id ?? ""))),
@@ -290,5 +380,8 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     removedCustomers: removableCustomerIds.size,
     removedWarehouses: removableWarehouseIds.size,
     removedInventoryMovements: originalMovements.length - remainingMovements.length,
+    removedSales: removableSaleIds.size,
+    removedSalesReturns,
+    removedCustomerPayments,
   }
 }
