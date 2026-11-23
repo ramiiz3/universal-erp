@@ -16,6 +16,19 @@ describe("daily cash register", () => {
     expect(getBusinessDate(new Date("2026-11-23T20:00:00.000Z"), "Asia/Kolkata")).toBe("2026-11-24")
   })
 
+  it("groups transactions by Dubai business date when UTC has not crossed midnight", () => {
+    const summary = calculateDailyRegisterSummary({
+      businessDate: "2026-11-24",
+      openingCash: 0,
+      sales: [{ createdAt: "2026-11-23T20:00:00.000Z", paymentMethod: "Cash", total: 25 }],
+      customerPayments: [],
+      returns: [],
+      supplierInvoices: [],
+    })
+    expect(summary.salesCount).toBe(1)
+    expect(summary.sales.cash).toBe(25)
+  })
+
   it("reconciles cash sales, credit collections, refunds, supplier payments and cash movements", () => {
     const summary = calculateDailyRegisterSummary({
       businessDate,
