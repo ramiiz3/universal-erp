@@ -754,7 +754,8 @@ export function ERPProvider({
   const scheduleCloudSaveRef = useRef<() => void>(() => undefined)
 
   useEffect(() => {
-    if (!companyId || !user?.id || !supabase) {
+    const client = supabase
+    if (!companyId || !user?.id || !client) {
       setCloudReady(false)
       setCloudSyncStatus("loading")
       cloudRevisionRef.current = null
@@ -778,7 +779,7 @@ export function ERPProvider({
       }
 
       const localSnapshot = createERPCloudState(localStorage)
-      const { data: remoteRow, error: readError } = await supabase
+      const { data: remoteRow, error: readError } = await client
         .from("legacy_erp_state")
         .select("revision, state, updated_at")
         .eq("company_id", companyId)
@@ -788,7 +789,7 @@ export function ERPProvider({
 
       // Preserve this workstation's exact ERP keys before remote data can
       // replace them. Auth sessions and unrelated browser storage are excluded.
-      const { error: recoveryError } = await supabase
+      const { error: recoveryError } = await client
         .from("legacy_erp_recovery_snapshots")
         .insert({
           company_id: companyId,
@@ -825,7 +826,7 @@ export function ERPProvider({
         restoreERPCloudState(localStorage, remoteRow.state)
         cloudRevisionRef.current = remoteRevision
       } else {
-        const { data: newRevision, error: seedError } = await supabase.rpc(
+        const { data: newRevision, error: seedError } = await client.rpc(
           "save_legacy_erp_state",
           {
             p_company_id: companyId,
@@ -838,7 +839,7 @@ export function ERPProvider({
           if (seedError.code !== "40001") {
             throw new Error("Could not migrate this workstation's data to secure storage. " + seedError.message)
           }
-          const { data: racedRow, error: racedReadError } = await supabase
+          const { data: racedRow, error: racedReadError } = await client
             .from("legacy_erp_state")
             .select("revision, state")
             .eq("company_id", companyId)
@@ -888,11 +889,12 @@ export function ERPProvider({
   }, [companyId, user?.id, loadResult.error])
 
   async function saveCloudSnapshot() {
+    const client = supabase
     if (
       !cloudReady ||
       !companyId ||
       !user?.id ||
-      !supabase ||
+      !client ||
       cloudSavingRef.current ||
       !cloudDirtyRef.current
     ) return
@@ -906,7 +908,7 @@ export function ERPProvider({
 
     try {
       const snapshot = createERPCloudState(localStorage)
-      const { data, error } = await supabase.rpc("save_legacy_erp_state", {
+      const { data, error } = await client.rpc("save_legacy_erp_state", {
         p_company_id: companyId,
         p_expected_revision: expectedRevision,
         p_state: snapshot,
@@ -946,7 +948,8 @@ export function ERPProvider({
   }
 
   async function syncCloudNow() {
-    if (!cloudReady || !companyId || !supabase) {
+    const client = supabase
+    if (!cloudReady || !companyId || !client) {
       throw new Error("The pharmacy cloud database is not ready to receive this backup.")
     }
     cloudDirtyRef.current = true
