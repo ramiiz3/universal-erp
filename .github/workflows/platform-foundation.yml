@@ -10,6 +10,19 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: universal_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d universal_erp_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -28,3 +41,20 @@ jobs:
         run: npm run build
       - name: Lint
         run: npm run lint
+      - name: Create non-owner API database role
+        env:
+          MIGRATIONS_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/universal_erp_test
+          PGPASSWORD: postgres
+        run: |
+          psql "$MIGRATIONS_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "CREATE ROLE erp_app LOGIN PASSWORD 'erp_app_test_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
+          psql "$MIGRATIONS_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+            "GRANT CONNECT ON DATABASE universal_erp_test TO erp_app"
+      - name: Apply PostgreSQL migrations
+        env:
+          MIGRATIONS_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/universal_erp_test
+        run: npm run db:migrate
+      - name: Verify cross-company row-level security
+        env:
+          SECURITY_TEST_DATABASE_URL: postgresql://erp_app:erp_app_test_password@localhost:5432/universal_erp_test
+        run: npm run db:test:isolation
