@@ -28,22 +28,22 @@ export type ERPSettings = {
 }
 
 export const DEFAULT_ERP_SETTINGS: ERPSettings = {
-  businessName: "Zaki Pharmacy",
-  tagline: "A Family Healthcare Destination",
+  businessName: "Zaki Pharmacy LLC",
+  tagline: "",
   tradeLicenseNumber: "",
   taxNumber: "",
   country: "United Arab Emirates",
-  emirate: "Dubai",
+  emirate: "",
   poBox: "",
   address: "",
-  phone: "",
+  phone: "+97156 217 1051",
   email: "",
   website: "",
   currency: "AED",
   vatRate: "5",
   invoicePrefix: "INV",
   invoiceFooter:
-    "Thank you for choosing Zaki Pharmacy.",
+    "Thank you for your business.",
   vatRegistered: true,
   payment: {
     cash: true,
@@ -67,6 +67,16 @@ export function getERPSettings(): ERPSettings {
     return {
       ...DEFAULT_ERP_SETTINGS,
       ...parsed,
+      businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || DEFAULT_ERP_SETTINGS.businessName),
+      phone: !String(parsed.phone ?? "").trim() || String(parsed.phone).trim() === "067446775"
+        ? DEFAULT_ERP_SETTINGS.phone
+        : String(parsed.phone).trim(),
+      tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
+      emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
+      vatRate: Number(parsed.vatRate) > 0 ? String(parsed.vatRate) : "5",
+      invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
+        ? "Thank you for your business."
+        : (parsed.invoiceFooter || DEFAULT_ERP_SETTINGS.invoiceFooter),
       payment: {
         ...DEFAULT_ERP_SETTINGS.payment,
         ...(parsed.payment || {}),

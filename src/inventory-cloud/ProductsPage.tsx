@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
-import { Download, FileSpreadsheet, Search, Upload, X } from "lucide-react"
+import { Barcode as BarcodeIcon, Download, FileSpreadsheet, Search, Upload, X } from "lucide-react"
+import BarcodePreview from "../components/BarcodePreview"
+import { buildCompanyProductBarcode, generateCompanyProductBarcode } from "../lib/productBarcode"
 import * as XLSX from "xlsx"
 import { useAuth } from "../auth/AuthProvider"
 import { supabase } from "../lib/supabase"
@@ -20,24 +22,30 @@ const EMPTY_PRODUCT: ProductInput = {
   purchasePrice: "0",
   sellingPrice: "0",
   minimumStock: "0",
-  vatRate: "0",
+  vatRate: "5",
+  vatApplicable: true,
 }
 
-const PRODUCT_FIELDS: { key: keyof ProductInput; label: string; type?: string }[] = [
+type ProductFieldKey = Exclude<keyof ProductInput, "vatApplicable">
+
+const PRODUCT_FIELDS: { key: ProductFieldKey; label: string; type?: string }[] = [
   { key: "name", label: "Product name" },
   { key: "sku", label: "SKU" },
-  { key: "barcode", label: "Barcode" },
   { key: "category", label: "Category" },
   { key: "manufacturer", label: "Manufacturer" },
   { key: "unit", label: "Unit of measurement" },
   { key: "purchasePrice", label: "Purchase cost", type: "number" },
   { key: "sellingPrice", label: "Default selling price", type: "number" },
   { key: "minimumStock", label: "Low-stock threshold", type: "number" },
-  { key: "vatRate", label: "VAT rate (%)", type: "number" },
 ]
 
-function formFor(product?: CloudProduct): ProductInput {
-  if (!product) return EMPTY_PRODUCT
+function getDefaultCompanyVatRate(rate?: number | null) {
+  return Number.isFinite(rate) && Number(rate) > 0 ? Number(rate) : 5
+}
+
+function formFor(product?: CloudProduct, defaultVatRate = 5): ProductInput {
+  if (!product) return { ...EMPTY_PRODUCT, vatRate: String(defaultVatRate), vatApplicable: true }
+  const vatApplicable = product.vat_applicable !== false
   return {
     name: product.name,
     sku: product.sku,
@@ -49,7 +57,8 @@ function formFor(product?: CloudProduct): ProductInput {
     purchasePrice: String(product.purchase_price),
     sellingPrice: String(product.selling_price),
     minimumStock: String(product.minimum_stock),
-    vatRate: String(product.vat_rate),
+    vatRate: String(vatApplicable ? (product.vat_rate || defaultVatRate) : 0),
+    vatApplicable,
   }
 }
 
@@ -63,7 +72,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<CloudProduct | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [details, setDetails] = useState<CloudProduct | null>(null)
-  const [form, setForm] = useState<ProductInput>(EMPTY_PRODUCT)
+  const [form, setForm] = useState<ProductInput>({ ...EMPTY_PRODUCT, vatRate: String(getDefaultCompanyVatRate(activeCompany?.taxRate)) })
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState("")
   const [message, setMessage] = useState("")
@@ -148,8 +157,23 @@ export default function ProductsPage() {
         workbook.Sheets[firstSheet],
         { header: 1, raw: false, defval: "", blankrows: false },
       )
-      const preview = previewCloudCatalogImport(rows)
-      setImportRows(preview.rows)
+      const preview = previewCloudCatalogImport(rows, getDefaultCompanyVatRate(activeCompany?.taxRate))
+      const productsWithoutBarcode = new Map<string, string>()
+      const rowsWithBarcodes = preview.rows.map((row) => {
+        if (row.barcode) return row
+        if (!productsWithoutBarcode.has(row.productKey)) {
+          const normalizedSku = row.sku.replace(/[^a-z0-9]/gi, "")
+          const suffix = normalizedSku.length >= 6
+            ? normalizedSku
+            : globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+          productsWithoutBarcode.set(row.productKey, buildCompanyProductBarcode({
+            companyName: activeCompany?.legalName || activeCompany?.companyName || "",
+            mobileNumber: activeCompany?.phone || "",
+          }, suffix))
+        }
+        return { ...row, barcode: productsWithoutBarcode.get(row.productKey)! }
+      })
+      setImportRows(rowsWithBarcodes)
       setImportIssues(preview.issues)
       setImportDuplicates(preview.duplicateRows)
       setImportRequestId(globalThis.crypto.randomUUID())
@@ -164,7 +188,7 @@ export default function ProductsPage() {
   function downloadImportTemplate() {
     const rows = [[
       "Product Name", "SKU", "Barcode", "Category", "Manufacturer", "Description",
-      "Unit", "Purchase Price", "Selling Price", "Minimum Stock", "VAT Rate",
+      "Unit", "Purchase Price", "Selling Price", "Minimum Stock", "VAT Applicable", "VAT Rate",
       "Batch", "Expiry Date", "Stock Quantity", "Lot Purchase Price", "Lot Selling Price",
     ]]
     const workbook = XLSX.utils.book_new()
@@ -183,6 +207,10 @@ export default function ProductsPage() {
     }
     if (!importRows.length) {
       setImportError("Choose a spreadsheet containing at least one valid product row.")
+      return
+    }
+    if (importRows.some((row) => !row.barcode.trim())) {
+      setImportError("Every imported product needs a barcode. Add barcodes to the spreadsheet or regenerate the preview.")
       return
     }
     const stockRows = importRows.filter((row) => row.stockQuantity > 0).length
@@ -208,6 +236,7 @@ export default function ProductsPage() {
           sellingPrice: row.sellingPrice,
           minimumStock: row.minimumStock,
           vatRate: row.vatRate,
+          vatApplicable: row.vatApplicable,
           batch: row.batch,
           expiry: row.expiry,
           stockQuantity: row.stockQuantity,
@@ -228,14 +257,14 @@ export default function ProductsPage() {
 
   function startCreate() {
     setEditing(null)
-    setForm(EMPTY_PRODUCT)
+    setForm({ ...EMPTY_PRODUCT, vatRate: String(getDefaultCompanyVatRate(activeCompany?.taxRate)), vatApplicable: true })
     setPageError("")
     setShowForm(true)
   }
 
   function startEdit(product: CloudProduct) {
     setEditing(product)
-    setForm(formFor(product))
+    setForm(formFor(product, getDefaultCompanyVatRate(activeCompany?.taxRate)))
     setPageError("")
     setShowForm(true)
   }
@@ -248,6 +277,12 @@ export default function ProductsPage() {
     setMessage("")
     setSaving(true)
     try {
+      const submittedForm = !editing && !form.barcode.trim()
+        ? { ...form, barcode: generateCompanyProductBarcode({
+            companyName: activeCompany.legalName || activeCompany.companyName,
+            mobileNumber: activeCompany.phone,
+          }) }
+        : form
       await submitLock.current(async () => {
         await saveProductWorkflow({
           insert: async (row) => {
@@ -268,7 +303,7 @@ export default function ProductsPage() {
               .eq("id", productId)
             if (updateError) throw updateError
           },
-        }, activeCompany.companyId, user.id, form, editing?.id)
+        }, activeCompany.companyId, user.id, submittedForm, editing?.id)
         setShowForm(false)
         setMessage(editing ? "Product updated." : "Product created.")
         await refresh()
@@ -358,7 +393,7 @@ export default function ProductsPage() {
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-              <tr><th className="p-3">Product</th><th className="p-3">SKU / Barcode</th><th className="p-3">Category</th><th className="p-3">Default price</th><th className="p-3">Stock</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr>
+              <tr><th className="p-3">Product</th><th className="p-3">SKU / Barcode</th><th className="p-3">Category</th><th className="p-3">Default price</th><th className="p-3">VAT</th><th className="p-3">Stock</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr>
             </thead>
             <tbody>
               {visibleProducts.map((product) => {
@@ -369,6 +404,7 @@ export default function ProductsPage() {
                     <td className="p-3">{product.sku || "—"}<div className="text-xs text-slate-500">{product.barcode || "—"}</div></td>
                     <td className="p-3">{product.category || "Uncategorized"}</td>
                     <td className="p-3">{Number(product.selling_price).toFixed(2)} {activeCompany?.currency}</td>
+                    <td className="p-3">{product.vat_applicable ? `${Number(product.vat_rate || getDefaultCompanyVatRate(activeCompany?.taxRate))}%` : "Not applicable"}</td>
                     <td className="p-3">{stock} {product.unit}</td>
                     <td className="p-3">{product.is_active ? "Active" : "Archived"}</td>
                     <td className="p-3">
@@ -380,7 +416,7 @@ export default function ProductsPage() {
                   </tr>
                 )
               })}
-              {!visibleProducts.length && <tr><td colSpan={7} className="p-8 text-center text-sm text-slate-500">No products match these filters.</td></tr>}
+              {!visibleProducts.length && <tr><td colSpan={8} className="p-8 text-center text-sm text-slate-500">No products match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -468,9 +504,43 @@ export default function ProductsPage() {
               {PRODUCT_FIELDS.map(({ key, label, type }) => (
                 <label key={key} className="text-sm font-medium">
                   {label}
-                  <input required={key === "name" || key === "unit"} type={type ?? "text"} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} max={key === "vatRate" ? "100" : undefined} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                  <input required={key === "name" || key === "unit"} type={type ?? "text"} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 </label>
               ))}
+              <div className="space-y-2 sm:col-span-2">
+                <label className="block text-sm font-medium">Barcode</label>
+                <input value={form.barcode} onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))} placeholder="Generate a company barcode or enter an existing barcode" className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => {
+                    try {
+                      setForm((current) => ({ ...current, barcode: generateCompanyProductBarcode({
+                        companyName: activeCompany?.legalName || activeCompany?.companyName || "",
+                        mobileNumber: activeCompany?.phone || "",
+                      }) }))
+                    } catch (caught) {
+                      setPageError(caught instanceof Error ? caught.message : String(caught))
+                    }
+                  }} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold dark:border-slate-700"><BarcodeIcon className="h-4 w-4" /> Generate Code 128</button>
+                  <span className="text-xs text-slate-500">Company name · mobile · unique product code</span>
+                </div>
+                <BarcodePreview value={form.barcode} />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={form.vatApplicable} onChange={(event) => setForm((current) => ({
+                    ...current,
+                    vatApplicable: event.target.checked,
+                    vatRate: event.target.checked
+                      ? (current.vatRate === "0" ? String(getDefaultCompanyVatRate(activeCompany?.taxRate)) : current.vatRate)
+                      : "0",
+                  }))} />
+                  VAT applicable to this product
+                </label>
+                <label className="block text-sm font-medium">VAT rate (%)
+                  <input type="number" min="0" max="100" step="any" disabled={!form.vatApplicable} value={form.vatRate} onChange={(event) => setForm((current) => ({ ...current, vatRate: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950" />
+                </label>
+                <p className="text-xs text-slate-500">Untick for VAT-exempt products such as eligible medicines.</p>
+              </div>
               <label className="text-sm font-medium sm:col-span-2">Description
                 <textarea maxLength={5000} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} className="mt-1 min-h-20 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950" />
               </label>
@@ -493,12 +563,12 @@ export default function ProductsPage() {
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <dt className="text-slate-500">SKU</dt><dd>{details.sku || "—"}</dd>
-              <dt className="text-slate-500">Barcode</dt><dd>{details.barcode || "—"}</dd>
+              <dt className="text-slate-500">Barcode</dt><dd className="break-all font-mono">{details.barcode || "—"}</dd>
               <dt className="text-slate-500">Manufacturer</dt><dd>{details.manufacturer || "—"}</dd>
               <dt className="text-slate-500">Unit</dt><dd>{details.unit}</dd>
               <dt className="text-slate-500">Purchase cost</dt><dd>{Number(details.purchase_price).toFixed(2)}</dd>
               <dt className="text-slate-500">Default selling price</dt><dd>{Number(details.selling_price).toFixed(2)}</dd>
-              <dt className="text-slate-500">VAT</dt><dd>{Number(details.vat_rate)}%</dd>
+              <dt className="text-slate-500">VAT</dt><dd>{details.vat_applicable ? `${Number(details.vat_rate || activeCompany?.taxRate || 0)}%` : "Not applicable"}</dd>
               <dt className="text-slate-500">Status</dt><dd>{details.is_active ? "Active" : "Archived"}</dd>
               <dt className="text-slate-500">Description</dt><dd className="whitespace-pre-wrap">{details.description || "—"}</dd>
             </dl>

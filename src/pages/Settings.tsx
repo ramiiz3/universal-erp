@@ -40,22 +40,22 @@ type SettingsData = {
 }
 
 const defaultSettings: SettingsData = {
-  businessName: "Zaki Pharmacy",
-  tagline: "A Family Healthcare Destination",
+  businessName: "Zaki Pharmacy LLC",
+  tagline: "",
   tradeLicenseNumber: "",
   taxNumber: "",
   country: "United Arab Emirates",
-  emirate: "Dubai",
+  emirate: "",
   poBox: "",
   address: "",
-  phone: "",
+  phone: "+97156 217 1051",
   email: "",
   website: "",
   currency: "AED",
   vatRate: "5",
   invoicePrefix: "INV",
   invoiceFooter:
-    "Thank you for choosing Zaki Pharmacy.",
+    "Thank you for your business.",
   vatRegistered: true,
   payment: {
     cash: true,
@@ -76,6 +76,16 @@ function loadSettings(): SettingsData {
     return {
       ...defaultSettings,
       ...parsed,
+      businessName: parsed.businessName === "Zaki Pharmacy" ? "Zaki Pharmacy LLC" : (parsed.businessName || defaultSettings.businessName),
+      phone: !String(parsed.phone ?? "").trim() || String(parsed.phone).trim() === "067446775"
+        ? defaultSettings.phone
+        : String(parsed.phone).trim(),
+      tagline: parsed.tagline === "A Family Healthcare Destination" ? "" : (parsed.tagline || ""),
+      emirate: parsed.emirate === "Dubai" ? "" : (parsed.emirate || ""),
+      vatRate: Number(parsed.vatRate) > 0 ? String(parsed.vatRate) : "5",
+      invoiceFooter: parsed.invoiceFooter === "Thank you for choosing Zaki Pharmacy."
+        ? "Thank you for your business."
+        : (parsed.invoiceFooter || defaultSettings.invoiceFooter),
       payment: {
         ...defaultSettings.payment,
         ...(parsed.payment || {}),
@@ -149,7 +159,7 @@ export default function Settings() {
           </div>
 
           <p className="mt-1 text-sm text-slate-500">
-            Zaki Pharmacy — Dubai business, tax, invoice and payment settings.
+            Manage company profile, tax, invoice and payment settings.
           </p>
         </div>
 
@@ -175,7 +185,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Zaki Pharmacy's official business details.
+                      The company's official business details.
                     </p>
                   </div>
                 </div>
@@ -298,7 +308,7 @@ export default function Settings() {
 
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Phone
+                    Mobile Number (used for barcode generation)
                   </label>
 
                   <input
@@ -309,7 +319,7 @@ export default function Settings() {
                         event.target.value,
                       )
                     }
-                    placeholder="+971..."
+                    placeholder="Include country code, e.g. +971 50 123 4567"
                     className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-[#2F9E63] focus:ring-2 focus:ring-[#2F9E63]/15"
                   />
                 </div>
@@ -386,7 +396,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      UAE VAT configuration for Zaki Pharmacy.
+                      UAE VAT configuration for this company.
                     </p>
                   </div>
                 </div>
@@ -474,7 +484,7 @@ export default function Settings() {
                     </h2>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Configure Zaki Pharmacy invoice presentation.
+                      Configure company invoice presentation.
                     </p>
                   </div>
                 </div>

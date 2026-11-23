@@ -14,15 +14,21 @@ import {
 } from "lucide-react"
 import { useERP, type Sale } from "../context/ERPContext"
 import { takePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
+import { getERPSettings } from "../lib/erpSettings"
 
-const PHARMACY_NAME = "Zaki Pharmacy LLC"
-const PHARMACY_ADDRESS = "Shop No. 3, Nuaimeya 1, Ajman"
-const PHARMACY_PHONE = "Tel: 067446775"
-const PHARMACY_TRN = "TRN: 105461855600003"
-const PHARMACY_ARABIC_NAME = "صيدلية زاكي ذ.م.م"
-const PHARMACY_ARABIC_ADDRESS = "محل رقم 3، النعيمية 1، عجمان"
-const PHARMACY_ARABIC_PHONE = "هاتف: 067446775"
-const PHARMACY_ARABIC_TRN = "الرقم الضريبي: 105461855600003"
+function getInvoiceBusinessProfile() {
+  const settings = getERPSettings()
+  return {
+    businessName: settings.businessName.trim() || "Company",
+    address: settings.address.trim(),
+    phone: settings.phone.trim() ? "Tel: " + settings.phone.trim() : "",
+    trn: settings.taxNumber.trim() ? "TRN: " + settings.taxNumber.trim() : "",
+    arabicName: "",
+    arabicAddress: "",
+    arabicPhone: "",
+    arabicTrn: "",
+  }
+}
 
 type PrintFormat = "80mm" | "58mm"
 
@@ -264,7 +270,7 @@ function loadInvoiceLogo(): Promise<HTMLImageElement> {
 
     image.onload = () => resolve(image)
     image.onerror = () =>
-      reject(new Error("Unable to load Zaki Pharmacy logo."))
+      reject(new Error("Unable to load the company logo."))
 
     image.src = "/brand/zaki-logo.png"
   })
@@ -293,6 +299,7 @@ function getInvoiceBreakdown(sale: Sale) {
 }
 
 async function createInvoicePdf(sale: Sale) {
+  const invoiceProfile = getInvoiceBusinessProfile()
   const pdf = new jsPDF("p", "mm", "a4")
 
   const left = 14
@@ -353,17 +360,17 @@ async function createInvoicePdf(sale: Sale) {
   pdf.setTextColor(...text)
   pdf.setFont("helvetica", "bold")
   pdf.setFontSize(8)
-  pdf.text(PHARMACY_NAME, left + 12, 63)
-  pdf.text(PHARMACY_ARABIC_NAME, left + 12, 69)
+  pdf.text(invoiceProfile.businessName, left + 12, 63)
+  pdf.text(invoiceProfile.arabicName, left + 12, 69)
   pdf.setTextColor(...muted)
   pdf.setFont("helvetica", "normal")
   pdf.setFontSize(6.5)
-  pdf.text(PHARMACY_ADDRESS, left + 12, 75)
-  pdf.text(PHARMACY_ARABIC_ADDRESS, left + 12, 81)
-  pdf.text(PHARMACY_PHONE, left + 12, 87)
-  pdf.text(PHARMACY_ARABIC_PHONE, left + 12, 93)
-  pdf.text(PHARMACY_TRN, left + 12, 99)
-  pdf.text(PHARMACY_ARABIC_TRN, left + 12, 105)
+  pdf.text(invoiceProfile.address, left + 12, 75)
+  pdf.text(invoiceProfile.arabicAddress, left + 12, 81)
+  pdf.text(invoiceProfile.phone, left + 12, 87)
+  pdf.text(invoiceProfile.arabicPhone, left + 12, 93)
+  pdf.text(invoiceProfile.trn, left + 12, 99)
+  pdf.text(invoiceProfile.arabicTrn, left + 12, 105)
 
   let y = 117
   const cardHeight = 26
@@ -517,6 +524,7 @@ async function createInvoicePdf(sale: Sale) {
 }
 
 export default function Invoices() {
+  const invoiceProfile = getInvoiceBusinessProfile()
   const navigate = useNavigate()
   const { invoiceId } = useParams()
   const { sales, customers, products } = useERP()
@@ -595,9 +603,9 @@ export default function Invoices() {
       return
     }
 
-    const subject = encodeURIComponent(`Invoice ${sale.invoiceNumber} - ${PHARMACY_NAME}`)
+    const subject = encodeURIComponent(`Invoice ${sale.invoiceNumber} - ${invoiceProfile.businessName}`)
     const body = encodeURIComponent(
-      `Dear ${sale.customerName},\n\nPlease find your invoice details below.\n\nInvoice: ${sale.invoiceNumber}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}\n\nRegards,\n${PHARMACY_NAME}`,
+      `Dear ${sale.customerName},\n\nPlease find your invoice details below.\n\nInvoice: ${sale.invoiceNumber}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}\n\nRegards,\n${invoiceProfile.businessName}`,
     )
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
@@ -611,7 +619,7 @@ export default function Invoices() {
     }
 
     const message = encodeURIComponent(
-      `Invoice ${sale.invoiceNumber} from ${PHARMACY_NAME}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}`,
+      `Invoice ${sale.invoiceNumber} from ${invoiceProfile.businessName}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}`,
     )
 
     const number = whatsapp.replace(/[^\d]/g, "")
@@ -834,24 +842,24 @@ export default function Invoices() {
               <div className="invoice-header relative overflow-hidden bg-white px-7 py-7 text-slate-900">
                 <div className="invoice-header-inner relative flex flex-col items-center justify-center gap-2 text-center">
                   <div className="invoice-brand-block">
-                    <img src="/brand/zaki-logo.png" alt="Zaki Pharmacy" className="invoice-brand-logo h-14 w-[190px] object-contain" />
+                    <img src="/brand/zaki-logo.png" alt={invoiceProfile.businessName} className="invoice-brand-logo h-14 w-[190px] object-contain" />
                   </div>
 
                   <div className="invoice-brand-name text-[26px] font-black uppercase tracking-[0.08em] text-slate-900">
-                    {PHARMACY_NAME}
+                    {invoiceProfile.businessName}
                   </div>
 
                   <div dir="rtl" className="invoice-brand-name-ar text-[22px] font-black text-slate-800">
-                    {PHARMACY_ARABIC_NAME}
+                    {invoiceProfile.arabicName}
                   </div>
 
                   <div className="invoice-header-details mt-2 flex flex-col items-center gap-1 text-[11px] font-medium text-slate-700">
-                    <p>{PHARMACY_ADDRESS}</p>
-                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_ADDRESS}</p>
-                    <p>{PHARMACY_PHONE}</p>
-                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_PHONE}</p>
-                    <p>{PHARMACY_TRN}</p>
-                    <p dir="rtl" className="text-center">{PHARMACY_ARABIC_TRN}</p>
+                    <p>{invoiceProfile.address}</p>
+                    <p dir="rtl" className="text-center">{invoiceProfile.arabicAddress}</p>
+                    <p>{invoiceProfile.phone}</p>
+                    <p dir="rtl" className="text-center">{invoiceProfile.arabicPhone}</p>
+                    <p>{invoiceProfile.trn}</p>
+                    <p dir="rtl" className="text-center">{invoiceProfile.arabicTrn}</p>
                   </div>
 
                   <div className="mt-4 w-full border-t border-slate-200 pt-3 text-center">
@@ -1007,9 +1015,9 @@ export default function Invoices() {
 
               <div className="flex flex-col gap-3 border-t border-slate-200 bg-[#17221D] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-white">{PHARMACY_NAME}</p>
-                  <p className="mt-1 text-[10px] text-white/60">{PHARMACY_ADDRESS}</p>
-                  <p className="text-[10px] text-white/60">{PHARMACY_PHONE} • {PHARMACY_TRN}</p>
+                  <p className="text-xs font-semibold text-white">{invoiceProfile.businessName}</p>
+                  <p className="mt-1 text-[10px] text-white/60">{invoiceProfile.address}</p>
+                  <p className="text-[10px] text-white/60">{invoiceProfile.phone} • {invoiceProfile.trn}</p>
                 </div>
 
                 <div className="text-left sm:text-right">
@@ -1026,21 +1034,19 @@ export default function Invoices() {
           >
             <div className="thermal-receipt-card">
               <div className="thermal-header">
-                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
-                  صيدلية زاكي ذ.م.م
-                </div>
-                <div className="thermal-address">Shop No. 3, Nuaimeya 1, AJMAN</div>
+                <div className="thermal-brand">{invoiceProfile.businessName}</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">{invoiceProfile.arabicName}</div>
+                <div className="thermal-address">{invoiceProfile.address}</div>
                 <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_ADDRESS}
+                  {invoiceProfile.arabicAddress}
                 </div>
-                <div className="thermal-address">{PHARMACY_PHONE}</div>
+                <div className="thermal-address">{invoiceProfile.phone}</div>
                 <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_PHONE}
+                  {invoiceProfile.arabicPhone}
                 </div>
-                <div className="thermal-address">{PHARMACY_TRN}</div>
+                <div className="thermal-address">{invoiceProfile.trn}</div>
                 <div className="thermal-address thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_TRN}
+                  {invoiceProfile.arabicTrn}
                 </div>
               </div>
 
@@ -1166,21 +1172,19 @@ export default function Invoices() {
           >
             <div className="thermal-receipt-card compact">
               <div className="thermal-header">
-                <div className="thermal-brand">ZAKI PHARMACY LLC</div>
-                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">
-                  صيدلية زاكي ذ.م.م
-                </div>
-                <div>{PHARMACY_ADDRESS}</div>
+                <div className="thermal-brand">{invoiceProfile.businessName}</div>
+                <div className="thermal-brand-ar thermal-arabic" dir="rtl" lang="ar">{invoiceProfile.arabicName}</div>
+                <div>{invoiceProfile.address}</div>
                 <div className="thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_ADDRESS}
+                  {invoiceProfile.arabicAddress}
                 </div>
-                <div>{PHARMACY_PHONE}</div>
+                <div>{invoiceProfile.phone}</div>
                 <div className="thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_PHONE}
+                  {invoiceProfile.arabicPhone}
                 </div>
-                <div>{PHARMACY_TRN}</div>
+                <div>{invoiceProfile.trn}</div>
                 <div className="thermal-arabic" dir="rtl" lang="ar">
-                  {PHARMACY_ARABIC_TRN}
+                  {invoiceProfile.arabicTrn}
                 </div>
               </div>
 

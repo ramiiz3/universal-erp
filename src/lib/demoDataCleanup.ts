@@ -106,55 +106,53 @@ function matchesOnlyKnownFields(record: Record<string, unknown>, allowedFields: 
 
 function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
+  if (!record) return false
+
+  const allowedFields = new Set([
     "id", "name", "category", "sku", "barcode", "purchasePrice",
-    "sellingPrice", "minimumStock", "vatRate", "unit",
-  ])) return false
+    "sellingPrice", "minimumStock", "vatRate", "unit", "productType",
+    "subcategory", "brand", "manufacturer", "alternateBarcodes",
+    "description", "returnEligible", "status", "createdAt", "updatedAt",
+    "vatApplicable",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
+  // Seed identity is the stable legacy ID plus SKU and barcode. Editable
+  // descriptions, names, prices, VAT and stock levels do not turn a demo seed
+  // into a genuine company product. Business references are checked separately.
   return record.id === expected.id
-    && record.name === expected.name
     && record.sku === expected.sku
     && record.barcode === expected.barcode
-    && record.category === expected.category
-    && Number(record.purchasePrice) === expected.purchasePrice
-    && Number(record.sellingPrice) === expected.sellingPrice
-    && Number(record.minimumStock) === expected.minimumStock
-    && Number(record.vatRate) === expected.vatRate
-    && record.unit === expected.unit
-    && !record.description
-    && !record.manufacturer
-    && !record.brand
-    && !record.packagings
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
-    "id", "productId", "batch", "expiry", "quantity", "purchasePrice", "warehouseId",
-  ])) return false
+  if (!record) return false
+  const allowedFields = new Set([
+    "id", "productId", "batch", "expiry", "quantity", "purchasePrice",
+    "warehouseId", "locationId", "sellingPrice", "totalPurchaseValue",
+    "totalSellingValue", "createdAt", "updatedAt",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
   return record.id === expected.id
     && record.productId === expected.productId
     && record.batch === expected.batch
-    && record.expiry === expected.expiry
-    && Number(record.quantity) === expected.quantity
-    && Number(record.purchasePrice) === expected.purchasePrice
-    && (!record.warehouseId || record.warehouseId === "WH-MAIN")
-    && !record.locationId
-    && record.sellingPrice == null
-    && record.totalPurchaseValue == null
-    && record.totalSellingValue == null
 }
 
 function matchesCustomer(value: unknown, expected: BuiltInDemoCustomer): boolean {
   const record = asRecord(value)
-  if (!record || !matchesOnlyKnownFields(record, [
+  if (!record) return false
+  const allowedFields = new Set([
     "id", "name", "phone", "email", "whatsapp", "status",
-  ])) return false
+    "createdAt", "updatedAt", "address", "notes", "customerType",
+    "taxRegistrationNumber", "creditLimit", "loyaltyPoints", "isActive",
+  ])
+  if (Object.keys(record).some((field) => !allowedFields.has(field))) return false
+
   return record.id === expected.id
-    && record.name === expected.name
-    && record.phone === expected.phone
     && record.email === expected.email
-    && record.whatsapp === expected.whatsapp
-    && record.status === expected.status
+    && record.phone === expected.phone
 }
 
 function containsReference(value: unknown, fields: ReadonlySet<string>, targetId: string): boolean {
@@ -261,7 +259,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     const warehouse = warehouses.find((item) => {
       const record = asRecord(item)
       if (!record || !matchesOnlyKnownFields(record, [
-        "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt",
+        "id", "name", "code", "type", "address", "manager", "phone", "active", "createdAt", "updatedAt",
       ])) return false
       return record.id === expectedWarehouse.id
         && record.name === expectedWarehouse.name
@@ -272,6 +270,7 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
         && record.phone === expectedWarehouse.phone
         && record.active === expectedWarehouse.active
         && record.createdAt === expectedWarehouse.createdAt
+        && (record.updatedAt == null || typeof record.updatedAt === "string")
     })
     if (!warehouse) continue
     const hasBusinessReferences = isReferencedOutside(

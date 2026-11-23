@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { useAuth } from "../auth/AuthProvider"
+import { Barcode as BarcodeIcon } from "lucide-react"
+import BarcodePreview from "../components/BarcodePreview"
+import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { supabase } from "../lib/supabase"
 import { useCloudInventory } from "./CloudInventoryContext"
 
@@ -114,7 +117,7 @@ export default function ProductCatalogPage() {
   const [packageSaleEnabled, setPackageSaleEnabled] = useState(true)
   const [barcodePackageId, setBarcodePackageId] = useState("")
   const [barcodeValue, setBarcodeValue] = useState("")
-  const [barcodeType, setBarcodeType] = useState("other")
+  const [barcodeType, setBarcodeType] = useState("code128")
   const [barcodePrimary, setBarcodePrimary] = useState(false)
   const [pricePackageId, setPricePackageId] = useState("")
   const [priceType, setPriceType] = useState<"purchase" | "selling">("selling")
@@ -487,7 +490,21 @@ export default function ProductCatalogPage() {
                       <select required value={barcodePackageId} onChange={(event) => setBarcodePackageId(event.target.value)} className={inputClass}>
                         {productPackages.filter((packaging) => packaging.is_active).map((packaging) => <option key={packaging.id} value={packaging.id}>{packaging.name}</option>)}
                       </select>
-                      <input required value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value)} placeholder="Barcode value" className={inputClass} />
+                      <div className="space-y-2">
+                        <input required value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value)} placeholder="Barcode value" className={inputClass} />
+                        <button type="button" onClick={() => {
+                          try {
+                            setBarcodeValue(generateCompanyProductBarcode({
+                              companyName: activeCompany?.legalName || activeCompany?.companyName || "",
+                              mobileNumber: activeCompany?.phone || "",
+                            }))
+                            setBarcodeType("code128")
+                          } catch (caught) {
+                            setError(caught instanceof Error ? caught.message : String(caught))
+                          }
+                        }} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold dark:border-slate-700"><BarcodeIcon className="h-4 w-4" /> Generate Code 128</button>
+                        {barcodeType === "code128" && <BarcodePreview value={barcodeValue} />}
+                      </div>
                       <select value={barcodeType} onChange={(event) => setBarcodeType(event.target.value)} className={inputClass}>
                         {BARCODE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                       </select>
