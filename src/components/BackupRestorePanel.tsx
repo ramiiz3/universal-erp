@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { dispatchERPCloudSync } from "../lib/erpCloudState"
 import {
   AlertTriangle,
   Download,
@@ -20,7 +21,7 @@ import {
 } from "../lib/erpBackup"
 
 type Props = {
-  onRestored?: () => void
+  onRestored?: () => void | Promise<void>
 }
 
 const COUNT_LABELS = [
@@ -98,7 +99,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
     }
   }
 
-  function handleRestore() {
+  async function handleRestore() {
     if (!backup || !confirmed) return
     const keyPreview = restorePreview
     const confirmation = window.confirm(
@@ -110,8 +111,9 @@ export default function BackupRestorePanel({ onRestored }: Props) {
     setMessage("")
     try {
       restoreERPBackup(localStorage, backup, true)
+      dispatchERPCloudSync()
       if (onRestored) {
-        onRestored()
+        await onRestored()
         return
       }
       setMessage("Restore completed. Reload the page to use the restored ERP data.")

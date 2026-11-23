@@ -18,8 +18,8 @@ function AuthFrame({ children }: { children: ReactNode }) {
               <Building2 className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">UniversalERP</h1>
-              <p className="text-sm text-slate-500">Secure company workspace</p>
+              <h1 className="text-xl font-semibold text-slate-900">Zaki Pharmacy ERP</h1>
+              <p className="text-sm text-slate-500">Secure pharmacy sign-in</p>
             </div>
           </div>
           <button
@@ -42,9 +42,7 @@ function AuthFrame({ children }: { children: ReactNode }) {
           </div>
         )}
         {children}
-        <p className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-500">
-          Legacy local ERP data remains separate and is not used as company workspace data.
-        </p>
+
       </div>
     </main>
   )
@@ -61,7 +59,7 @@ export function LoginPage() {
   const requestedReturnTo = (location.state as { from?: string } | null)?.from
   const returnTo = requestedReturnTo?.startsWith("/") && !requestedReturnTo.startsWith("//")
     ? requestedReturnTo
-    : "/workspace/dashboard"
+    : "/dashboard"
 
   if (loading) return <AuthFrame><p className="text-sm text-slate-600">Checking sign-in session…</p></AuthFrame>
   if (user) return <Navigate to={returnTo} replace />
@@ -83,7 +81,7 @@ export function LoginPage() {
   return (
     <AuthFrame>
       <h2 className="text-lg font-semibold text-slate-900">Sign in</h2>
-      <p className="mt-1 text-sm text-slate-500">Sign in to a company workspace. Local ERP records remain separate.</p>
+      <p className="mt-1 text-sm text-slate-500">Sign in to open Zaki Pharmacy ERP.</p>
       <form onSubmit={submit} className="mt-5 space-y-4">
         <label className="block text-sm font-medium text-slate-700">
           Email
@@ -106,7 +104,6 @@ export function LoginPage() {
       </form>
       <div className="mt-4 flex flex-wrap justify-between gap-3 text-sm">
         <Link className="text-emerald-700 hover:underline" to="/auth/recover">Forgot password?</Link>
-        <Link className="text-emerald-700 hover:underline" to="/auth/register">Register an account</Link>
       </div>
     </AuthFrame>
   )

@@ -1,3 +1,5 @@
+import { dispatchERPCloudSync } from "./erpCloudState"
+
 export type ERPUnitCategory =
   | "Count"
   | "Weight"
@@ -106,6 +108,7 @@ export function getERPUnits(existingUnits: string[] = []) {
 export function saveERPUnits(units: ERPUnitDefinition[]) {
   localStorage.setItem(ERP_UNITS_STORAGE_KEY, JSON.stringify(units))
   window.dispatchEvent(new Event(ERP_UNITS_EVENT))
+  dispatchERPCloudSync()
 }
 
 export function toBaseUnit(quantity: number, conversionFactor: number) {

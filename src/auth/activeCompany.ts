@@ -30,7 +30,7 @@ export type ActiveCompanyState = {
 }
 
 export type ActiveCompanyAction =
-  | { type: "begin" }
+  | { type: "begin"; preserveActive?: boolean }
   | { type: "activate"; company: ActiveCompany }
   | { type: "deny"; error: string }
   | { type: "clear" }
@@ -62,7 +62,8 @@ export function activeCompanyReducer(
   switch (action.type) {
     case "begin":
       return {
-        activeCompany: null,
+        ...state,
+        activeCompany: action.preserveActive ? state.activeCompany : null,
         loading: true,
         error: "",
         revision: state.revision + 1,

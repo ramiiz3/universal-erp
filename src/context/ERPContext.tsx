@@ -2,9 +2,18 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState
 } from "react"
 import type { ReactNode } from "react"
+import { useAuth } from "../auth/AuthProvider"
+import { supabase } from "../lib/supabase"
+import {
+  createERPCloudState,
+  areERPCloudStatesEqual,
+  restoreERPCloudState,
+  ERP_CLOUD_SYNC_EVENT,
+} from "../lib/erpCloudState"
 import {
   applyInventoryImport as buildImportedInventory,
   type InventoryImportMode,
@@ -303,6 +312,10 @@ type CreatePurchaseInput = {
 }
 
 type ERPContextValue = {
+  cloudSyncStatus: "loading" | "saving" | "saved" | "error"
+  cloudSyncError: string
+  cloudLastSavedAt: string | null
+  syncCloudNow: () => Promise<void>
   chartOfAccounts: ChartOfAccount[]
   createChartOfAccount: (input: ChartOfAccountInput) => ChartOfAccount
   updateChartOfAccount: (id: string, input: ChartOfAccountInput) => void
@@ -694,22 +707,326 @@ const ERPContext =
     null,
   )
 
+const ERP_CLOUD_META_KEY = "zaky-pharmacy-erp-cloud-sync-meta"
+
+type ERPCloudSyncMeta = {
+  companyId: string
+  revision: number
+}
+
+function readCloudSyncMeta(): ERPCloudSyncMeta | null {
+  try {
+    const raw = localStorage.getItem(ERP_CLOUD_META_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ERPCloudSyncMeta>
+    if (
+      typeof parsed.companyId !== "string" ||
+      typeof parsed.revision !== "number" ||
+      !Number.isSafeInteger(parsed.revision) ||
+      parsed.revision < 1
+    ) return null
+    return { companyId: parsed.companyId, revision: parsed.revision }
+  } catch {
+    return null
+  }
+}
+
 export function ERPProvider({
   children,
 }: {
   children: ReactNode
 }) {
+  const { activeCompany, user } = useAuth()
+  const companyId = activeCompany?.companyId ?? null
   const [loadResult] = useState(loadStoredData)
   const [store, setStore] =
     useState<StoredData>(() => migrateWarehouseData(loadResult.data))
+  const [cloudReady, setCloudReady] = useState(false)
+  const [cloudSyncStatus, setCloudSyncStatus] =
+    useState<ERPContextValue["cloudSyncStatus"]>("loading")
+  const [cloudSyncError, setCloudSyncError] = useState("")
+  const [cloudLastSavedAt, setCloudLastSavedAt] = useState<string | null>(null)
+  const cloudRevisionRef = useRef<number | null>(null)
+  const cloudCompanyRef = useRef<string | null>(null)
+  const cloudDirtyRef = useRef(false)
+  const cloudSavingRef = useRef(false)
+  const cloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleCloudSaveRef = useRef<() => void>(() => undefined)
 
   useEffect(() => {
-    if (loadResult.error) return
-    localStorage.setItem(
-      ERP_STORAGE_KEY,
-      JSON.stringify(store),
-    )
-  }, [loadResult.error, store])
+    const client = supabase
+    if (!companyId || !user?.id || !client) {
+      setCloudReady(false)
+      setCloudSyncStatus("loading")
+      cloudRevisionRef.current = null
+      cloudCompanyRef.current = null
+      return
+    }
+
+    let cancelled = false
+    setCloudReady(false)
+    setCloudSyncStatus("loading")
+    setCloudSyncError("")
+    cloudRevisionRef.current = null
+    cloudCompanyRef.current = companyId
+
+    const hydrate = async () => {
+      if (loadResult.error) {
+        throw new Error(
+          "The existing workstation data has a storage error. Resolve it or restore a valid ERP backup before connecting cloud storage. " +
+          loadResult.error,
+        )
+      }
+
+      const localSnapshot = createERPCloudState(localStorage)
+      const { data: remoteRow, error: readError } = await client
+        .from("legacy_erp_state")
+        .select("revision, state, updated_at")
+        .eq("company_id", companyId)
+        .maybeSingle()
+
+      if (readError) throw new Error("Could not read the saved pharmacy data. " + readError.message)
+
+      // Preserve this workstation's exact ERP keys before remote data can
+      // replace them. Auth sessions and unrelated browser storage are excluded.
+      const { error: recoveryError } = await client
+        .from("legacy_erp_recovery_snapshots")
+        .insert({
+          company_id: companyId,
+          reason: remoteRow ? "Before workstation cloud hydration" : "Before initial workstation cloud migration",
+          revision: remoteRow ? Number(remoteRow.revision) : null,
+          state: localSnapshot,
+          created_by: user.id,
+        })
+
+      if (recoveryError) {
+        throw new Error(
+          "A protected recovery copy of this workstation could not be created, so no data was changed. " +
+          recoveryError.message,
+        )
+      }
+
+      if (remoteRow) {
+        const remoteRevision = Number(remoteRow.revision)
+        if (!Number.isSafeInteger(remoteRevision) || remoteRevision < 1) {
+          throw new Error("The saved pharmacy data has an invalid revision number.")
+        }
+
+        const meta = readCloudSyncMeta()
+        const localDiffersFromCloud =
+          !areERPCloudStatesEqual(localSnapshot, remoteRow.state)
+
+        if (meta?.companyId === companyId && localDiffersFromCloud) {
+          if (meta.revision !== remoteRevision) {
+            throw new Error(
+              "This workstation and the database have conflicting ERP changes. A recovery copy of this workstation was saved. Reload or reconcile the newer data before continuing; nothing was overwritten.",
+            )
+          }
+
+          // The browser may have closed before its debounced save completed.
+          // Retry those local changes only when the last acknowledged database
+          // revision is unchanged, using the same compare-and-swap protection.
+          const { data: recoveredRevision, error: recoverySaveError } =
+            await client.rpc("save_legacy_erp_state", {
+              p_company_id: companyId,
+              p_expected_revision: remoteRevision,
+              p_state: localSnapshot,
+            })
+
+          if (recoverySaveError) {
+            throw new Error(
+              recoverySaveError.code === "40001"
+                ? "The pharmacy data changed in another tab during recovery. The workstation recovery copy is preserved; reload before continuing."
+                : "The pending workstation changes could not be recovered to the database. " + recoverySaveError.message,
+            )
+          }
+
+          const nextRevision = Number(recoveredRevision)
+          if (!Number.isSafeInteger(nextRevision) || nextRevision <= remoteRevision) {
+            throw new Error("The database did not confirm recovery of the pending workstation changes.")
+          }
+          cloudRevisionRef.current = nextRevision
+        } else {
+          restoreERPCloudState(localStorage, remoteRow.state)
+          cloudRevisionRef.current = remoteRevision
+        }
+      } else {
+        const { data: newRevision, error: seedError } = await client.rpc(
+          "save_legacy_erp_state",
+          {
+            p_company_id: companyId,
+            p_expected_revision: 0,
+            p_state: localSnapshot,
+          },
+        )
+
+        if (seedError) {
+          if (seedError.code !== "40001") {
+            throw new Error("Could not migrate this workstation's data to secure storage. " + seedError.message)
+          }
+          const { data: racedRow, error: racedReadError } = await client
+            .from("legacy_erp_state")
+            .select("revision, state")
+            .eq("company_id", companyId)
+            .maybeSingle()
+          if (racedReadError || !racedRow) {
+            throw new Error("The initial data migration conflicted and could not be safely reloaded.")
+          }
+          restoreERPCloudState(localStorage, racedRow.state)
+          cloudRevisionRef.current = Number(racedRow.revision)
+        } else {
+          const revision = Number(newRevision)
+          if (!Number.isSafeInteger(revision) || revision < 1) {
+            throw new Error("The database did not confirm the initial ERP migration.")
+          }
+          cloudRevisionRef.current = revision
+        }
+      }
+
+      if (cancelled) return
+
+      const reloaded = loadStoredData()
+      if (reloaded.error) throw new Error("The saved ERP data could not be loaded after synchronization. " + reloaded.error)
+      setStore(migrateWarehouseData(reloaded.data))
+
+      const revision = cloudRevisionRef.current
+      if (revision !== null) {
+        localStorage.setItem(
+          ERP_CLOUD_META_KEY,
+          JSON.stringify({ companyId, revision } satisfies ERPCloudSyncMeta),
+        )
+      }
+      setCloudLastSavedAt(new Date().toISOString())
+      setCloudSyncStatus("saved")
+      setCloudReady(true)
+    }
+
+    void hydrate().catch((error: unknown) => {
+      if (cancelled) return
+      setCloudReady(false)
+      setCloudSyncStatus("error")
+      setCloudSyncError(error instanceof Error ? error.message : String(error))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [companyId, user?.id, loadResult.error])
+
+  async function saveCloudSnapshot() {
+    const client = supabase
+    if (
+      !cloudReady ||
+      !companyId ||
+      !user?.id ||
+      !client ||
+      cloudSavingRef.current ||
+      !cloudDirtyRef.current
+    ) return
+
+    const expectedRevision = cloudRevisionRef.current
+    if (expectedRevision === null || cloudCompanyRef.current !== companyId) return
+
+    cloudSavingRef.current = true
+    setCloudSyncStatus("saving")
+    setCloudSyncError("")
+
+    try {
+      const snapshot = createERPCloudState(localStorage)
+      const { data, error } = await client.rpc("save_legacy_erp_state", {
+        p_company_id: companyId,
+        p_expected_revision: expectedRevision,
+        p_state: snapshot,
+      })
+      if (error) {
+        if (error.code === "40001") {
+          throw new Error(
+            "A different browser tab or workstation saved newer ERP data. This save was stopped to prevent overwriting it. Reload the ERP before continuing.",
+          )
+        }
+        throw new Error("The latest ERP changes could not be saved. " + error.message)
+      }
+
+      const nextRevision = Number(data)
+      if (!Number.isSafeInteger(nextRevision) || nextRevision <= expectedRevision) {
+        throw new Error("The database did not confirm the latest ERP revision.")
+      }
+      cloudRevisionRef.current = nextRevision
+      localStorage.setItem(
+        ERP_CLOUD_META_KEY,
+        JSON.stringify({ companyId, revision: nextRevision } satisfies ERPCloudSyncMeta),
+      )
+      setCloudLastSavedAt(new Date().toISOString())
+
+      const latestSnapshot = createERPCloudState(localStorage)
+      cloudDirtyRef.current =
+        !areERPCloudStatesEqual(latestSnapshot, snapshot)
+      setCloudSyncStatus(cloudDirtyRef.current ? "saving" : "saved")
+      if (cloudDirtyRef.current) scheduleCloudSaveRef.current()
+    } catch (error) {
+      setCloudSyncStatus("error")
+      setCloudSyncError(error instanceof Error ? error.message : String(error))
+      throw error
+    } finally {
+      cloudSavingRef.current = false
+    }
+  }
+
+  async function syncCloudNow() {
+    const client = supabase
+    if (!cloudReady || !companyId || !client) {
+      throw new Error("The pharmacy cloud database is not ready to receive this backup.")
+    }
+    cloudDirtyRef.current = true
+    if (cloudTimerRef.current) {
+      clearTimeout(cloudTimerRef.current)
+      cloudTimerRef.current = null
+    }
+    await saveCloudSnapshot()
+    if (cloudDirtyRef.current) {
+      throw new Error("The latest restored ERP backup has not yet been confirmed by the database.")
+    }
+  }
+
+  function scheduleCloudSave() {
+    cloudDirtyRef.current = true
+    if (!cloudReady || cloudCompanyRef.current !== companyId) return
+    setCloudSyncStatus("saving")
+    if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current)
+    cloudTimerRef.current = setTimeout(() => {
+      cloudTimerRef.current = null
+      void saveCloudSnapshot().catch(() => undefined)
+    }, 800)
+  }
+
+  scheduleCloudSaveRef.current = scheduleCloudSave
+
+  useEffect(() => {
+    if (!cloudReady || loadResult.error || !companyId) return
+    try {
+      localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(store))
+      scheduleCloudSave()
+    } catch (error) {
+      setCloudSyncStatus("error")
+      setCloudSyncError("The local recovery copy could not be updated. " + (error instanceof Error ? error.message : String(error)))
+    }
+  }, [cloudReady, loadResult.error, store, companyId])
+
+  useEffect(() => {
+    const onERPCloudSync = () => scheduleCloudSaveRef.current()
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key.startsWith("universal-erp-")) {
+        scheduleCloudSaveRef.current()
+      }
+    }
+    window.addEventListener(ERP_CLOUD_SYNC_EVENT, onERPCloudSync)
+    window.addEventListener("storage", onStorage)
+    return () => {
+      window.removeEventListener(ERP_CLOUD_SYNC_EVENT, onERPCloudSync)
+      window.removeEventListener("storage", onStorage)
+      if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current)
+    }
+  }, [])
 
   function persistStore(
     nextStore: StoredData,
@@ -3200,6 +3517,10 @@ export function ERPProvider({
   return (
     <ERPContext.Provider
       value={{
+        cloudSyncStatus,
+        cloudSyncError,
+        cloudLastSavedAt,
+        syncCloudNow,
         products: store.products,
         chartOfAccounts: store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS,
         createChartOfAccount,

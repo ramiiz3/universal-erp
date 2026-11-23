@@ -1,0 +1,38 @@
+name: ERP cloud persistence validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/App.tsx"
+      - "src/auth/**"
+      - "src/context/ERPContext.tsx"
+      - "src/layouts/AppLayout.tsx"
+      - "src/components/BackupRestorePanel.tsx"
+      - "src/lib/erpCloudState.ts"
+      - "src/lib/erpCloudState.test.ts"
+      - "src/lib/erpBackup.ts"
+      - "src/lib/erpUnits.ts"
+      - "src/lib/productCategories.ts"
+      - "src/pages/Settings.tsx"
+      - "supabase/migrations/**"
+      - ".github/workflows/erp-cloud-persistence-validation.yml"
+
+jobs:
+  validate:
+    name: ERP tests and production build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run all tests
+        run: npm test
+      - name: Build production application
+        run: npm run build

@@ -34,6 +34,7 @@ type AuthContextValue = {
   loading: boolean
   authError: string
   membershipError: string
+  membershipLoading: boolean
   refreshMemberships: () => Promise<void>
   activateCompany: (companyId: string) => Promise<boolean>
   clearActiveCompany: () => void
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState("")
   const [memberships, setMemberships] = useState<CompanyMembership[]>([])
   const [membershipError, setMembershipError] = useState("")
+  const [membershipLoading, setMembershipLoading] = useState(true)
   const [companyState, dispatchCompany] = useReducer(
     activeCompanyReducer,
     initialActiveCompanyState,
@@ -131,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase || !session?.user) {
       setMemberships([])
       setMembershipError("")
+      setMembershipLoading(false)
       clearActiveCompany()
       return
     }
@@ -138,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const requestId = ++membershipRequestRef.current
     const selectedCompanyId = companyStateRef.current.activeCompany?.companyId ?? null
     const selectedRevision = companyStateRef.current.revision
+    setMembershipLoading(true)
     const { data, error } = await supabase
       .from("company_memberships")
       .select("company_id, branch_id, status, companies!inner(id, name, legal_name, address, phone, email, tax_registration_number, tax_rate, currency, country, invoice_prefix, invoice_footer, logo_path), roles!inner(role_key, display_name)")
@@ -147,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       if (requestId !== membershipRequestRef.current) return
       setMembershipError(`Could not load active company memberships. ${error.message}`)
+      setMembershipLoading(false)
       setMemberships([])
       dispatchCompany({
         type: "deny",
@@ -177,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status: row.status,
     }))
     setMembershipError("")
+    setMembershipLoading(false)
     setMemberships(mappedMemberships)
     if (
       selectedCompanyId &&
@@ -193,7 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activateCompany = useCallback(async (companyId: string) => {
     const requestId = ++membershipRequestRef.current
-    dispatchCompany({ type: "begin" })
+    const preserveActive = companyStateRef.current.activeCompany?.companyId === companyId
+    dispatchCompany({ type: "begin", preserveActive })
     if (!companyId || !supabase || !session?.user) {
       dispatchCompany({
         type: "deny",
@@ -291,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     authError,
     membershipError,
+    membershipLoading,
     refreshMemberships,
     activateCompany,
     clearActiveCompany,
@@ -302,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     authError,
     membershipError,
+    membershipLoading,
     memberships,
     refreshMemberships,
     session,

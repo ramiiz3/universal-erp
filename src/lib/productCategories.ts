@@ -1,3 +1,5 @@
+import { dispatchERPCloudSync } from "./erpCloudState"
+
 export type ProductCategory = {
   id: string
   name: string
@@ -104,6 +106,7 @@ export function getProductCategories(
       PRODUCT_CATEGORIES_STORAGE_KEY,
       JSON.stringify(categories),
     )
+    dispatchERPCloudSync()
   }
 
   return categories
@@ -120,4 +123,5 @@ export function saveProductCategories(
   window.dispatchEvent(
     new Event(PRODUCT_CATEGORIES_EVENT),
   )
+  dispatchERPCloudSync()
 }
