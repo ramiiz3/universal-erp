@@ -199,7 +199,9 @@ export function createApp({ pool, authenticate, frontendOrigin = "" }) {
         if (rawToken.length < 32 || rawToken.length > 200) throw Object.assign(new Error("Invitation token is invalid."), { status: 400 });
         const tokenHash = createHash("sha256").update(rawToken).digest("hex");
         const email = normalizeEmail(user.email);
-        if (!email) throw Object.assign(new Error("Your signed-in account has no verified email address."), { status: 400 });
+        if (!email || !user.emailConfirmedAt) {
+          throw Object.assign(new Error("Confirm your email address with Supabase Auth before accepting this invitation."), { status: 403 });
+        }
         const accepted = await withUserTransaction(pool, user.id, async (client) => {
           const result = await client.query(
             "select erp_private.accept_company_invitation($1,$2,$3) as company_id",
