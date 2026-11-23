@@ -184,15 +184,15 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     BUILT_IN_PRODUCTS
       .filter((expected) =>
         (!options.onlyProductId || expected.id === options.onlyProductId)
-          ? products.some((item) => matchesProduct(item, expected))
-          : products.some((item) => matchesProduct(item, expected)),
+          && products.some((item) => matchesProduct(item, expected)),
       )
       .map((expected) => expected.id),
   )
   const allSeedLotIds = new Set(
     BUILT_IN_LOTS
       .filter((expected) =>
-        lots.some((item) => matchesLot(item, expected)),
+        allSeedProductIds.has(expected.productId)
+          && lots.some((item) => matchesLot(item, expected)),
       )
       .map((expected) => expected.id),
   )
