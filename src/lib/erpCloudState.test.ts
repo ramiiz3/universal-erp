@@ -69,7 +69,11 @@ describe("pharmacy ERP cloud-state snapshots", () => {
 
     expect(() => validateERPCloudState({
       ...snapshot,
-      entries: [...snapshot.entries.slice(1), snapshot.entries[0]],
+      entries: snapshot.entries.map((entry, index) =>
+        index === snapshot.entries.length - 1
+          ? { ...entry, key: snapshot.entries[0].key }
+          : entry,
+      ),
     })).toThrow(/duplicate/)
 
     expect(() => validateERPCloudState({
