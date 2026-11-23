@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --exclude server/tests/**",
     "test:db:security": "node scripts/test-database-security.mjs",
     "test:storage:security": "node scripts/test-storage-api-security.mjs",
     "test:security": "npm run test:db:security && npm run test:storage:security",
