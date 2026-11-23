@@ -84,6 +84,17 @@ export function validateERPCloudState(value: unknown): ERPCloudState {
  * Applies a validated cloud snapshot atomically from the browser's point of
  * view. If a local write fails, previously stored keys are restored.
  */
+export function areERPCloudStatesEqual(leftValue: unknown, rightValue: unknown): boolean {
+  try {
+    const left = validateERPCloudState(leftValue)
+    const right = validateERPCloudState(rightValue)
+    const rightByKey = new Map(right.entries.map((entry) => [entry.key, entry.value]))
+    return left.entries.every((entry) => rightByKey.get(entry.key) === entry.value)
+  } catch {
+    return false
+  }
+}
+
 export function restoreERPCloudState(
   storage: StorageLike,
   value: unknown,
