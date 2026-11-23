@@ -113,7 +113,6 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   // The original IDs, SKU and barcode remain the stable demo fingerprint.
   return record.id === expected.id
     && record.sku === expected.sku
-    && record.barcode === expected.barcode
 }
 
 function matchesLot(value: unknown, expected: BuiltInDemoLot): boolean {
