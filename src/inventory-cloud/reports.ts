@@ -36,6 +36,7 @@ export type CloudReportPayment = {
 
 export type CloudSalesReport = {
   invoiceCount: number
+  invoiceTotal: number
   grossSales: number
   discounts: number
   vat: number
@@ -117,6 +118,7 @@ export function buildCloudSalesReport(
 
   return {
     invoiceCount: sales.length,
+    invoiceTotal: sales.reduce((sum, sale) => sum + number(sale.total), 0),
     grossSales,
     discounts,
     vat,
