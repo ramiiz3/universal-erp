@@ -20,6 +20,7 @@ const productForm: ProductInput = {
   sellingPrice: "2",
   minimumStock: "0",
   vatRate: "5",
+  vatApplicable: true,
 }
 
 const warehouse: CloudWarehouse = {
