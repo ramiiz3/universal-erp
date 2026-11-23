@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Boxes,
   Bot,
+  BarChart3,
   ClipboardList,
   Package,
   ReceiptText,
@@ -26,6 +27,7 @@ const navigationGroups = [
     items: [
       { to: "/workspace/pos", label: "Point of sale", icon: ShoppingCart },
       { to: "/workspace/sales", label: "Sales & invoices", icon: ReceiptText },
+      { to: "/workspace/reports", label: "Sales reports", icon: BarChart3 },
     ],
   },
   {
