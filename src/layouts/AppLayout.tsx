@@ -21,6 +21,7 @@ import {
   Warehouse,
   X,
   LayoutDashboard,
+  LogOut,
   Bot,
   CheckCircle2,
   Clock3,
@@ -30,6 +31,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
+import { useAuth } from "../auth/AuthProvider"
 import { useTheme } from "../context/ThemeContext"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
@@ -163,9 +165,12 @@ export default function AppLayout() {
     products,
     inventoryLots,
     sales,
+    cloudSyncStatus,
+    cloudSyncError,
+    cloudLastSavedAt,
     localStorageError,
-    localLastSavedAt,
   } = useERP()
+  const { user, signOut } = useAuth()
 
   const [notificationsOpen, setNotificationsOpen] =
     useState(false)
@@ -420,14 +425,16 @@ export default function AppLayout() {
             <div className="flex items-center gap-2">
               <span
                 aria-live="polite"
-                title={localStorageError || (localLastSavedAt ? "Last saved on this device " + new Date(localLastSavedAt).toLocaleString() : "ERP records are stored in this browser on this device")}
+                title={cloudSyncError || localStorageError || (cloudLastSavedAt ? "Last saved to the secure pharmacy database " + new Date(cloudLastSavedAt).toLocaleString() : "Waiting for the first secure cloud save")}
                 className={`hidden items-center rounded-lg px-2.5 py-2 text-xs font-medium sm:flex ${
-                  localStorageError
-                    ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  cloudSyncStatus === "saved"
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : cloudSyncStatus === "error" || localStorageError
+                      ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
                 }`}
               >
-                {localStorageError ? "Local storage issue" : "Saved on this device"}
+                {localStorageError ? "Local data issue" : cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "saving" ? "Saving to cloud…" : cloudSyncStatus === "error" ? "Cloud sync error" : "Connecting…"}
               </span>
               <div className="relative">
                 <button
@@ -636,7 +643,12 @@ export default function AppLayout() {
                             {owner.role}
                           </p>
 
-                          {owner.email && (
+                          {user?.email && (
+                            <p className="mt-1 truncate text-[11px] text-slate-400">
+                              Signed in: {user.email}
+                            </p>
+                          )}
+                          {owner.email && owner.email !== user?.email && (
                             <p className="mt-1 truncate text-[11px] text-slate-400">
                               {owner.email}
                             </p>
@@ -665,6 +677,21 @@ export default function AppLayout() {
                       >
                         <SettingsIcon className="h-4 w-4" />
                         Settings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOwnerOpen(false)
+                          void signOut()
+                            .then(() => navigate("/auth/login", { replace: true }))
+                            .catch((error: unknown) => {
+                              window.alert(error instanceof Error ? error.message : "Sign out failed. Please try again.")
+                            })
+                        }}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sign out
                       </button>
                     </div>
 

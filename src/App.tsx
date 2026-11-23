@@ -31,14 +31,27 @@ import AI from "./pages/AI"
 
 import { ERPProvider } from "./context/ERPContext"
 import { ThemeProvider } from "./context/ThemeContext"
+import { AuthProvider } from "./auth/AuthProvider"
+import {
+  InvitationPage,
+  LoginPage,
+  RecoveryPage,
+  RegistrationPage,
+} from "./auth/AuthPages"
+import LegacyERPAccess from "./auth/LegacyERPAccess"
 
 export default function App() {
   return (
     <ThemeProvider>
-      <Routes>
-          <Route path="/auth/*" element={<Navigate to="/dashboard" replace />} />
+      <AuthProvider>
+        <Routes>
+          <Route path="/auth/login" element={<LoginPage />} />
+          <Route path="/auth/register" element={<RegistrationPage />} />
+          <Route path="/auth/recover" element={<RecoveryPage />} />
+          <Route path="/auth/invite/:token" element={<InvitationPage />} />
           <Route path="/workspace/*" element={<Navigate to="/dashboard" replace />} />
-          <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
+          <Route element={<LegacyERPAccess />}>
+            <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/daily-register" element={<DailyRegister />} />
@@ -70,8 +83,10 @@ export default function App() {
             <Route path="/ai" element={<AI />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Route>
           </Route>
-      </Routes>
+        </Routes>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

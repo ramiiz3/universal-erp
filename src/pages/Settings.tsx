@@ -11,6 +11,8 @@ import {
 } from "lucide-react"
 import BackupRestorePanel from "../components/BackupRestorePanel"
 import { ERP_SETTINGS_STORAGE_KEY } from "../lib/erpStorageKeys"
+import { dispatchERPCloudSync } from "../lib/erpCloudState"
+import { useERP } from "../context/ERPContext"
 
 type PaymentSettings = {
   cash: boolean
@@ -97,6 +99,7 @@ function loadSettings(): SettingsData {
 }
 
 export default function Settings() {
+  const { syncCloudNow } = useERP()
   const [settings, setSettings] =
     useState<SettingsData>(loadSettings)
 
@@ -138,6 +141,7 @@ export default function Settings() {
       ERP_SETTINGS_STORAGE_KEY,
       JSON.stringify(settings),
     )
+    dispatchERPCloudSync()
 
     setSaved(true)
 
@@ -646,7 +650,10 @@ export default function Settings() {
         </form>
 
         <div className="mt-8 space-y-6">
-          <BackupRestorePanel onRestored={() => window.location.reload()} />
+          <BackupRestorePanel onRestored={async () => {
+            await syncCloudNow()
+            window.location.reload()
+          }} />
         </div>
       </div>
     </section>
