@@ -51,8 +51,12 @@ function Metric({
 }
 
 export default function CloudReportsPage() {
-  const { activeCompany } = useAuth()
+  const { activeCompany, memberships } = useAuth()
   const { companyId, branches } = useCloudInventory()
+  const canViewReports = memberships.some((membership) =>
+    membership.companyId === companyId &&
+    ["owner", "admin", "accountant", "manager", "read_only"].includes(membership.roleKey),
+  )
   const currency = activeCompany?.currency ?? "AED"
   const today = new Date()
   const [fromDate, setFromDate] = useState(() => localDate(new Date(today.getFullYear(), today.getMonth(), 1)))
@@ -70,6 +74,16 @@ export default function CloudReportsPage() {
 
   const refresh = useCallback(async () => {
     const requestId = ++requestVersion.current
+    if (!canViewReports) {
+      setSales([])
+      setLines([])
+      setPayments([])
+      setLineDataReady(false)
+      setPaymentDataReady(false)
+      setError("Your company membership does not include the view_reports permission.")
+      setLoading(false)
+      return
+    }
     if (!supabase || !companyId) {
       setSales([])
       setLines([])
@@ -156,7 +170,7 @@ export default function CloudReportsPage() {
       setNotice("This report reached the 2,000-invoice retrieval limit. Narrow the date range to include all invoices.")
     }
     setLoading(false)
-  }, [companyId, fromDate, toDate, branchId])
+  }, [companyId, fromDate, toDate, branchId, canViewReports])
 
   useEffect(() => {
     void refresh()
@@ -164,6 +178,17 @@ export default function CloudReportsPage() {
   }, [refresh])
 
   const report = buildCloudSalesReport(sales, lines, payments)
+
+  if (!canViewReports) {
+    return (
+      <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30">
+        <h1 className="text-xl font-semibold">Reports access required</h1>
+        <p className="mt-2 text-sm text-amber-900 dark:text-amber-200">
+          Your company role does not include report access. Ask an owner or administrator to assign the view_reports permission.
+        </p>
+      </section>
+    )
+  }
 
   function exportRegister() {
     const rows: unknown[][] = [[
