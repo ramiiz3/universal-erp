@@ -38,7 +38,6 @@ import {
   RecoveryPage,
   RegistrationPage,
 } from "./auth/AuthPages"
-import WorkspaceRoutes from "./auth/WorkspaceRoutes"
 import LegacyERPAccess from "./auth/LegacyERPAccess"
 
 export default function App() {
@@ -50,7 +49,7 @@ export default function App() {
           <Route path="/auth/register" element={<RegistrationPage />} />
           <Route path="/auth/recover" element={<RecoveryPage />} />
           <Route path="/auth/invite/:token" element={<InvitationPage />} />
-          <Route path="/workspace/*" element={<WorkspaceRoutes />} />
+          <Route path="/workspace/*" element={<Navigate to="/dashboard" replace />} />
           <Route element={<LegacyERPAccess />}>
             <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
