@@ -314,6 +314,7 @@ type ERPContextValue = {
   cloudSyncStatus: "loading" | "saving" | "saved" | "error"
   cloudSyncError: string
   cloudLastSavedAt: string | null
+  syncCloudNow: () => Promise<void>
   chartOfAccounts: ChartOfAccount[]
   createChartOfAccount: (input: ChartOfAccountInput) => ChartOfAccount
   updateChartOfAccount: (id: string, input: ChartOfAccountInput) => void
@@ -937,8 +938,24 @@ export function ERPProvider({
     } catch (error) {
       setCloudSyncStatus("error")
       setCloudSyncError(error instanceof Error ? error.message : String(error))
+      throw error
     } finally {
       cloudSavingRef.current = false
+    }
+  }
+
+  async function syncCloudNow() {
+    if (!cloudReady || !companyId || !supabase) {
+      throw new Error("The pharmacy cloud database is not ready to receive this backup.")
+    }
+    cloudDirtyRef.current = true
+    if (cloudTimerRef.current) {
+      clearTimeout(cloudTimerRef.current)
+      cloudTimerRef.current = null
+    }
+    await saveCloudSnapshot()
+    if (cloudDirtyRef.current) {
+      throw new Error("The latest restored ERP backup has not yet been confirmed by the database.")
     }
   }
 
@@ -949,7 +966,7 @@ export function ERPProvider({
     if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current)
     cloudTimerRef.current = setTimeout(() => {
       cloudTimerRef.current = null
-      void saveCloudSnapshot()
+      void saveCloudSnapshot().catch(() => undefined)
     }, 800)
   }
 
@@ -3474,6 +3491,7 @@ export function ERPProvider({
         cloudSyncStatus,
         cloudSyncError,
         cloudLastSavedAt,
+        syncCloudNow,
         products: store.products,
         chartOfAccounts: store.chartOfAccounts ?? DEFAULT_CHART_OF_ACCOUNTS,
         createChartOfAccount,
