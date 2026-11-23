@@ -45,5 +45,8 @@ export async function verifySupabaseAccessToken(
   return {
     id: user.id,
     email: typeof user.email === "string" ? user.email.trim().toLowerCase() : null,
+    emailConfirmedAt: typeof user.email_confirmed_at === "string"
+      ? user.email_confirmed_at
+      : typeof user.confirmed_at === "string" ? user.confirmed_at : null,
   };
 }
