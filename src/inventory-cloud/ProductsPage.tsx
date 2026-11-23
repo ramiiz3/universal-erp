@@ -26,7 +26,9 @@ const EMPTY_PRODUCT: ProductInput = {
   vatApplicable: true,
 }
 
-const PRODUCT_FIELDS: { key: keyof ProductInput; label: string; type?: string }[] = [
+type ProductFieldKey = Exclude<keyof ProductInput, "vatApplicable">
+
+const PRODUCT_FIELDS: { key: ProductFieldKey; label: string; type?: string }[] = [
   { key: "name", label: "Product name" },
   { key: "sku", label: "SKU" },
   { key: "category", label: "Category" },
