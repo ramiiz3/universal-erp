@@ -40,6 +40,9 @@ async function readJson(request) {
 }
 
 function safeCompanyInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw Object.assign(new Error("Company details must be provided as a JSON object."), { status: 400 });
+  }
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const legalName = typeof body.legalName === "string" ? body.legalName.trim() : "";
   const country = typeof body.country === "string" ? body.country.trim().toUpperCase() : "";
@@ -292,7 +295,9 @@ export function createApp({ pool, authenticate, frontendOrigin = "" }) {
         if (request.method === "PUT" && entityType && decodedId) {
           if (!canWriteRecords(membership.role)) throw Object.assign(new Error("Your company role is read-only."), { status: 403 });
           const body = await readJson(request);
-          if (!validateJsonValue(body.data)) throw Object.assign(new Error("Record data is missing or exceeds the 1 MB limit."), { status: 400 });
+          if (!body.data || typeof body.data !== "object" || !validateJsonValue(body.data)) {
+            throw Object.assign(new Error("Record data must be a JSON object or array and must not exceed 1 MB."), { status: 400 });
+          }
           const current = await client.query(
             "select revision from public.erp_company_records where company_id=$1 and entity_type=$2 and record_id=$3 for update",
             [companyId, entityType, decodedId],
