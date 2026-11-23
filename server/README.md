@@ -50,6 +50,15 @@ Run migrations:
 Migrations are tracked in erp_private.schema_migrations. They are safe to run
 repeatedly. Back up an existing database before applying schema changes.
 
+## Render deployment
+
+The existing root render.yaml is intentionally unchanged and continues to describe
+only the current static pharmacy application. When a PostgreSQL host and secrets
+are ready, create the API service from render.api.yaml as a separate Render
+Blueprint. Set its DATABASE_URL to the dedicated non-owner erp_app database
+role, and set SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY and FRONTEND_ORIGIN. Do not
+put the migration/admin connection string into the API service.
+
 ## Environment
 
 Copy .env.example to .env for local work and set:
