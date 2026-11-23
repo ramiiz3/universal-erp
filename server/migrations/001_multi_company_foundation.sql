@@ -23,6 +23,17 @@ create table if not exists public.erp_companies (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.erp_company_branches (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.erp_companies(id) on delete cascade,
+  name text not null check (length(btrim(name)) between 1 and 150),
+  code text not null check (length(btrim(code)) between 1 and 30),
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (company_id, id),
+  unique (company_id, code)
+);
+
 create table if not exists public.erp_company_memberships (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references public.erp_companies(id) on delete cascade,
@@ -31,7 +42,9 @@ create table if not exists public.erp_company_memberships (
   branch_id uuid,
   status text not null default 'active' check (status in ('active','suspended','removed')),
   joined_at timestamptz not null default now(),
-  unique (company_id, user_id)
+  unique (company_id, user_id),
+  foreign key (company_id, branch_id)
+    references public.erp_company_branches(company_id, id)
 );
 create index if not exists erp_memberships_user_status_idx
   on public.erp_company_memberships(user_id, status);
@@ -125,6 +138,7 @@ as $$
 declare
   v_user_id uuid := erp_private.current_user_id();
   v_company_id uuid;
+  v_branch_id uuid;
 begin
   if v_user_id is null then
     raise exception 'Authentication is required to create a company' using errcode = '42501';
@@ -137,8 +151,11 @@ begin
     coalesce(p_phone,''), coalesce(p_email,''), coalesce(p_tax_registration_number,''),
     coalesce(p_invoice_prefix,'INV'), coalesce(p_invoice_footer,''), v_user_id
   ) returning id into v_company_id;
-  insert into public.erp_company_memberships(company_id, user_id, role, status)
-  values (v_company_id, v_user_id, 'owner', 'active');
+  insert into public.erp_company_branches(company_id, name, code, is_default)
+  values (v_company_id, coalesce(nullif(btrim(p_default_branch_name), ''), 'Main'), 'MAIN', true)
+  returning id into v_branch_id;
+  insert into public.erp_company_memberships(company_id, user_id, role, branch_id, status)
+  values (v_company_id, v_user_id, 'owner', v_branch_id, 'active');
   return v_company_id;
 end
 $$;
@@ -164,8 +181,7 @@ begin
   if not found then return null; end if;
   insert into public.erp_company_memberships(company_id, user_id, role, status)
   values (v_invitation.company_id, p_user_id, v_invitation.role, 'active')
-  on conflict (company_id, user_id) do update
-    set role = excluded.role, status = 'active', joined_at = now();
+  on conflict (company_id, user_id) do nothing;
   update public.erp_company_invitations set accepted_at = now() where id = v_invitation.id;
   return v_invitation.company_id;
 end
@@ -175,6 +191,11 @@ alter table public.erp_companies enable row level security;
 create policy erp_companies_member_read on public.erp_companies
   for select to erp_app
   using (erp_private.is_company_member(id, erp_private.current_user_id()));
+
+alter table public.erp_company_branches enable row level security;
+create policy erp_company_branches_member_read on public.erp_company_branches
+  for select to erp_app
+  using (erp_private.is_company_member(company_id, erp_private.current_user_id()));
 
 alter table public.erp_company_memberships enable row level security;
 create policy erp_memberships_self_or_admin_read on public.erp_company_memberships
@@ -246,6 +267,7 @@ create policy erp_audit_member_insert on public.erp_audit_events
 grant usage on schema public, erp_private to erp_app;
 grant select on public.erp_companies to erp_app;
 grant select on public.erp_company_memberships to erp_app;
+grant select on public.erp_company_branches to erp_app;
 grant select, insert on public.erp_company_invitations to erp_app;
 grant select, insert, update, delete on public.erp_company_records to erp_app;
 grant select, insert on public.erp_audit_events to erp_app;
