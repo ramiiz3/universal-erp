@@ -26,6 +26,7 @@ import CloudPOSPage from "../inventory-cloud/CloudPOSPage"
 import CloudPurchasingPage from "../inventory-cloud/CloudPurchasingPage"
 import CloudSalesPage from "../inventory-cloud/CloudSalesPage"
 import CloudInvoicePage from "../inventory-cloud/CloudInvoicePage"
+import CloudReportsPage from "../inventory-cloud/CloudReportsPage"
 import AI from "../pages/AI"
 import { ERPProvider } from "../context/ERPContext"
 import {
@@ -856,6 +857,7 @@ export default function WorkspaceRoutes() {
           <Route path="pos" element={<CloudPOSPage />} />
           <Route path="purchasing" element={<CloudPurchasingPage />} />
           <Route path="sales" element={<CloudSalesPage />} />
+          <Route path="reports" element={<CloudReportsPage />} />
           <Route path="ai" element={<WorkspaceAIAssistant />} />
           <Route path="invoices/:saleId" element={<CloudInvoicePage />} />
         </Route>

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import { Barcode as BarcodeIcon, Download, FileSpreadsheet, Search, Upload, X } from "lucide-react"
 import BarcodePreview from "../components/BarcodePreview"
@@ -10,6 +10,49 @@ import { createSubmissionLock, type ProductInput } from "./domain"
 import { useCloudInventory, type CloudProduct } from "./CloudInventoryContext"
 import { saveProductWorkflow, setProductArchiveWorkflow } from "./workflows"
 import { previewCloudCatalogImport, type CloudCatalogImportIssue, type CloudCatalogImportRow } from "./catalogImport"
+
+type ProductPackagingProfile = {
+  id: string
+  name: string
+  base_quantity: number
+  is_base_unit: boolean
+  allow_fractional: boolean
+  is_purchase_enabled: boolean
+  is_sale_enabled: boolean
+  is_active: boolean
+  sort_order: number
+}
+
+type ProductBarcodeProfile = {
+  id: string
+  packaging_id: string
+  barcode: string
+  barcode_type: string
+  is_primary: boolean
+}
+
+type ProductPriceProfile = {
+  id: string
+  packaging_id: string
+  branch_id: string | null
+  price_type: "purchase" | "selling"
+  amount: number
+  currency: string
+  effective_from: string
+  effective_to: string | null
+}
+
+type ProductProfileData = {
+  packagings: ProductPackagingProfile[]
+  barcodes: ProductBarcodeProfile[]
+  prices: ProductPriceProfile[]
+}
+
+const EMPTY_PROFILE: ProductProfileData = {
+  packagings: [],
+  barcodes: [],
+  prices: [],
+}
 
 const EMPTY_PRODUCT: ProductInput = {
   name: "",
@@ -64,7 +107,7 @@ function formFor(product?: CloudProduct, defaultVatRate = 5): ProductInput {
 
 export default function ProductsPage() {
   const { activeCompany, memberships, user } = useAuth()
-  const { companyId, products, warehouses, lots, loading, error, refresh } = useCloudInventory()
+  const { companyId, products, branches, warehouses, lots, loading, error, refresh } = useCloudInventory()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
   const [status, setStatus] = useState("active")
@@ -72,6 +115,9 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<CloudProduct | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [details, setDetails] = useState<CloudProduct | null>(null)
+  const [profile, setProfile] = useState<ProductProfileData>(EMPTY_PROFILE)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileError, setProfileError] = useState("")
   const [form, setForm] = useState<ProductInput>({ ...EMPTY_PRODUCT, vatRate: String(getDefaultCompanyVatRate(activeCompany?.taxRate)) })
   const [saving, setSaving] = useState(false)
   const [pageError, setPageError] = useState("")
@@ -94,6 +140,58 @@ export default function ProductsPage() {
     openingStockQuantity: number
   } | null>(null)
   const submitLock = useRef(createSubmissionLock())
+
+  useEffect(() => {
+    if (!details || !supabase || !companyId) {
+      setProfile(EMPTY_PROFILE)
+      setProfileError("")
+      setProfileLoading(false)
+      return
+    }
+
+    let active = true
+    setProfileLoading(true)
+    setProfileError("")
+    void Promise.all([
+      supabase.from("product_packagings")
+        .select("id, name, base_quantity, is_base_unit, allow_fractional, is_purchase_enabled, is_sale_enabled, is_active, sort_order")
+        .eq("company_id", companyId)
+        .eq("product_id", details.id)
+        .order("sort_order")
+        .order("name"),
+      supabase.from("product_barcodes")
+        .select("id, packaging_id, barcode, barcode_type, is_primary")
+        .eq("company_id", companyId)
+        .eq("product_id", details.id)
+        .order("is_primary", { ascending: false })
+        .order("barcode"),
+      supabase.from("product_prices")
+        .select("id, packaging_id, branch_id, price_type, amount, currency, effective_from, effective_to")
+        .eq("company_id", companyId)
+        .eq("product_id", details.id)
+        .is("effective_to", null)
+        .order("effective_from", { ascending: false }),
+    ]).then(([packagings, barcodes, prices]) => {
+      if (!active) return
+      const errors = [packagings, barcodes, prices]
+        .filter((result) => result.error)
+        .map((result) => result.error?.message)
+      setProfile({
+        packagings: (packagings.data ?? []) as ProductPackagingProfile[],
+        barcodes: (barcodes.data ?? []) as ProductBarcodeProfile[],
+        prices: (prices.data ?? []) as ProductPriceProfile[],
+      })
+      setProfileError(errors.length ? errors.join("; ") : "")
+      setProfileLoading(false)
+    }).catch((caught: unknown) => {
+      if (!active) return
+      setProfileError(caught instanceof Error ? caught.message : String(caught))
+      setProfileLoading(false)
+    })
+
+    return () => { active = false }
+  }, [details?.id, companyId])
+
   const canManageProducts = memberships.some((membership) =>
     membership.companyId === companyId &&
     membership.branchId === null &&
@@ -556,22 +654,90 @@ export default function ProductsPage() {
 
       {details && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetails(null) }}>
-          <section className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900">
-            <div className="flex items-start justify-between gap-3">
-              <div><h2 className="text-xl font-semibold">{details.name}</h2><p className="text-sm text-slate-500">{details.category || "Uncategorized"}</p></div>
-              <button type="button" onClick={() => setDetails(null)} className="text-sm text-slate-500">Close</button>
+          <section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-slate-900">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Complete product profile</p>
+                <h2 className="mt-1 text-xl font-semibold">{details.name}</h2>
+                <p className="text-sm text-slate-500">{details.category || "Uncategorized"} · {details.is_active ? "Active" : "Archived"}</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { startEdit(details); setDetails(null) }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium dark:border-slate-700">Edit product</button>
+                <button type="button" onClick={() => setDetails(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700">Close</button>
+              </div>
             </div>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <dt className="text-slate-500">SKU</dt><dd>{details.sku || "—"}</dd>
-              <dt className="text-slate-500">Barcode</dt><dd className="break-all font-mono">{details.barcode || "—"}</dd>
-              <dt className="text-slate-500">Manufacturer</dt><dd>{details.manufacturer || "—"}</dd>
-              <dt className="text-slate-500">Unit</dt><dd>{details.unit}</dd>
-              <dt className="text-slate-500">Purchase cost</dt><dd>{Number(details.purchase_price).toFixed(2)}</dd>
-              <dt className="text-slate-500">Default selling price</dt><dd>{Number(details.selling_price).toFixed(2)}</dd>
-              <dt className="text-slate-500">VAT</dt><dd>{details.vat_applicable ? `${Number(details.vat_rate || activeCompany?.taxRate || 0)}%` : "Not applicable"}</dd>
-              <dt className="text-slate-500">Status</dt><dd>{details.is_active ? "Active" : "Archived"}</dd>
-              <dt className="text-slate-500">Description</dt><dd className="whitespace-pre-wrap">{details.description || "—"}</dd>
-            </dl>
+
+            {profileError && <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{profileError}</p>}
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                <h3 className="font-semibold">Product information</h3>
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <dt className="text-slate-500">SKU</dt><dd className="break-all">{details.sku || "—"}</dd>
+                  <dt className="text-slate-500">Primary barcode</dt><dd className="break-all font-mono">{details.barcode || "—"}</dd>
+                  <dt className="text-slate-500">Manufacturer</dt><dd>{details.manufacturer || "—"}</dd>
+                  <dt className="text-slate-500">Base unit</dt><dd>{details.unit}</dd>
+                  <dt className="text-slate-500">Purchase cost</dt><dd>{activeCompany?.currency ?? "AED"} {Number(details.purchase_price).toFixed(2)}</dd>
+                  <dt className="text-slate-500">Selling price</dt><dd>{activeCompany?.currency ?? "AED"} {Number(details.selling_price).toFixed(2)}</dd>
+                  <dt className="text-slate-500">Minimum stock</dt><dd>{Number(details.minimum_stock).toLocaleString()}</dd>
+                  <dt className="text-slate-500">VAT treatment</dt><dd>{details.vat_applicable ? `${Number(details.vat_rate || getDefaultCompanyVatRate(activeCompany?.taxRate))}%` : "Not applicable (status not classified)"}</dd>
+                  <dt className="text-slate-500">Description</dt><dd className="whitespace-pre-wrap">{details.description || "—"}</dd>
+                </dl>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                <h3 className="font-semibold">Stock by warehouse</h3>
+                {warehouses.map((warehouse) => {
+                  const warehouseLots = lots.filter((lot) => lot.product_id === details.id && lot.warehouse_id === warehouse.id)
+                  const quantity = warehouseLots.reduce((total, lot) => total + Number(lot.quantity), 0)
+                  return (
+                    <div key={warehouse.id} className="mt-3 border-b border-slate-100 pb-3 last:border-0 dark:border-slate-800">
+                      <div className="flex justify-between gap-3 text-sm"><span className="font-medium">{warehouse.name}</span><span>{quantity.toLocaleString()} {details.unit}</span></div>
+                      {warehouseLots.map((lot) => (
+                        <p key={lot.id} className="mt-1 text-xs text-slate-500">
+                          {lot.batch || "No batch"} · Expiry {lot.expiry || "Not recorded"} · Qty {Number(lot.quantity).toLocaleString()} · Cost {activeCompany?.currency ?? "AED"} {Number(lot.purchase_price).toFixed(2)}
+                        </p>
+                      ))}
+                      {!warehouseLots.length && <p className="mt-1 text-xs text-slate-400">No stock lots recorded.</p>}
+                    </div>
+                  )
+                })}
+                {!warehouses.length && <p className="mt-3 text-sm text-slate-500">No company warehouses created yet.</p>}
+                <p className="mt-3 text-sm font-semibold">Total on hand: {lots.filter((lot) => lot.product_id === details.id).reduce((total, lot) => total + Number(lot.quantity), 0).toLocaleString()} {details.unit}</p>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                <h3 className="font-semibold">Packaging and barcodes</h3>
+                {profileLoading ? <p className="mt-3 text-sm text-slate-500">Loading packaging and barcode records…</p> : profile.packagings.map((packaging) => {
+                  const packagingBarcodes = profile.barcodes.filter((barcode) => barcode.packaging_id === packaging.id)
+                  return (
+                    <div key={packaging.id} className="mt-3 border-b border-slate-100 pb-3 last:border-0 dark:border-slate-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium">{packaging.name}</span>
+                        <span className="text-xs text-slate-500">{packaging.is_base_unit ? "Base unit" : `${Number(packaging.base_quantity).toLocaleString()} ${details.unit}`}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{packaging.allow_fractional ? "Fractional quantities allowed" : "Whole units only"} · Purchase {packaging.is_purchase_enabled ? "enabled" : "disabled"} · Sale {packaging.is_sale_enabled ? "enabled" : "disabled"} · {packaging.is_active ? "Active" : "Archived"}</p>
+                      {packagingBarcodes.map((barcode) => <p key={barcode.id} className="mt-1 break-all font-mono text-xs">{barcode.barcode}{barcode.is_primary ? " · Primary" : ""} · {barcode.barcode_type}</p>)}
+                      {!packagingBarcodes.length && <p className="mt-1 text-xs text-slate-400">No barcode assigned to this packaging.</p>}
+                    </div>
+                  )
+                })}
+                {!profileLoading && !profile.packagings.length && <p className="mt-3 text-sm text-slate-500">No package records found. The base unit barcode is shown above.</p>}
+              </section>
+
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                <h3 className="font-semibold">Current effective prices</h3>
+                {profileLoading ? <p className="mt-3 text-sm text-slate-500">Loading prices…</p> : profile.prices.map((price) => {
+                  const packaging = profile.packagings.find((item) => item.id === price.packaging_id)
+                  const branch = price.branch_id ? branches.find((item) => item.id === price.branch_id)?.name ?? "Branch override" : "Company default"
+                  return <p key={price.id} className="mt-3 flex flex-wrap justify-between gap-2 text-sm">
+                    <span>{packaging?.name ?? details.unit} · {price.price_type} · {branch}</span>
+                    <strong>{price.currency} {Number(price.amount).toFixed(2)}</strong>
+                  </p>
+                })}
+                {!profileLoading && !profile.prices.length && <p className="mt-3 text-sm text-slate-500">No effective-dated prices recorded. Default product prices apply.</p>}
+              </section>
+            </div>
           </section>
         </div>
       )}
