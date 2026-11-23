@@ -260,12 +260,22 @@ function calculateLegacyCounts(
 function calculateVersion2Counts(
   entries: { key: string; value: string }[],
 ): Omit<BackupCounts, "productCategoryRecords" | "unitDefinitionRecords"> {
-  const {
-    productCategoryRecords: _productCategoryRecords,
-    unitDefinitionRecords: _unitDefinitionRecords,
-    ...counts
-  } = calculateCounts(entries)
-  return counts
+  const counts = calculateCounts(entries)
+  return {
+    storageKeys: counts.storageKeys,
+    products: counts.products,
+    inventoryLots: counts.inventoryLots,
+    stockMovements: counts.stockMovements,
+    customers: counts.customers,
+    sales: counts.sales,
+    invoices: counts.invoices,
+    purchases: counts.purchases,
+    suppliers: counts.suppliers,
+    settingsRecords: counts.settingsRecords,
+    ownerProfileRecords: counts.ownerProfileRecords,
+    readNotificationRecords: counts.readNotificationRecords,
+    otherStorageKeys: counts.otherStorageKeys,
+  }
 }
 
 function validateProvidedCounts(
