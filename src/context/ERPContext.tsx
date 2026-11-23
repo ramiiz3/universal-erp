@@ -2137,7 +2137,7 @@ export function ERPProvider({
     if (!note) throw new Error("Add a short note for this cash movement.")
     const now = new Date()
     const businessDate = input.businessDate ?? getBusinessDate(now)
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(businessDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
       throw new Error("Choose a valid business date for this cash movement.")
     }
     const movement: DailyRegisterCashMovement = {
@@ -2163,7 +2163,7 @@ export function ERPProvider({
     reconciledBy?: string
     notes?: string
   }): DailyRegisterSession {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.businessDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate)) {
       throw new Error("Choose a valid business date to reconcile.")
     }
     const openingCash = validateDailyRegisterMoney(input.openingCash, "Opening cash")
