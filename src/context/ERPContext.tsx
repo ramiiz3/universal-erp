@@ -428,15 +428,21 @@ type ERPContextValue = {
   cancelStockCount: (id: string) => void
   dailyRegisters: DailyRegisterSession[]
   dailyCashMovements: DailyRegisterCashMovement[]
-  openDailyRegister: (input: { openingCash: number; openedBy?: string }) => DailyRegisterSession
   addDailyCashMovement: (input: {
+    businessDate?: string
     kind: DailyCashMovementKind
     category: string
     amount: number
     note?: string
   }) => DailyRegisterCashMovement
-  closeDailyRegister: (input: { countedCash: number; closedBy?: string; notes?: string }) => DailyRegisterSession
-  getDailyRegisterSummary: (register: DailyRegisterSession) => DailyRegisterSummary
+  saveDailyCashReconciliation: (input: {
+    businessDate: string
+    openingCash: number
+    countedCash: number
+    reconciledBy?: string
+    notes?: string
+  }) => DailyRegisterSession
+  getDailyRegisterSummary: (businessDate: string, openingCash?: number) => DailyRegisterSummary
 }
 
 const initialProducts: Product[] = []
@@ -2101,20 +2107,10 @@ export function ERPProvider({
     return invoice
   }
 
-  function ensureDailyRegisterOpen(now = new Date()) {
-    const businessDate = getBusinessDate(now)
-    const openRegister = (store.dailyRegisters ?? []).find((item) => item.status === "OPEN")
-    if (openRegister?.businessDate === businessDate) return openRegister
-    if (openRegister) {
-      throw new Error(`The register for ${openRegister.businessDate} is still open. Close that day before opening today's register.`)
-    }
-    throw new Error("Open today's cash register before recording a sale, collection or refund.")
-  }
-
-  function getDailyRegisterSummary(register: DailyRegisterSession) {
+  function getDailyRegisterSummary(businessDate: string, openingCash = 0): DailyRegisterSummary {
     return calculateDailyRegisterSummary({
-      businessDate: register.businessDate,
-      openingCash: register.openingCash,
+      businessDate,
+      openingCash: validateDailyRegisterMoney(openingCash, "Opening cash"),
       sales: store.sales,
       customerPayments: store.customerPayments ?? [],
       returns: store.salesReturns ?? [],
@@ -2123,38 +2119,13 @@ export function ERPProvider({
     })
   }
 
-  function openDailyRegister(input: { openingCash: number; openedBy?: string }) {
-    const now = new Date()
-    const businessDate = getBusinessDate(now)
-    if ((store.dailyRegisters ?? []).some((item) => item.status === "OPEN")) {
-      throw new Error("A register is already open. Close it before starting another day.")
-    }
-    if ((store.dailyRegisters ?? []).some((item) => item.businessDate === businessDate)) {
-      throw new Error("A register has already been closed for today. It cannot be reopened.")
-    }
-    const openingCash = validateDailyRegisterMoney(input.openingCash, "Opening cash")
-    const register: DailyRegisterSession = {
-      id: `REGISTER-${businessDate}-${now.getTime()}`,
-      businessDate,
-      openedAt: now.toISOString(),
-      openedBy: (input.openedBy ?? "").trim(),
-      openingCash,
-      status: "OPEN",
-    }
-    persistStore({
-      ...store,
-      dailyRegisters: [register, ...(store.dailyRegisters ?? [])],
-    })
-    return register
-  }
-
   function addDailyCashMovement(input: {
+    businessDate?: string
     kind: DailyCashMovementKind
     category: string
     amount: number
     note?: string
   }) {
-    const register = ensureDailyRegisterOpen()
     if (input.kind !== "IN" && input.kind !== "OUT") {
       throw new Error("Choose cash received or cash paid out.")
     }
@@ -2165,9 +2136,13 @@ export function ERPProvider({
     const note = (input.note ?? "").trim()
     if (!note) throw new Error("Add a short note for this cash movement.")
     const now = new Date()
+    const businessDate = input.businessDate ?? getBusinessDate(now)
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(businessDate)) {
+      throw new Error("Choose a valid business date for this cash movement.")
+    }
     const movement: DailyRegisterCashMovement = {
       id: `CASH-MOVE-${now.getTime()}`,
-      businessDate: register.businessDate,
+      businessDate,
       kind: input.kind,
       category,
       amount,
@@ -2181,17 +2156,31 @@ export function ERPProvider({
     return movement
   }
 
-  function closeDailyRegister(input: { countedCash: number; closedBy?: string; notes?: string }) {
-    const openRegister = (store.dailyRegisters ?? []).find((item) => item.status === "OPEN")
-    if (!openRegister) throw new Error("There is no open register to close.")
+  function saveDailyCashReconciliation(input: {
+    businessDate: string
+    openingCash: number
+    countedCash: number
+    reconciledBy?: string
+    notes?: string
+  }): DailyRegisterSession {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.businessDate)) {
+      throw new Error("Choose a valid business date to reconcile.")
+    }
+    const openingCash = validateDailyRegisterMoney(input.openingCash, "Opening cash")
     const countedCash = validateDailyRegisterMoney(input.countedCash, "Counted closing cash")
-    const summary = getDailyRegisterSummary(openRegister)
+    const summary = getDailyRegisterSummary(input.businessDate, openingCash)
     const now = new Date()
-    const closed: DailyRegisterSession = {
-      ...openRegister,
+    const previous = (store.dailyRegisters ?? []).find((item) => item.businessDate === input.businessDate)
+    const reconciledBy = (input.reconciledBy ?? "").trim()
+    const reconciliation: DailyRegisterSession = {
+      id: previous?.id ?? `RECONCILIATION-${input.businessDate}`,
+      businessDate: input.businessDate,
+      openedAt: previous?.openedAt ?? now.toISOString(),
+      openedBy: previous?.openedBy ?? reconciledBy,
+      openingCash,
       status: "CLOSED",
       closedAt: now.toISOString(),
-      closedBy: (input.closedBy ?? "").trim(),
+      closedBy: reconciledBy,
       countedCash,
       expectedCash: summary.expectedCash,
       cashDifference: Math.round((countedCash - summary.expectedCash + Number.EPSILON) * 100) / 100,
@@ -2200,13 +2189,15 @@ export function ERPProvider({
     }
     persistStore({
       ...store,
-      dailyRegisters: (store.dailyRegisters ?? []).map((item) => item.id === openRegister.id ? closed : item),
+      dailyRegisters: [
+        reconciliation,
+        ...(store.dailyRegisters ?? []).filter((item) => item.businessDate !== input.businessDate),
+      ],
     })
-    return closed
+    return reconciliation
   }
 
   function recordSupplierInvoicePayment(id: string, input: RecordSupplierInvoicePaymentInput) {
-    ensureDailyRegisterOpen()
     const current = (store.supplierInvoices ?? []).find((item) => item.id === id)
     if (!current) throw new Error("Supplier invoice not found.")
     const updated = applySupplierInvoicePayment(current, input)
@@ -2218,7 +2209,6 @@ export function ERPProvider({
   }
 
   function createSalesReturn(input: CreateSalesReturnInput): SalesReturn {
-    ensureDailyRegisterOpen()
     const sale = store.sales.find((item) => item.id === input.saleId)
     const salesReturn = buildSalesReturn(input, sale, store.products, store.salesReturns ?? [])
     const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
@@ -2292,7 +2282,6 @@ export function ERPProvider({
   }
 
   function recordCustomerPayment(input: RecordCustomerPaymentInput) {
-    ensureDailyRegisterOpen()
     const payment = buildCustomerPayment(
       input,
       store.sales,
@@ -2893,7 +2882,6 @@ export function ERPProvider({
   function completeSale(
     input: CompleteSaleInput,
   ): Sale {
-    ensureDailyRegisterOpen()
     if (!input.items.length) {
       throw new Error(
         "Cannot complete a sale with no items.",
@@ -3263,9 +3251,8 @@ export function ERPProvider({
         stockCounts: store.stockCounts ?? [],
         dailyRegisters: store.dailyRegisters ?? [],
         dailyCashMovements: store.dailyCashMovements ?? [],
-        openDailyRegister,
         addDailyCashMovement,
-        closeDailyRegister,
+        saveDailyCashReconciliation,
         getDailyRegisterSummary,
         createStockCount,
         updateStockCountLine,
