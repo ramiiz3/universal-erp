@@ -19,6 +19,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser"
 import { useERP, type PaymentMethod, type Product } from "../context/ERPContext"
 import { reservePendingThermalPrintWindow, closePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
 import { getERPSettings } from "../lib/erpSettings"
+import { getBusinessDate } from "../lib/dailyRegister"
 import {
   allocateSaleLots,
   calculateLotSaleTotals,
@@ -39,7 +40,8 @@ type SelectedProductPackaging =
 
 export default function POS() {
   const navigate = useNavigate()
-  const { products, inventoryLots, customers, warehouses, getProductStock, completeSale } = useERP()
+  const { products, inventoryLots, customers, warehouses, dailyRegisters, getProductStock, completeSale } = useERP()
+  const registerOpenToday = dailyRegisters.some((item) => item.status === "OPEN" && item.businessDate === getBusinessDate())
 
   const erpSettings = getERPSettings()
   const activeWarehouses = warehouses.filter((item) => item.active)
@@ -487,6 +489,15 @@ export default function POS() {
   return (
     <section className="min-h-full bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-[1800px]">
+        {!registerOpenToday && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <div>
+              <p className="font-semibold">Open today's register before starting sales</p>
+              <p className="mt-1 text-sm">The cash drawer must be opened for the current day. Previous sales and stock are unchanged.</p>
+            </div>
+            <button type="button" onClick={() => navigate("/daily-register")} className="h-10 rounded-lg bg-amber-800 px-4 text-sm font-semibold text-white hover:bg-amber-900">Open daily register</button>
+          </div>
+        )}
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
           <label htmlFor="pos-warehouse" className="text-sm font-semibold text-slate-700">
             Sales Warehouse
@@ -931,13 +942,14 @@ export default function POS() {
                 type="button"
                 onClick={handleCompleteSale}
                 disabled={
+                  !registerOpenToday ||
                   cart.length === 0 ||
                   saleAllocationPreview.unallocated.length > 0
                 }
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <CheckCircle2 className="h-5 w-5" />
-                Complete Sale
+                {registerOpenToday ? "Complete Sale" : "Open Daily Register First"}
               </button>
             </div>
           </aside>

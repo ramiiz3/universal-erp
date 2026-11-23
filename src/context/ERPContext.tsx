@@ -52,6 +52,15 @@ import BackupRestorePanel from "../components/BackupRestorePanel"
 
 import { DEFAULT_CHART_OF_ACCOUNTS, buildChartOfAccount, validateChartOfAccountInput, validateChartAccountStatus, type ChartOfAccount, type ChartOfAccountInput, type ChartAccountStatus } from "../lib/chartOfAccounts"
 import { buildJournalEntry, postJournalEntry as postJournalEntryRecord, type JournalEntry, type JournalEntryInput } from "../lib/journalEntries"
+import {
+  calculateDailyRegisterSummary,
+  getBusinessDate,
+  validateDailyRegisterMoney,
+  type DailyCashMovementKind,
+  type DailyRegisterCashMovement,
+  type DailyRegisterSession,
+  type DailyRegisterSummary,
+} from "../lib/dailyRegister"
 
 
 export type ProductPackaging = {
@@ -416,6 +425,17 @@ type ERPContextValue = {
   submitStockCount: (id: string) => void
   postStockCount: (id: string) => void
   cancelStockCount: (id: string) => void
+  dailyRegisters: DailyRegisterSession[]
+  dailyCashMovements: DailyRegisterCashMovement[]
+  openDailyRegister: (input: { openingCash: number; openedBy?: string }) => DailyRegisterSession
+  addDailyCashMovement: (input: {
+    kind: DailyCashMovementKind
+    category: string
+    amount: number
+    note?: string
+  }) => DailyRegisterCashMovement
+  closeDailyRegister: (input: { countedCash: number; closedBy?: string; notes?: string }) => DailyRegisterSession
+  getDailyRegisterSummary: (register: DailyRegisterSession) => DailyRegisterSummary
 }
 
 const initialProducts: Product[] = []
@@ -510,6 +530,8 @@ type StoredData = {
 
   stockTransfers: StockTransfer[]
   stockCounts: StockCount[]
+  dailyRegisters: DailyRegisterSession[]
+  dailyCashMovements: DailyRegisterCashMovement[]
 }
 
 function readLegacySuppliers(): Supplier[] {
@@ -542,6 +564,8 @@ function createEmptyStore(): StoredData {
     storageLocations: [],
     stockTransfers: [],
     stockCounts: [],
+    dailyRegisters: [],
+    dailyCashMovements: [],
   }
 }
 
@@ -560,6 +584,8 @@ function migrateWarehouseData(data: StoredData): StoredData {
     purchaseOrders?: PurchaseOrder[]
     customerPayments?: CustomerPayment[]
     salesReturns?: SalesReturn[]
+    dailyRegisters?: DailyRegisterSession[]
+    dailyCashMovements?: DailyRegisterCashMovement[]
   }
 
   const suppliers = normalizeSupplierRecords(
@@ -598,6 +624,8 @@ function migrateWarehouseData(data: StoredData): StoredData {
     stockCounts: Array.isArray(raw.stockCounts)
       ? raw.stockCounts
       : [],
+    dailyRegisters: Array.isArray(raw.dailyRegisters) ? raw.dailyRegisters : [],
+    dailyCashMovements: Array.isArray(raw.dailyCashMovements) ? raw.dailyCashMovements : [],
     inventoryLots: (data.inventoryLots || []).map((lot) => ({
       ...lot,
       warehouseId:
@@ -2056,7 +2084,112 @@ export function ERPProvider({
     return invoice
   }
 
+  function ensureDailyRegisterOpen(now = new Date()) {
+    const businessDate = getBusinessDate(now)
+    const openRegister = (store.dailyRegisters ?? []).find((item) => item.status === "OPEN")
+    if (openRegister?.businessDate === businessDate) return openRegister
+    if (openRegister) {
+      throw new Error(`The register for ${openRegister.businessDate} is still open. Close that day before opening today's register.`)
+    }
+    throw new Error("Open today's cash register before recording a sale, collection or refund.")
+  }
+
+  function getDailyRegisterSummary(register: DailyRegisterSession) {
+    return calculateDailyRegisterSummary({
+      businessDate: register.businessDate,
+      openingCash: register.openingCash,
+      sales: store.sales,
+      customerPayments: store.customerPayments ?? [],
+      returns: store.salesReturns ?? [],
+      supplierInvoices: store.supplierInvoices ?? [],
+      cashMovements: store.dailyCashMovements ?? [],
+    })
+  }
+
+  function openDailyRegister(input: { openingCash: number; openedBy?: string }) {
+    const now = new Date()
+    const businessDate = getBusinessDate(now)
+    if ((store.dailyRegisters ?? []).some((item) => item.status === "OPEN")) {
+      throw new Error("A register is already open. Close it before starting another day.")
+    }
+    if ((store.dailyRegisters ?? []).some((item) => item.businessDate === businessDate)) {
+      throw new Error("A register has already been closed for today. It cannot be reopened.")
+    }
+    const openingCash = validateDailyRegisterMoney(input.openingCash, "Opening cash")
+    const register: DailyRegisterSession = {
+      id: `REGISTER-${businessDate}-${now.getTime()}`,
+      businessDate,
+      openedAt: now.toISOString(),
+      openedBy: (input.openedBy ?? "").trim(),
+      openingCash,
+      status: "OPEN",
+    }
+    persistStore({
+      ...store,
+      dailyRegisters: [register, ...(store.dailyRegisters ?? [])],
+    })
+    return register
+  }
+
+  function addDailyCashMovement(input: {
+    kind: DailyCashMovementKind
+    category: string
+    amount: number
+    note?: string
+  }) {
+    const register = ensureDailyRegisterOpen()
+    if (input.kind !== "IN" && input.kind !== "OUT") {
+      throw new Error("Choose cash received or cash paid out.")
+    }
+    const category = input.category.trim()
+    if (!category) throw new Error("Enter a cash movement category.")
+    const amount = validateDailyRegisterMoney(input.amount, "Cash movement amount")
+    if (amount <= 0) throw new Error("Cash movement amount must be greater than zero.")
+    const note = (input.note ?? "").trim()
+    if (!note) throw new Error("Add a short note for this cash movement.")
+    const now = new Date()
+    const movement: DailyRegisterCashMovement = {
+      id: `CASH-MOVE-${now.getTime()}`,
+      businessDate: register.businessDate,
+      kind: input.kind,
+      category,
+      amount,
+      note,
+      createdAt: now.toISOString(),
+    }
+    persistStore({
+      ...store,
+      dailyCashMovements: [movement, ...(store.dailyCashMovements ?? [])],
+    })
+    return movement
+  }
+
+  function closeDailyRegister(input: { countedCash: number; closedBy?: string; notes?: string }) {
+    const openRegister = (store.dailyRegisters ?? []).find((item) => item.status === "OPEN")
+    if (!openRegister) throw new Error("There is no open register to close.")
+    const countedCash = validateDailyRegisterMoney(input.countedCash, "Counted closing cash")
+    const summary = getDailyRegisterSummary(openRegister)
+    const now = new Date()
+    const closed: DailyRegisterSession = {
+      ...openRegister,
+      status: "CLOSED",
+      closedAt: now.toISOString(),
+      closedBy: (input.closedBy ?? "").trim(),
+      countedCash,
+      expectedCash: summary.expectedCash,
+      cashDifference: Math.round((countedCash - summary.expectedCash + Number.EPSILON) * 100) / 100,
+      notes: (input.notes ?? "").trim(),
+      summary,
+    }
+    persistStore({
+      ...store,
+      dailyRegisters: (store.dailyRegisters ?? []).map((item) => item.id === openRegister.id ? closed : item),
+    })
+    return closed
+  }
+
   function recordSupplierInvoicePayment(id: string, input: RecordSupplierInvoicePaymentInput) {
+    ensureDailyRegisterOpen()
     const current = (store.supplierInvoices ?? []).find((item) => item.id === id)
     if (!current) throw new Error("Supplier invoice not found.")
     const updated = applySupplierInvoicePayment(current, input)
@@ -2068,6 +2201,7 @@ export function ERPProvider({
   }
 
   function createSalesReturn(input: CreateSalesReturnInput): SalesReturn {
+    ensureDailyRegisterOpen()
     const sale = store.sales.find((item) => item.id === input.saleId)
     const salesReturn = buildSalesReturn(input, sale, store.products, store.salesReturns ?? [])
     const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
@@ -2141,6 +2275,7 @@ export function ERPProvider({
   }
 
   function recordCustomerPayment(input: RecordCustomerPaymentInput) {
+    ensureDailyRegisterOpen()
     const payment = buildCustomerPayment(
       input,
       store.sales,
@@ -2741,6 +2876,7 @@ export function ERPProvider({
   function completeSale(
     input: CompleteSaleInput,
   ): Sale {
+    ensureDailyRegisterOpen()
     if (!input.items.length) {
       throw new Error(
         "Cannot complete a sale with no items.",
@@ -3106,6 +3242,12 @@ export function ERPProvider({
         receiveStockTransfer,
         cancelStockTransfer,
         stockCounts: store.stockCounts ?? [],
+        dailyRegisters: store.dailyRegisters ?? [],
+        dailyCashMovements: store.dailyCashMovements ?? [],
+        openDailyRegister,
+        addDailyCashMovement,
+        closeDailyRegister,
+        getDailyRegisterSummary,
         createStockCount,
         updateStockCountLine,
         submitStockCount,
