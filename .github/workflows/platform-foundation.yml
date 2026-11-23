@@ -1,0 +1,30 @@
+name: Universal ERP platform checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test existing ERP
+        run: npm test
+      - name: Test API authentication and tenant policy helpers
+        run: npm run api:test
+      - name: Build existing frontend
+        run: npm run build
+      - name: Lint
+        run: npm run lint
