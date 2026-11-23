@@ -35,6 +35,7 @@ import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
 } from "../lib/erpStorageKeys"
+import { dispatchERPCloudSync } from "../lib/erpCloudState"
 
 const navigationGroups = [
   {
@@ -163,6 +164,9 @@ export default function AppLayout() {
     products,
     inventoryLots,
     sales,
+    cloudSyncStatus,
+    cloudSyncError,
+    cloudLastSavedAt,
   } = useERP()
 
   const [notificationsOpen, setNotificationsOpen] =
@@ -294,6 +298,7 @@ export default function AppLayout() {
       ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(next),
     )
+    dispatchERPCloudSync()
 
     setNotificationsOpen(false)
     navigate(notification.path)
@@ -311,6 +316,7 @@ export default function AppLayout() {
       ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(allIds),
     )
+    dispatchERPCloudSync()
   }
 
   function openProfile() {
@@ -340,6 +346,7 @@ export default function AppLayout() {
       ERP_OWNER_PROFILE_STORAGE_KEY,
       JSON.stringify(nextOwner),
     )
+    dispatchERPCloudSync()
 
     setProfileOpen(false)
   }
@@ -415,6 +422,19 @@ export default function AppLayout() {
             </div>
 
             <div className="flex items-center gap-2">
+              <span
+                aria-live="polite"
+                title={cloudSyncError || (cloudLastSavedAt ? "Last saved " + new Date(cloudLastSavedAt).toLocaleString() : "Waiting for first cloud save")}
+                className={`hidden items-center rounded-lg px-2.5 py-2 text-xs font-medium sm:flex ${
+                  cloudSyncStatus === "saved"
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    : cloudSyncStatus === "error"
+                      ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                }`}
+              >
+                {cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "saving" ? "Saving…" : cloudSyncStatus === "error" ? "Sync error" : "Connecting…"}
+              </span>
               <div className="relative">
                 <button
                   type="button"
