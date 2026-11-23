@@ -3,6 +3,7 @@ import AppLayout from "./layouts/AppLayout"
 
 import Dashboard from "./pages/Dashboard"
 import POS from "./pages/POS"
+import DailyRegister from "./pages/DailyRegister"
 import Sales from "./pages/Sales"
 import Invoices from "./pages/Invoices"
 import CustomerPayments from "./pages/CustomerPayments"
@@ -52,6 +53,7 @@ export default function App() {
           <Route element={<ERPProvider><AppLayout /></ERPProvider>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/daily-register" element={<DailyRegister />} />
             <Route path="/pos" element={<POS />} />
             <Route path="/sales" element={<Sales />} />
             <Route path="/customer-payments" element={<CustomerPayments />} />
