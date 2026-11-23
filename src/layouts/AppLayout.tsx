@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   ShoppingCart,
   ClipboardList,
+  Sparkles,
   Sun,
   UserRound,
   Users,
