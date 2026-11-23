@@ -17,7 +17,7 @@ test("server verifies token against the Supabase Auth user endpoint", async () =
     publishableKey: "sb_publishable_example",
     fetchImpl: async (url, options) => {
       call = { url, options };
-      return { ok: true, json: async () => ({ id: userId, email: "User@example.com" }) };
+      return { ok: true, json: async () => ({ id: userId, email: "User@example.com", email_confirmed_at: "2026-11-23T00:00:00Z" }) };
     },
   });
   assert.equal(call.url, "https://example.supabase.co/auth/v1/user");
@@ -25,6 +25,7 @@ test("server verifies token against the Supabase Auth user endpoint", async () =
   assert.equal(call.options.headers.Authorization, "Bearer valid-token");
   assert.equal(result.id, userId);
   assert.equal(result.email, "user@example.com");
+  assert.equal(result.emailConfirmedAt, "2026-11-23T00:00:00Z");
 });
 
 test("invalid or expired Supabase tokens are rejected", async () => {
