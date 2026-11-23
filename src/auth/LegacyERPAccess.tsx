@@ -71,7 +71,7 @@ export default function LegacyERPAccess() {
   if (!user) {
     return <Navigate to="/auth/login" state={{ from: location.pathname }} replace />
   }
-  if (membershipLoading || activeCompanyLoading) {
+  if ((membershipLoading || activeCompanyLoading) && !activeCompany) {
     return <AccessMessage title="Opening Zaki Pharmacy ERP" message="Verifying pharmacy access and loading the saved company data…" />
   }
   if (membershipError) {
