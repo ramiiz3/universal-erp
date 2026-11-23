@@ -813,18 +813,43 @@ export function ERPProvider({
         }
 
         const meta = readCloudSyncMeta()
-        if (
-          meta?.companyId === companyId &&
-          meta.revision === remoteRevision &&
+        const localDiffersFromCloud =
           !areERPCloudStatesEqual(localSnapshot, remoteRow.state)
-        ) {
-          throw new Error(
-            "This workstation has local changes that were not confirmed as saved to the database. The local data has been preserved in a recovery snapshot. Do not continue making transactions until the data is reconciled.",
-          )
-        }
 
-        restoreERPCloudState(localStorage, remoteRow.state)
-        cloudRevisionRef.current = remoteRevision
+        if (meta?.companyId === companyId && localDiffersFromCloud) {
+          if (meta.revision !== remoteRevision) {
+            throw new Error(
+              "This workstation and the database have conflicting ERP changes. A recovery copy of this workstation was saved. Reload or reconcile the newer data before continuing; nothing was overwritten.",
+            )
+          }
+
+          // The browser may have closed before its debounced save completed.
+          // Retry those local changes only when the last acknowledged database
+          // revision is unchanged, using the same compare-and-swap protection.
+          const { data: recoveredRevision, error: recoverySaveError } =
+            await client.rpc("save_legacy_erp_state", {
+              p_company_id: companyId,
+              p_expected_revision: remoteRevision,
+              p_state: localSnapshot,
+            })
+
+          if (recoverySaveError) {
+            throw new Error(
+              recoverySaveError.code === "40001"
+                ? "The pharmacy data changed in another tab during recovery. The workstation recovery copy is preserved; reload before continuing."
+                : "The pending workstation changes could not be recovered to the database. " + recoverySaveError.message,
+            )
+          }
+
+          const nextRevision = Number(recoveredRevision)
+          if (!Number.isSafeInteger(nextRevision) || nextRevision <= remoteRevision) {
+            throw new Error("The database did not confirm recovery of the pending workstation changes.")
+          }
+          cloudRevisionRef.current = nextRevision
+        } else {
+          restoreERPCloudState(localStorage, remoteRow.state)
+          cloudRevisionRef.current = remoteRevision
+        }
       } else {
         const { data: newRevision, error: seedError } = await client.rpc(
           "save_legacy_erp_state",
