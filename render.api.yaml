@@ -1,0 +1,22 @@
+services:
+  - type: web
+    runtime: node
+    name: universal-erp-api
+    buildCommand: npm ci
+    startCommand: npm run api:start
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: PGSSLMODE
+        value: require
