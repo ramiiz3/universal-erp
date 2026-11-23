@@ -193,7 +193,7 @@ describe("full ERP backup and restore", () => {
       (entry) => entry.key !== ERP_UNITS_STORAGE_KEY &&
         entry.key !== PRODUCT_CATEGORIES_STORAGE_KEY,
     )
-    const legacyCounts = { ...currentV3.counts }
+    const legacyCounts = { ...currentV3.counts, storageKeys: legacyEntries.length }
     delete (legacyCounts as Partial<typeof legacyCounts>).productCategoryRecords
     delete (legacyCounts as Partial<typeof legacyCounts>).unitDefinitionRecords
     const legacyV2 = {
@@ -305,7 +305,7 @@ describe("full ERP backup and restore", () => {
     }).sort(([left], [right]) => left.localeCompare(right))).toEqual(original)
   })
 
-  it("rejects a v2 backup that attempts to restore a non-ERP browser key", () => {
+  it("rejects a current backup that attempts to restore a non-ERP browser key", () => {
     const backup = createERPBackup(populatedStorage())
     expect(() => validateERPBackup({
       ...backup,
