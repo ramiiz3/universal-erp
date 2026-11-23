@@ -1868,6 +1868,23 @@ export function ERPProvider({
           "This starter product is linked to business activity or has non-demo inventory. Review its sales, purchases, transfers and stock records before deleting it.",
         )
       }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+      const backupRoot = `${ERP_STORAGE_KEY}-pre-demo-delete-${timestamp}`
+      let backupKey = backupRoot
+      let suffix = 1
+      while (localStorage.getItem(backupKey) !== null) {
+        backupKey = `${backupRoot}-${suffix++}`
+      }
+      const rawStore = localStorage.getItem(ERP_STORAGE_KEY) ?? JSON.stringify(store)
+      try {
+        localStorage.setItem(backupKey, rawStore)
+      } catch (error) {
+        throw new Error(
+          `The demo product was not deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+
       persistStore(cleanup.data as unknown as StoredData)
       return
     }
