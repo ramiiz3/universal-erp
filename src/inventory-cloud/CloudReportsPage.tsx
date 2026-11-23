@@ -61,6 +61,8 @@ export default function CloudReportsPage() {
   const [sales, setSales] = useState<CloudReportSale[]>([])
   const [lines, setLines] = useState<CloudReportLine[]>([])
   const [payments, setPayments] = useState<CloudReportPayment[]>([])
+  const [lineDataReady, setLineDataReady] = useState(true)
+  const [paymentDataReady, setPaymentDataReady] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
@@ -72,6 +74,8 @@ export default function CloudReportsPage() {
       setSales([])
       setLines([])
       setPayments([])
+      setLineDataReady(false)
+      setPaymentDataReady(false)
       setError("Reports are unavailable until an active company is verified.")
       setLoading(false)
       return
@@ -105,6 +109,8 @@ export default function CloudReportsPage() {
       setSales([])
       setLines([])
       setPayments([])
+      setLineDataReady(false)
+      setPaymentDataReady(false)
       setError(`Could not load sales for this report. ${salesError.message}`)
       setLoading(false)
       return
@@ -116,6 +122,8 @@ export default function CloudReportsPage() {
       setSales([])
       setLines([])
       setPayments([])
+      setLineDataReady(true)
+      setPaymentDataReady(true)
       setLoading(false)
       return
     }
@@ -136,15 +144,13 @@ export default function CloudReportsPage() {
     const relatedErrors = [lineResult, paymentResult]
       .filter((result) => result.error)
       .map((result) => result.error?.message)
+    setSales(selectedSales)
+    setLines((lineResult.data ?? []) as unknown as CloudReportLine[])
+    setPayments((paymentResult.data ?? []) as unknown as CloudReportPayment[])
+    setLineDataReady(!lineResult.error)
+    setPaymentDataReady(!paymentResult.error)
     if (relatedErrors.length) {
-      setSales(selectedSales)
-      setLines([])
-      setPayments([])
       setError(`Invoices loaded, but some report details are unavailable: ${relatedErrors.join("; ")}`)
-    } else {
-      setSales(selectedSales)
-      setLines((lineResult.data ?? []) as unknown as CloudReportLine[])
-      setPayments((paymentResult.data ?? []) as unknown as CloudReportPayment[])
     }
     if (selectedSales.length === 2000) {
       setNotice("This report reached the 2,000-invoice retrieval limit. Narrow the date range to include all invoices.")
@@ -202,7 +208,7 @@ export default function CloudReportsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={exportRegister} disabled={loading || !sales.length} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" /> Export register</button>
-          <button type="button" onClick={exportProducts} disabled={loading || !report.products.length} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" /> Export products</button>
+          <button type="button" onClick={exportProducts} disabled={loading || !lineDataReady || !report.products.length} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium disabled:opacity-50 dark:border-slate-700"><Download className="h-4 w-4" /> Export products</button>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh</button>
         </div>
       </header>
@@ -223,8 +229,8 @@ export default function CloudReportsPage() {
         <Metric label="VAT on invoices" value={money(report.vat, currency)} note="Recorded VAT totals on invoice lines" />
         <Metric label="Collections" value={money(report.collected, currency)} note="Payments posted against these invoices" />
         <Metric label="Outstanding invoices" value={money(report.outstanding, currency)} note={`${report.unpaidInvoices} unpaid · ${report.partiallyPaidInvoices} partial`} />
-        <Metric label="Cost of goods sold" value={money(report.costOfGoods, currency)} note="Sold quantity × recorded lot cost" />
-        <Metric label="Gross profit" value={money(report.grossProfit, currency)} note="Net sales less recorded lot cost" />
+        <Metric label="Cost of goods sold" value={lineDataReady ? money(report.costOfGoods, currency) : "Unavailable"} note={lineDataReady ? "Sold quantity × recorded lot cost" : "Invoice lines could not be loaded"} />
+        <Metric label="Gross profit" value={lineDataReady ? money(report.grossProfit, currency) : "Unavailable"} note={lineDataReady ? "Net sales less recorded lot cost" : "Requires complete invoice line data"} />
         <Metric label="Average invoice" value={money(report.averageInvoice, currency)} note="Invoice total including VAT" />
       </div>
 
@@ -236,7 +242,7 @@ export default function CloudReportsPage() {
             {(["cash", "card", "bank_transfer", "other"] as const).map((method) => (
               <div key={method} className="flex items-center justify-between gap-3 text-sm">
                 <span className="capitalize">{method.replace("_", " ")}</span>
-                <strong>{money(report.paymentsByMethod[method], currency)}</strong>
+                <strong>{paymentDataReady ? money(report.paymentsByMethod[method], currency) : "Unavailable"}</strong>
               </div>
             ))}
           </div>
@@ -257,7 +263,8 @@ export default function CloudReportsPage() {
                   <td className="py-2 font-medium">{product.name}<span className="block text-xs text-slate-500">{product.sku}</span></td>
                   <td>{product.quantity.toLocaleString()}</td><td>{money(product.netSales, currency)}</td><td>{money(product.cost, currency)}</td><td className="font-semibold">{money(product.grossProfit, currency)}</td>
                 </tr>)}
-                {!loading && !report.products.length && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No product sales in this period.</td></tr>}
+                {!loading && !lineDataReady && <tr><td colSpan={5} className="py-8 text-center text-slate-500">Invoice line data is unavailable. Product performance cannot be calculated.</td></tr>}
+                {!loading && lineDataReady && !report.products.length && <tr><td colSpan={5} className="py-8 text-center text-slate-500">No product sales in this period.</td></tr>}
               </tbody>
             </table>
           </div>
