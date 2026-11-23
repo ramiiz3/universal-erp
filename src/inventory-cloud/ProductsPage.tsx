@@ -107,7 +107,7 @@ function formFor(product?: CloudProduct, defaultVatRate = 5): ProductInput {
 
 export default function ProductsPage() {
   const { activeCompany, memberships, user } = useAuth()
-  const { companyId, products, warehouses, lots, loading, error, refresh } = useCloudInventory()
+  const { companyId, products, branches, warehouses, lots, loading, error, refresh } = useCloudInventory()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
   const [status, setStatus] = useState("active")
