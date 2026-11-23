@@ -17,6 +17,12 @@ on:
       - "src/pages/Settings.tsx"
       - "supabase/migrations/**"
       - ".github/workflows/erp-cloud-persistence-validation.yml"
+      - ".github/workflows/platform-foundation.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "render.yaml"
+      - "server/**"
+      - "scripts/test-multi-tenant-isolation.mjs"
 
 jobs:
   validate:
@@ -34,5 +40,9 @@ jobs:
         run: npm ci
       - name: Run all tests
         run: npm test
+      - name: Run platform API security tests
+        run: npm run api:test
+      - name: Run lint
+        run: npm run lint
       - name: Build production application
         run: npm run build
