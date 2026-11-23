@@ -46,16 +46,16 @@ const emptyForm = {
 }
 
 type LegacyCompanyBarcodeProfile = {
-  businessName: string
-  phone: string
+  companyName: string
+  mobileNumber: string
   vatRate: string
 }
 
 function getLegacyCompanyBarcodeProfile(): LegacyCompanyBarcodeProfile {
   const settings = getERPSettings()
   return {
-    businessName: settings.businessName.trim() || "Zaki Pharmacy LLC",
-    phone: settings.phone,
+    companyName: settings.businessName.trim() || "Zaki Pharmacy LLC",
+    mobileNumber: settings.phone,
     vatRate: Number(settings.vatRate) > 0 ? settings.vatRate : "5",
   }
 }
