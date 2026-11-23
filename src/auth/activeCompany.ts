@@ -63,6 +63,7 @@ export function activeCompanyReducer(
     case "begin":
       return {
         ...state,
+        activeCompany: action.preserveActive ? state.activeCompany : null,
         loading: true,
         error: "",
         revision: state.revision + 1,
