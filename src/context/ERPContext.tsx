@@ -625,7 +625,10 @@ function loadStoredData() {
       cleanup.removedInventoryLots +
       cleanup.removedCustomers +
       cleanup.removedWarehouses +
-      cleanup.removedInventoryMovements
+      cleanup.removedInventoryMovements +
+      cleanup.removedSales +
+      cleanup.removedSalesReturns +
+      cleanup.removedCustomerPayments
 
     if (removedRecords > 0 && result.raw !== null) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
