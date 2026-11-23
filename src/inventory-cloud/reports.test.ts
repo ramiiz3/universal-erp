@@ -38,6 +38,7 @@ describe("cloud sales reporting", () => {
 
     expect(report).toMatchObject({
       invoiceCount: 1,
+      invoiceTotal: 94.5,
       grossSales: 100,
       discounts: 10,
       vat: 4.5,
@@ -65,6 +66,7 @@ describe("cloud sales reporting", () => {
   it("handles an empty period without NaN or fabricated totals", () => {
     expect(buildCloudSalesReport([], [], [])).toMatchObject({
       invoiceCount: 0,
+      invoiceTotal: 0,
       grossSales: 0,
       discounts: 0,
       vat: 0,
