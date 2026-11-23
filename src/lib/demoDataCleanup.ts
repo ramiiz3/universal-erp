@@ -110,7 +110,7 @@ function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   if (!record) return false
 
   // Product master fields evolve (for example, packagings were added later).
-  // The original IDs, SKU and barcode remain the stable demo fingerprint.
+  // The original legacy ID and SKU remain the stable demo fingerprint.
   return record.id === expected.id
     && record.sku === expected.sku
 }
@@ -246,11 +246,9 @@ export function removeBuiltInDemoData<T extends Record<string, unknown>>(
     } : {}),
   } as T
 
-  const warehouses = options.onlyProductId
-    ? []
-    : (Array.isArray(source.warehouses) ? source.warehouses : [])
+  const warehouses = Array.isArray(source.warehouses) ? source.warehouses : []
   const removableWarehouseIds = new Set<string>()
-  for (const expectedWarehouse of BUILT_IN_WAREHOUSES) {
+  for (const expectedWarehouse of options.onlyProductId ? [] : BUILT_IN_WAREHOUSES) {
     const warehouse = warehouses.find((item) => {
       const record = asRecord(item)
       if (!record || !matchesOnlyKnownFields(record, [
