@@ -104,10 +104,6 @@ function matchesOnlyKnownFields(record: Record<string, unknown>, allowedFields: 
   return Object.keys(record).every((field) => allowedFields.includes(field))
 }
 
-function isEmptyValue(value: unknown): boolean {
-  return value === undefined || value === null || value === ""
-}
-
 function matchesProduct(value: unknown, expected: BuiltInDemoProduct): boolean {
   const record = asRecord(value)
   if (!record) return false
