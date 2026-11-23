@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState("")
   const [memberships, setMemberships] = useState<CompanyMembership[]>([])
   const [membershipError, setMembershipError] = useState("")
-  const [membershipLoading, setMembershipLoading] = useState(false)
+  const [membershipLoading, setMembershipLoading] = useState(true)
   const [companyState, dispatchCompany] = useReducer(
     activeCompanyReducer,
     initialActiveCompanyState,
