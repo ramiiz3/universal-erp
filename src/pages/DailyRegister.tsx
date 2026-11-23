@@ -36,10 +36,6 @@ export default function DailyRegister() {
   const {
     dailyRegisters,
     dailyCashMovements,
-    sales,
-    customerPayments,
-    salesReturns,
-    supplierInvoices,
     openDailyRegister,
     addDailyCashMovement,
     closeDailyRegister,
