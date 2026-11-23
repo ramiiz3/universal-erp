@@ -224,7 +224,7 @@ export default function CloudReportsPage() {
       {notice && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{notice}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Invoice total" value={money(report.invoiceCount ? report.grossSales - report.discounts + report.vat : 0, currency)} note={`${report.invoiceCount.toLocaleString()} posted invoices, including VAT`} />
+        <Metric label="Invoice total" value={money(report.invoiceTotal, currency)} note={`${report.invoiceCount.toLocaleString()} posted invoices, including VAT`} />
         <Metric label="Net sales (ex VAT)" value={money(report.netSales, currency)} note="After discounts, before VAT" />
         <Metric label="VAT on invoices" value={money(report.vat, currency)} note="Recorded VAT totals on invoice lines" />
         <Metric label="Collections" value={money(report.collected, currency)} note="Payments posted against these invoices" />
