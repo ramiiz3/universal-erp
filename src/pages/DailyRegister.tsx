@@ -142,7 +142,7 @@ export default function DailyRegister() {
               <h1 className="text-2xl font-semibold tracking-tight">Daily Summary &amp; Cash Reconciliation</h1>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Transactions are grouped by date automatically. There is no need to open or close a day.
+              Transactions are grouped by the pharmacy's Dubai business date automatically. There is no need to open or close a day.
             </p>
           </div>
           <button type="button" onClick={downloadBackupNow} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
