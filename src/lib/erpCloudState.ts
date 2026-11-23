@@ -113,6 +113,7 @@ export function restoreERPCloudState(
     )
   }
 
+  dispatchERPCloudSync()
   return state
 }
 
