@@ -55,10 +55,24 @@ type RegisterSupplierInvoice = { payments?: DatedAmount[] }
 const roundMoney = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100
 
-export function getBusinessDate(date = new Date()): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+export const DEFAULT_BUSINESS_TIME_ZONE = "Asia/Dubai"
+
+export function getBusinessDate(
+  date = new Date(),
+  timeZone = DEFAULT_BUSINESS_TIME_ZONE,
+): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date)
+  const year = parts.find((part) => part.type === "year")?.value
+  const month = parts.find((part) => part.type === "month")?.value
+  const day = parts.find((part) => part.type === "day")?.value
+  if (!year || !month || !day) {
+    throw new Error("Could not determine the business date for the configured time zone.")
+  }
   return `${year}-${month}-${day}`
 }
 
