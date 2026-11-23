@@ -134,6 +134,26 @@ describe("sale lot allocation", () => {
     })
   })
 
+  it("does not charge VAT on products explicitly marked VAT-exempt", () => {
+    const vatExemptProduct = {
+      ...product,
+      id: "product-vat-exempt",
+      vatApplicable: false,
+      vatRate: 5,
+    }
+    const allocation = allocateSaleLots(
+      [{ product: vatExemptProduct, quantity: 2, unitPrice: 10 }],
+      [{ ...lots[0], productId: vatExemptProduct.id, quantity: 2, sellingPrice: 10 }],
+    )
+
+    expect(calculateLotSaleTotals(allocation.lines, 1)).toEqual({
+      subtotal: 20,
+      discount: 1,
+      vat: 0,
+      total: 19,
+    })
+  })
+
   it("allocates package sales across FEFO batches using the selected package price", () => {
     const packageLots: InventoryLot[] = [
       { ...lots[0], quantity: 19, sellingPrice: 9 },
