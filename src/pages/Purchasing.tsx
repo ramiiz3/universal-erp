@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { useERP, type Purchase } from "../context/ERPContext"
+import { getERPSettings } from "../lib/erpSettings"
 
 type PurchaseLine = {
   id: string
