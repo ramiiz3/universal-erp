@@ -680,7 +680,7 @@ export default function ProductsPage() {
                   <dt className="text-slate-500">Purchase cost</dt><dd>{activeCompany?.currency ?? "AED"} {Number(details.purchase_price).toFixed(2)}</dd>
                   <dt className="text-slate-500">Selling price</dt><dd>{activeCompany?.currency ?? "AED"} {Number(details.selling_price).toFixed(2)}</dd>
                   <dt className="text-slate-500">Minimum stock</dt><dd>{Number(details.minimum_stock).toLocaleString()}</dd>
-                  <dt className="text-slate-500">VAT treatment</dt><dd>{details.vat_applicable ? `${Number(details.vat_rate || getDefaultCompanyVatRate(activeCompany?.taxRate))}% standard rate` : "Not applicable / exempt"}</dd>
+                  <dt className="text-slate-500">VAT treatment</dt><dd>{details.vat_applicable ? `${Number(details.vat_rate || getDefaultCompanyVatRate(activeCompany?.taxRate))}%` : "Not applicable (status not classified)"}</dd>
                   <dt className="text-slate-500">Description</dt><dd className="whitespace-pre-wrap">{details.description || "—"}</dd>
                 </dl>
               </section>
