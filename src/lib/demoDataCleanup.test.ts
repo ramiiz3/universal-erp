@@ -275,6 +275,40 @@ describe("built-in demo data cleanup", () => {
     expect(result.data.customers).toEqual([])
   })
 
+  it("keeps the genuine part of a customer receipt when its other allocation is a demo sale", () => {
+    const demoSale = {
+      id: "SALE-DEMO-PARTIAL",
+      items: [{
+        productId: "PROD-005",
+        batchAllocations: [{ lotId: "LOT-005" }],
+      }],
+    }
+    const payment = {
+      id: "PAYMENT-MIXED",
+      customerId: "CUSTOMER-REAL",
+      amount: 30,
+      allocations: [
+        { saleId: "SALE-DEMO-PARTIAL", amount: 10 },
+        { saleId: "SALE-GENUINE", amount: 20 },
+      ],
+    }
+    const result = removeBuiltInDemoData({
+      products: [demoProduct],
+      inventoryLots: [demoLot],
+      customers: [],
+      sales: [demoSale],
+      customerPayments: [payment],
+    })
+
+    expect(result.removedSales).toBe(1)
+    expect(result.removedCustomerPayments).toBe(0)
+    expect(result.data.customerPayments).toEqual([{
+      ...payment,
+      amount: 20,
+      allocations: [{ saleId: "SALE-GENUINE", amount: 20 }],
+    }])
+  })
+
   it("preserves demo products when a sale includes a genuine product", () => {
     const genuineProduct = {
       ...demoProduct,
