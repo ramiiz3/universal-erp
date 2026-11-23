@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { dispatchERPCloudSync } from "../lib/erpCloudState"
 import {
   AlertTriangle,
   Download,
@@ -103,7 +102,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
     if (!backup || !confirmed) return
     const keyPreview = restorePreview
     const confirmation = window.confirm(
-      `Replace only the ${keyPreview?.currentKeyCount ?? 0} current allowlisted ERP key(s) with this backup? Settings missing from an older backup (including current custom categories and units) will be preserved. Authentication sessions, Supabase client data, theme preference, recovery snapshots, and unrelated browser storage will remain unchanged.`,
+      `Replace only the ${keyPreview?.currentKeyCount ?? 0} current allowlisted ERP key(s) with this backup? Settings missing from an older backup (including current custom categories and units) will be preserved. Browser theme preference and unrelated browser storage will remain unchanged.`,
     )
     if (!confirmation) return
 
@@ -111,7 +110,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
     setMessage("")
     try {
       restoreERPBackup(localStorage, backup, true)
-      dispatchERPCloudSync()
+
       if (onRestored) {
         await onRestored()
         return
@@ -150,9 +149,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
             <h2 className="font-semibold text-slate-900">Full ERP Backup &amp; Restore</h2>
             <p className="mt-1 text-sm text-slate-500">
                 Backs up ERP products, inventory, customers, sales, purchases, suppliers,
-                business settings, owner profile, and read-notification preferences. Supabase
-                sessions and tokens, OAuth credentials, theme preference, automatic recovery
-                snapshots, and unrelated browser storage are excluded and never changed by restore.
+                business settings, owner profile, and read-notification preferences. ERP records stay in this browser on this device; browser theme preference and unrelated browser storage are excluded and never changed by restore. Download backups regularly and keep a copy outside this device.
               </p>
           </div>
         </div>
@@ -265,8 +262,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
                 />
                 <span>
                   I understand this replaces only the allowlisted ERP data and settings keys shown
-                  in this preview. Authentication sessions, Supabase client data, theme preference,
-                  recovery snapshots, and unrelated browser storage will remain unchanged.
+                  in this preview. Browser theme preference and unrelated browser storage will remain unchanged.
                 </span>
               </label>
               <button

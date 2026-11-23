@@ -35,7 +35,6 @@ import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
 } from "../lib/erpStorageKeys"
-import { dispatchERPCloudSync } from "../lib/erpCloudState"
 
 const navigationGroups = [
   {
@@ -164,9 +163,8 @@ export default function AppLayout() {
     products,
     inventoryLots,
     sales,
-    cloudSyncStatus,
-    cloudSyncError,
-    cloudLastSavedAt,
+    localStorageError,
+    localLastSavedAt,
   } = useERP()
 
   const [notificationsOpen, setNotificationsOpen] =
@@ -298,7 +296,6 @@ export default function AppLayout() {
       ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(next),
     )
-    dispatchERPCloudSync()
 
     setNotificationsOpen(false)
     navigate(notification.path)
@@ -316,7 +313,7 @@ export default function AppLayout() {
       ERP_READ_NOTIFICATIONS_STORAGE_KEY,
       JSON.stringify(allIds),
     )
-    dispatchERPCloudSync()
+
   }
 
   function openProfile() {
@@ -346,7 +343,6 @@ export default function AppLayout() {
       ERP_OWNER_PROFILE_STORAGE_KEY,
       JSON.stringify(nextOwner),
     )
-    dispatchERPCloudSync()
 
     setProfileOpen(false)
   }
@@ -424,16 +420,14 @@ export default function AppLayout() {
             <div className="flex items-center gap-2">
               <span
                 aria-live="polite"
-                title={cloudSyncError || (cloudLastSavedAt ? "Last saved " + new Date(cloudLastSavedAt).toLocaleString() : "Waiting for first cloud save")}
+                title={localStorageError || (localLastSavedAt ? "Last saved on this device " + new Date(localLastSavedAt).toLocaleString() : "ERP records are stored in this browser on this device")}
                 className={`hidden items-center rounded-lg px-2.5 py-2 text-xs font-medium sm:flex ${
-                  cloudSyncStatus === "saved"
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    : cloudSyncStatus === "error"
-                      ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                  localStorageError
+                    ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                    : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
                 }`}
               >
-                {cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "saving" ? "Saving…" : cloudSyncStatus === "error" ? "Sync error" : "Connecting…"}
+                {localStorageError ? "Local storage issue" : "Saved on this device"}
               </span>
               <div className="relative">
                 <button
@@ -592,7 +586,7 @@ export default function AppLayout() {
                 className="hidden items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 sm:flex"
               >
                 <Sparkles size={16} />
-                Ask AI
+                ERP Assistant
               </button>
 
               <div className="relative">
