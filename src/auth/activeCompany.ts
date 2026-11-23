@@ -30,7 +30,7 @@ export type ActiveCompanyState = {
 }
 
 export type ActiveCompanyAction =
-  | { type: "begin" }
+  | { type: "begin"; preserveActive?: boolean }
   | { type: "activate"; company: ActiveCompany }
   | { type: "deny"; error: string }
   | { type: "clear" }
