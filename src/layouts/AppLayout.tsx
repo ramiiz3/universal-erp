@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { useAuth } from "../auth/AuthProvider"
+import GlobalERPSearch from "../components/GlobalERPSearch"
 import { useTheme } from "../context/ThemeContext"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
@@ -422,6 +423,7 @@ export default function AppLayout() {
               </div>
             </div>
 
+            <GlobalERPSearch />
             <div className="flex items-center gap-2">
               <span
                 aria-live="polite"
