@@ -46,7 +46,7 @@ const navigationGroups = [
   {
     label: "Sales & Customer Management",
     items: [
-      { label: "Day Opening & Closing", path: "/daily-register", icon: CalendarCheck },
+      { label: "Daily Summary", path: "/daily-register", icon: CalendarCheck },
       { label: "Point of Sale", path: "/pos", icon: ScanBarcode },
       { label: "Sales", path: "/sales", icon: ShoppingCart },
       { label: "Customer Payments", path: "/customer-payments", icon: CreditCard },
