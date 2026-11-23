@@ -10,6 +10,7 @@ import { useAuth } from "../auth/AuthProvider"
 import { supabase } from "../lib/supabase"
 import {
   createERPCloudState,
+  areERPCloudStatesEqual,
   restoreERPCloudState,
   ERP_CLOUD_SYNC_EVENT,
 } from "../lib/erpCloudState"
@@ -814,7 +815,7 @@ export function ERPProvider({
         if (
           meta?.companyId === companyId &&
           meta.revision === remoteRevision &&
-          JSON.stringify(localSnapshot) !== JSON.stringify(remoteRow.state)
+          !areERPCloudStatesEqual(localSnapshot, remoteRow.state)
         ) {
           throw new Error(
             "This workstation has local changes that were not confirmed as saved to the database. The local data has been preserved in a recovery snapshot. Do not continue making transactions until the data is reconciled.",
@@ -932,7 +933,7 @@ export function ERPProvider({
 
       const latestSnapshot = createERPCloudState(localStorage)
       cloudDirtyRef.current =
-        JSON.stringify(latestSnapshot) !== JSON.stringify(snapshot)
+        !areERPCloudStatesEqual(latestSnapshot, snapshot)
       setCloudSyncStatus(cloudDirtyRef.current ? "saving" : "saved")
       if (cloudDirtyRef.current) scheduleCloudSaveRef.current()
     } catch (error) {
