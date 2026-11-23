@@ -758,76 +758,119 @@ async function callGemini(
   systemInstruction: string,
   history: Array<Record<string, unknown>>,
   message: string,
+  fallbackModels: string[],
 ) {
-  const maxAttempts = 3
-  let lastFailure = "Unknown Gemini error."
+  const maxAttemptsPerModel = 2
+  const models = [...new Set([model, ...fallbackModels].map((item) => item.trim()).filter(Boolean))]
+  const failures: string[] = []
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    let upstream: Response
-    try {
-      upstream = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/" +
-          encodeURIComponent(model) +
-          ":generateContent",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          signal: AbortSignal.timeout(25_000),
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents: [
-              ...history,
-              { role: "user", parts: [{ text: message }] },
-            ],
-            generationConfig: {
-              temperature: 0.25,
-              maxOutputTokens: 1_400,
+  for (const candidateModel of models) {
+    let modelSucceeded = false
+
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt += 1) {
+      let upstream: Response
+      try {
+        upstream = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/" +
+            encodeURIComponent(candidateModel) +
+            ":generateContent",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey,
             },
-          }),
-        },
-      )
-    } catch (error) {
-      lastFailure = error instanceof Error ? error.message : "Network request to Gemini failed."
-      if (attempt === maxAttempts) break
-      const delay = Math.min(4_000, 700 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250))
-      console.warn("Gemini network request failed; retrying.", { attempt, delay, detail: lastFailure })
-      await new Promise((resolve) => setTimeout(resolve, delay))
-      continue
-    }
-
-    const result = await upstream.json().catch(() => ({})) as Record<string, unknown>
-    if (!upstream.ok) {
-      const upstreamError = result.error && typeof result.error === "object"
-        ? result.error as Record<string, unknown>
-        : {}
-      const detail = typeof upstreamError.message === "string"
-        ? upstreamError.message.slice(0, 500)
-        : "Gemini returned HTTP " + upstream.status + "."
-      lastFailure = "Gemini HTTP " + upstream.status + ": " + detail
-
-      if (!isRetryableGeminiFailure(upstream.status, detail) || attempt === maxAttempts) {
-        throw new Error(lastFailure)
+            signal: AbortSignal.timeout(25_000),
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents: [
+                ...history,
+                { role: "user", parts: [{ text: message }] },
+              ],
+              generationConfig: {
+                temperature: 0.25,
+                maxOutputTokens: 1_400,
+              },
+            }),
+          },
+        )
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "Network request to Gemini failed."
+        if (attempt < maxAttemptsPerModel) {
+          const delay = Math.min(4_000, 700 * (2 ** (attempt - 1)) + Math.floor(Math.random() * 250))
+          console.warn("Gemini network request failed; retrying the same model.", {
+            model: candidateModel,
+            attempt,
+            delay,
+          })
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+        failures.push(candidateModel + ": network failure (" + detail.slice(0, 180) + ")")
+        break
       }
 
-      const delay = geminiRetryDelay(upstream, attempt)
-      console.warn("Gemini returned a temporary error; retrying.", {
-        attempt,
-        status: upstream.status,
-        delay,
-      })
-      await new Promise((resolve) => setTimeout(resolve, delay))
-      continue
+      const result = await upstream.json().catch(() => ({})) as Record<string, unknown>
+      if (!upstream.ok) {
+        const upstreamError = result.error && typeof result.error === "object"
+          ? result.error as Record<string, unknown>
+          : {}
+        const detail = typeof upstreamError.message === "string"
+          ? upstreamError.message.slice(0, 500)
+          : "Gemini returned HTTP " + upstream.status + "."
+        const failure = "Gemini HTTP " + upstream.status + ": " + detail
+
+        // Invalid credentials and exhausted daily quota will not be fixed by
+        // switching models, so surface those immediately.
+        if (
+          upstream.status === 401 ||
+          upstream.status === 403 ||
+          (upstream.status === 429 && /daily quota|per[_ ]day|quota.*reset|requests_per_day|tokens_per_day|limit is 0/i.test(detail))
+        ) {
+          throw new Error(failure)
+        }
+
+        if (isRetryableGeminiFailure(upstream.status, detail) && attempt < maxAttemptsPerModel) {
+          const delay = geminiRetryDelay(upstream, attempt)
+          console.warn("Gemini returned a temporary error; retrying the same model.", {
+            model: candidateModel,
+            attempt,
+            status: upstream.status,
+            delay,
+          })
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+
+        failures.push(candidateModel + ": " + failure)
+        break
+      }
+
+      const reply = extractGeminiText(result)
+      if (!reply) {
+        failures.push(candidateModel + ": Gemini returned no text.")
+        break
+      }
+
+      modelSucceeded = true
+      if (candidateModel !== model) {
+        console.warn("Gemini fallback model answered successfully.", {
+          primaryModel: model,
+          fallbackModel: candidateModel,
+        })
+      }
+      return { reply, provider: "Gemini", model: candidateModel }
     }
 
-    const reply = extractGeminiText(result)
-    if (!reply) throw new Error("Gemini returned no text.")
-    return { reply, provider: "Gemini", model }
+    if (modelSucceeded) break
   }
 
-  throw new Error("Gemini request failed after " + maxAttempts + " attempts. " + lastFailure)
+  throw new Error(
+    "Gemini is temporarily unavailable. The Assistant tried these models: " +
+    models.join(", ") +
+    ". " +
+    failures.join(" | "),
+  )
 }
 
 Deno.serve(async (request) => {
@@ -954,9 +997,24 @@ Deno.serve(async (request) => {
     }, 503)
   }
 
+  const configuredFallbacks = (Deno.env.get("GEMINI_FALLBACK_MODELS") ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const fallbackModels = configuredFallbacks.length
+    ? configuredFallbacks
+    : ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+
   let answer: { reply: string; provider: string; model: string }
   try {
-    answer = await callGemini(geminiKey, geminiModel, systemInstruction, history, message)
+    answer = await callGemini(
+      geminiKey,
+      geminiModel,
+      systemInstruction,
+      history,
+      message,
+      fallbackModels,
+    )
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Gemini request failed."
     console.error("Zaki AI Gemini request failed.", detail)
