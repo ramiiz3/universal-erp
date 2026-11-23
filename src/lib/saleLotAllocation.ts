@@ -105,7 +105,8 @@ export function calculateLotSaleTotals(
   const vat = lines.reduce((sum, line) => {
     const lineTotal = line.quantity * line.unitPrice
     const discountedLine = lineTotal * (1 - discountRatio)
-    return sum + discountedLine * (line.product.vatRate / 100)
+    const vatRate = line.product.vatApplicable === false ? 0 : line.product.vatRate
+    return sum + discountedLine * (vatRate / 100)
   }, 0)
 
   return {

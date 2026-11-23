@@ -21,8 +21,6 @@ import {
   Warehouse,
   X,
   LayoutDashboard,
-  LogIn,
-  LogOut,
   Bot,
   CheckCircle2,
   Clock3,
@@ -32,7 +30,6 @@ import {
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { useTheme } from "../context/ThemeContext"
-import { useAuth } from "../auth/AuthProvider"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
@@ -159,7 +156,6 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const darkMode = theme === "dark"
-  const { user: cloudUser, configured: cloudAuthConfigured, signOut } = useAuth()
 
   const {
     products,
@@ -175,9 +171,6 @@ export default function AppLayout() {
 
   const [profileOpen, setProfileOpen] =
     useState(false)
-
-  const [cloudAuthBusy, setCloudAuthBusy] = useState(false)
-  const [cloudAuthError, setCloudAuthError] = useState("")
 
   const [owner, setOwner] =
     useState<OwnerProfile>(loadOwner)
@@ -349,19 +342,6 @@ export default function AppLayout() {
     setProfileOpen(false)
   }
 
-  async function signOutCloudAccount() {
-    setCloudAuthBusy(true)
-    setCloudAuthError("")
-    try {
-      await signOut()
-      setOwnerOpen(false)
-    } catch (error) {
-      setCloudAuthError(error instanceof Error ? error.message : "Could not sign out of the cloud workspace.")
-    } finally {
-      setCloudAuthBusy(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#0b120e] dark:text-slate-100">
       <div className="flex min-h-screen">
@@ -372,7 +352,7 @@ export default function AppLayout() {
                 <Building2 size={23} />
               </span>
               <div>
-                <p className="text-base font-bold tracking-tight text-slate-900 dark:text-white">Universal ERP</p>
+                <p className="text-base font-bold tracking-tight text-slate-900 dark:text-white">Zaki Pharmacy ERP</p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">Business management platform</p>
               </div>
             </div>
@@ -409,25 +389,6 @@ export default function AppLayout() {
             </nav>
           </div>
 
-          <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-            <div className="rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-950/40">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                <Sparkles size={16} />
-                Universal ERP
-              </div>
-
-              <p className="text-xs leading-5 text-emerald-700/80 dark:text-emerald-300/70">
-                Integrated business management workspace
-              </p>
-              <NavLink
-                to="/workspace"
-                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-emerald-800 hover:underline dark:text-emerald-300"
-              >
-                <Building2 size={14} />
-                {cloudUser ? "Open cloud workspace" : "Sign in to cloud workspace"}
-              </NavLink>
-            </div>
-          </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -437,16 +398,16 @@ export default function AppLayout() {
                 <span className="rounded-lg bg-emerald-600 p-2 text-white">
                   <Building2 size={18} />
                 </span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white">Universal ERP</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white">Zaki Pharmacy ERP</span>
               </div>
 
               <div className="hidden border-l border-slate-200 pl-4 dark:border-slate-700 lg:block">
                 <h1 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Universal ERP
+                  Zaki Pharmacy ERP
                 </h1>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Business Management Platform
+                  Pharmacy Management System
                 </p>
               </div>
             </div>
@@ -691,61 +652,6 @@ export default function AppLayout() {
                       </button>
                     </div>
 
-                    <div className="border-t border-slate-200 p-3 dark:border-slate-700">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Cloud workspace account
-                      </p>
-                      {cloudAuthConfigured ? (
-                        cloudUser ? (
-                          <>
-                            <p className="mb-2 truncate text-xs text-slate-500 dark:text-slate-400">
-                              Signed in as {cloudUser.email || "Cloud user"}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOwnerOpen(false)
-                                navigate("/workspace/dashboard")
-                              }}
-                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                            >
-                              <Building2 className="h-4 w-4" />
-                              Open cloud workspace
-                            </button>
-                            <button
-                              type="button"
-                              disabled={cloudAuthBusy}
-                              onClick={() => void signOutCloudAccount()}
-                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                            >
-                              <LogOut className="h-4 w-4" />
-                              {cloudAuthBusy ? "Signing out…" : "Sign out of cloud account"}
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOwnerOpen(false)
-                              navigate("/auth/login", { state: { from: "/workspace/dashboard" } })
-                            }}
-                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                          >
-                            <LogIn className="h-4 w-4" />
-                            Sign in to company workspace
-                          </button>
-                        )
-                      ) : (
-                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                          Cloud authentication is not configured. The legacy local ERP remains available.
-                        </p>
-                      )}
-                      {cloudAuthError && (
-                        <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
-                          {cloudAuthError}
-                        </p>
-                      )}
-                    </div>
                   </div>
                 )}
               </div>

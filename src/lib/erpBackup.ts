@@ -7,9 +7,11 @@ import {
   ERP_STORAGE_KEY,
   ERP_SUPPLIERS_STORAGE_KEY,
 } from "./erpStorageKeys"
+import { ERP_UNITS_STORAGE_KEY } from "./erpUnits"
+import { PRODUCT_CATEGORIES_STORAGE_KEY } from "./productCategories"
 
 export const ERP_BACKUP_FORMAT = "universal-erp-full-backup"
-export const ERP_BACKUP_SCHEMA_VERSION = 2
+export const ERP_BACKUP_SCHEMA_VERSION = 3
 export {
   ERP_BACKUP_STORAGE_KEYS,
   ERP_OWNER_PROFILE_STORAGE_KEY,
@@ -20,7 +22,14 @@ export {
 } from "./erpStorageKeys"
 
 const ERP_BACKUP_STORAGE_KEY_SET = new Set<string>(ERP_BACKUP_STORAGE_KEYS)
-const LEGACY_BACKUP_STORAGE_KEY_SET = new Set<string>([
+const VERSION_2_BACKUP_STORAGE_KEY_SET = new Set<string>([
+  ERP_STORAGE_KEY,
+  ERP_SETTINGS_STORAGE_KEY,
+  ERP_SUPPLIERS_STORAGE_KEY,
+  ERP_OWNER_PROFILE_STORAGE_KEY,
+  ERP_READ_NOTIFICATIONS_STORAGE_KEY,
+])
+const VERSION_1_BACKUP_STORAGE_KEY_SET = new Set<string>([
   ERP_STORAGE_KEY,
   ERP_SETTINGS_STORAGE_KEY,
   ERP_SUPPLIERS_STORAGE_KEY,
@@ -48,6 +57,8 @@ export type BackupCounts = {
   settingsRecords: number
   ownerProfileRecords: number
   readNotificationRecords: number
+  productCategoryRecords: number
+  unitDefinitionRecords: number
   otherStorageKeys: number
 }
 
@@ -59,6 +70,8 @@ export type ERPBackup = {
   counts: BackupCounts
   entries: { key: string; value: string }[]
   legacyExcludedKeys?: string[]
+  /** Current ERP keys absent from a legacy backup; keep existing workstation values. */
+  legacyMissingKeys?: string[]
 }
 
 export type RestorePreview = {
@@ -185,6 +198,18 @@ function calculateCounts(
       value: "",
     },
   )
+  const productCategories = parseEntry(
+    entryFor(erpEntries, PRODUCT_CATEGORIES_STORAGE_KEY) ?? {
+      key: PRODUCT_CATEGORIES_STORAGE_KEY,
+      value: "",
+    },
+  )
+  const unitDefinitions = parseEntry(
+    entryFor(erpEntries, ERP_UNITS_STORAGE_KEY) ?? {
+      key: ERP_UNITS_STORAGE_KEY,
+      value: "",
+    },
+  )
   return {
     storageKeys: erpEntries.length,
     products: arrayCount(mainStore, "products"),
@@ -200,13 +225,19 @@ function calculateCounts(
     readNotificationRecords: Array.isArray(readNotifications)
       ? readNotifications.length
       : 0,
+    productCategoryRecords: Array.isArray(productCategories)
+      ? productCategories.length
+      : 0,
+    unitDefinitionRecords: Array.isArray(unitDefinitions)
+      ? unitDefinitions.length
+      : 0,
     otherStorageKeys: 0,
   }
 }
 
 function calculateLegacyCounts(
   entries: { key: string; value: string }[],
-): Omit<BackupCounts, "readNotificationRecords"> {
+): Omit<BackupCounts, "readNotificationRecords" | "productCategoryRecords" | "unitDefinitionRecords"> {
   const counts = calculateCounts(entries)
   return {
     storageKeys: entries.length,
@@ -221,8 +252,29 @@ function calculateLegacyCounts(
     settingsRecords: counts.settingsRecords,
     ownerProfileRecords: counts.ownerProfileRecords,
     otherStorageKeys: entries.filter((entry) =>
-      !LEGACY_BACKUP_STORAGE_KEY_SET.has(entry.key),
+      !VERSION_1_BACKUP_STORAGE_KEY_SET.has(entry.key),
     ).length,
+  }
+}
+
+function calculateVersion2Counts(
+  entries: { key: string; value: string }[],
+): Omit<BackupCounts, "productCategoryRecords" | "unitDefinitionRecords"> {
+  const counts = calculateCounts(entries)
+  return {
+    storageKeys: counts.storageKeys,
+    products: counts.products,
+    inventoryLots: counts.inventoryLots,
+    stockMovements: counts.stockMovements,
+    customers: counts.customers,
+    sales: counts.sales,
+    invoices: counts.invoices,
+    purchases: counts.purchases,
+    suppliers: counts.suppliers,
+    settingsRecords: counts.settingsRecords,
+    ownerProfileRecords: counts.ownerProfileRecords,
+    readNotificationRecords: counts.readNotificationRecords,
+    otherStorageKeys: counts.otherStorageKeys,
   }
 }
 
@@ -261,8 +313,7 @@ export function validateERPBackup(value: unknown): ERPBackup {
   if (
     !backup ||
     backup.format !== ERP_BACKUP_FORMAT ||
-    (backup.schemaVersion !== 1 &&
-      backup.schemaVersion !== ERP_BACKUP_SCHEMA_VERSION)
+    ![1, 2, ERP_BACKUP_SCHEMA_VERSION].includes(backup.schemaVersion as number)
   ) {
     throw new Error("This file is not a supported UniversalERP backup.")
   }
@@ -297,8 +348,33 @@ export function validateERPBackup(value: unknown): ERPBackup {
   })
 
   const providedCounts = asRecord(backup.counts)
+  let erpEntries: { key: string; value: string }[]
+  let legacyExcludedKeys: string[] = []
+  let legacyMissingKeys: string[] = []
+
   if (backup.schemaVersion === 1) {
     validateProvidedCounts(providedCounts, calculateLegacyCounts(entries))
+    erpEntries = entries.filter((entry) => VERSION_1_BACKUP_STORAGE_KEY_SET.has(entry.key))
+    legacyExcludedKeys = entries
+      .filter((entry) => !VERSION_1_BACKUP_STORAGE_KEY_SET.has(entry.key))
+      .map((entry) => entry.key)
+    legacyMissingKeys = ERP_BACKUP_STORAGE_KEYS.filter(
+      (key) => !erpEntries.some((entry) => entry.key === key),
+    )
+  } else if (backup.schemaVersion === 2) {
+    const unexpectedKey = entries.find(
+      (entry) => !VERSION_2_BACKUP_STORAGE_KEY_SET.has(entry.key),
+    )
+    if (unexpectedKey) {
+      throw new Error(
+        `This backup contains non-ERP storage key "${unexpectedKey.key}" and cannot be restored.`,
+      )
+    }
+    validateProvidedCounts(providedCounts, calculateVersion2Counts(entries))
+    erpEntries = entries.filter((entry) => VERSION_2_BACKUP_STORAGE_KEY_SET.has(entry.key))
+    legacyMissingKeys = ERP_BACKUP_STORAGE_KEYS.filter(
+      (key) => !erpEntries.some((entry) => entry.key === key),
+    )
   } else {
     const unexpectedKey = entries.find(
       (entry) => !ERP_BACKUP_STORAGE_KEY_SET.has(entry.key),
@@ -309,15 +385,27 @@ export function validateERPBackup(value: unknown): ERPBackup {
       )
     }
     validateProvidedCounts(providedCounts, calculateCounts(entries))
+    erpEntries = selectERPEntries(entries)
+    if (backup.legacyMissingKeys !== undefined) {
+      if (!Array.isArray(backup.legacyMissingKeys)) {
+        throw new Error("The backup legacy-key preservation metadata is invalid.")
+      }
+      legacyMissingKeys = backup.legacyMissingKeys.map((key) => {
+        if (
+          typeof key !== "string" ||
+          !ERP_BACKUP_STORAGE_KEY_SET.has(key) ||
+          erpEntries.some((entry) => entry.key === key)
+        ) {
+          throw new Error("The backup legacy-key preservation metadata is invalid.")
+        }
+        return key
+      })
+      if (new Set(legacyMissingKeys).size !== legacyMissingKeys.length) {
+        throw new Error("The backup legacy-key preservation metadata contains duplicate keys.")
+      }
+    }
   }
 
-  const legacyExcludedKeys =
-    backup.schemaVersion === 1
-      ? entries
-          .filter((entry) => !ERP_BACKUP_STORAGE_KEY_SET.has(entry.key))
-          .map((entry) => entry.key)
-      : []
-  const erpEntries = selectERPEntries(entries)
   return {
     format: ERP_BACKUP_FORMAT,
     schemaVersion: ERP_BACKUP_SCHEMA_VERSION,
@@ -326,6 +414,7 @@ export function validateERPBackup(value: unknown): ERPBackup {
     counts: calculateCounts(erpEntries),
     entries: erpEntries,
     ...(legacyExcludedKeys.length ? { legacyExcludedKeys } : {}),
+    ...(legacyMissingKeys.length ? { legacyMissingKeys } : {}),
   }
 }
 
@@ -345,6 +434,12 @@ export function getBackupDataWarnings(backup: ERPBackup): string[] {
   if (backup.legacyExcludedKeys?.length) {
     warnings.push(
       `This legacy backup contains non-ERP browser keys that were not imported: ${backup.legacyExcludedKeys.join(", ")}. Keep the original backup if you need those values; any corresponding values in this browser remain unchanged.`,
+    )
+  }
+
+  if (backup.legacyMissingKeys?.length) {
+    warnings.push(
+      `This older backup does not contain these ERP settings: ${backup.legacyMissingKeys.join(", ")}. Existing values on this workstation will be preserved during restore.`,
     )
   }
 
@@ -388,6 +483,8 @@ export function getBackupDataWarnings(backup: ERPBackup): string[] {
     { key: ERP_SUPPLIERS_STORAGE_KEY, label: "Supplier data", type: "array" },
     { key: ERP_SETTINGS_STORAGE_KEY, label: "ERP settings", type: "object" },
     { key: ERP_OWNER_PROFILE_STORAGE_KEY, label: "Owner profile", type: "object" },
+    { key: PRODUCT_CATEGORIES_STORAGE_KEY, label: "Product categories", type: "array" },
+    { key: ERP_UNITS_STORAGE_KEY, label: "Unit definitions", type: "array" },
   ] as const
   for (const expected of expectedShapes) {
     const entry = entryFor(backup.entries, expected.key)
@@ -417,6 +514,7 @@ export function previewERPBackupRestore(
   const currentEntries = readERPEntries(storage)
   const currentKeys = new Set(currentEntries.map((entry) => entry.key))
   const backupKeys = new Set(backup.entries.map((entry) => entry.key))
+  const preservedKeys = new Set(backup.legacyMissingKeys ?? [])
 
   return {
     currentKeyCount: currentEntries.length,
@@ -425,7 +523,7 @@ export function previewERPBackupRestore(
       .filter((entry) => currentKeys.has(entry.key))
       .map((entry) => entry.key),
     removedKeys: currentEntries
-      .filter((entry) => !backupKeys.has(entry.key))
+      .filter((entry) => !backupKeys.has(entry.key) && !preservedKeys.has(entry.key))
       .map((entry) => entry.key),
     addedKeys: backup.entries
       .filter((entry) => !currentKeys.has(entry.key))
@@ -445,7 +543,10 @@ export function restoreERPBackup(
   const previousEntries = readERPEntries(storage)
 
   try {
-    for (const key of ERP_BACKUP_STORAGE_KEYS) storage.removeItem(key)
+    const preservedKeys = new Set(backup.legacyMissingKeys ?? [])
+    for (const key of ERP_BACKUP_STORAGE_KEYS) {
+      if (!preservedKeys.has(key)) storage.removeItem(key)
+    }
     for (const entry of backup.entries) storage.setItem(entry.key, entry.value)
   } catch (error) {
     const rollbackErrors: string[] = []

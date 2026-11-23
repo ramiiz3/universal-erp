@@ -35,6 +35,8 @@ const COUNT_LABELS = [
   ["settingsRecords", "Settings records"],
   ["ownerProfileRecords", "Owner/profile records"],
   ["readNotificationRecords", "Read notification preferences"],
+  ["productCategoryRecords", "Product categories"],
+  ["unitDefinitionRecords", "Unit definitions"],
   ["otherStorageKeys", "Other localStorage keys (names only)"],
   ["storageKeys", "ERP backup keys"],
 ] as const
@@ -100,7 +102,7 @@ export default function BackupRestorePanel({ onRestored }: Props) {
     if (!backup || !confirmed) return
     const keyPreview = restorePreview
     const confirmation = window.confirm(
-      `Replace only the ${keyPreview?.currentKeyCount ?? 0} current allowlisted ERP key(s) with this backup? Authentication sessions, Supabase client data, theme preference, recovery snapshots, and unrelated browser storage will remain unchanged.`,
+      `Replace only the ${keyPreview?.currentKeyCount ?? 0} current allowlisted ERP key(s) with this backup? Settings missing from an older backup (including current custom categories and units) will be preserved. Authentication sessions, Supabase client data, theme preference, recovery snapshots, and unrelated browser storage will remain unchanged.`,
     )
     if (!confirmation) return
 
