@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "./AuthProvider"
 
 function AccessMessage({ title, message, action }: {
   title: string
   message: string
-  action?: React.ReactNode
+  action?: ReactNode
 }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
