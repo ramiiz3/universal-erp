@@ -10,9 +10,11 @@ export const INVENTORY_COLUMNS = [
   { key: "productId", label: "Product ID", aliases: ["product id", "productid", "erp product id"] },
   { key: "lotId", label: "Inventory Lot ID", aliases: ["inventory lot id", "lot id", "lotid"] },
   { key: "name", label: "Product Name", aliases: ["product", "product name", "name", "medicine", "description", "item name"] },
-  { key: "barcode", label: "Barcode", aliases: ["barcode", "bar code", "ean", "upc"] },
-  { key: "sku", label: "SKU", aliases: ["sku", "item code", "product code", "stock code"] },
-  { key: "category", label: "Category", aliases: ["category", "product category"] },
+  { key: "barcode", label: "Barcode / GTIN", aliases: ["barcode", "bar code", "ean", "upc", "gtin", "gtin no", "gtin number", "trade item number"] },
+  { key: "sku", label: "Product Code / SKU", aliases: ["sku", "code", "item code", "product code", "stock code"] },
+  { key: "category", label: "Category / Group", aliases: ["category", "product category", "group", "product group"] },
+  { key: "genericName", label: "Generic Name", aliases: ["generic name", "generic", "molecule", "composition"] },
+  { key: "packagings", label: "Sub-units / Packaging JSON", aliases: ["sub units packaging json", "packagings json", "product units json", "unit conversions json"] },
   { key: "manufacturer", label: "Manufacturer", aliases: ["manufacturer", "brand"] },
   { key: "mrp", label: "MRP", aliases: ["mrp", "maximum retail price", "max retail price", "retail mrp"] },
   { key: "bonusQuantity", label: "Bonus Quantity", aliases: ["bonus", "bonus qty", "bonus quantity", "free qty", "free quantity", "scheme qty"] },
@@ -94,10 +96,12 @@ export const INVENTORY_EXPORT_HEADERS = [
   "GRN Number",
   "Supplier",
   "Product Name",
-  "Barcode",
-  "SKU",
-  "Category",
+  "Barcode / GTIN",
+  "SKU / Code",
+  "Category / Group",
   "Manufacturer",
+  "Generic Name",
+  "Sub-units / Packaging JSON",
   "Company",
   "Unit",
   "MRP",
@@ -285,7 +289,7 @@ export function previewInventoryImport(
         : normalizedText(mappedValue(row, "productId"))
       const sourceLotId = normalizedText(mappedValue(row, "lotId"))
 
-      for (const key of ["name", "barcode", "sku", "category", "manufacturer", "unit", "companyName"] as const) {
+      for (const key of ["name", "barcode", "sku", "category", "manufacturer", "unit", "companyName", "genericName"] as const) {
         const value = normalizedText(mappedValue(row, key))
         if (value) product[key] = value
       }
@@ -300,6 +304,24 @@ export function previewInventoryImport(
 
       if (!product.name) {
         throw new Error("Product Name is required.")
+      }
+      const packagingJson = normalizedText(mappedValue(row, "packagings"))
+      if (packagingJson) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(packagingJson)
+        } catch {
+          throw new Error("Sub-units / Packaging JSON is not valid JSON.")
+        }
+        if (!Array.isArray(parsed) || parsed.some((item) =>
+          !item || typeof item !== "object" ||
+          typeof item.id !== "string" || typeof item.name !== "string" ||
+          typeof item.unit !== "string" ||
+          !Number.isFinite(Number(item.conversionFactor)) || Number(item.conversionFactor) <= 0,
+        )) {
+          throw new Error("Sub-units / Packaging JSON must contain valid package IDs, names, units and positive conversion factors.")
+        }
+        product.packagings = parsed as NonNullable<Product["packagings"]>
       }
 
       const importedQuantity = parseNumber(mappedValue(row, "quantity"), "Stock / Purchase Quantity")
@@ -497,6 +519,8 @@ export function applyInventoryImport(
           ...(fields.unit === undefined ? {} : { unit: fields.unit }),
           ...(fields.manufacturer === undefined ? {} : { manufacturer: fields.manufacturer }),
           ...(fields.companyName === undefined ? {} : { companyName: fields.companyName }),
+          ...(fields.genericName === undefined ? {} : { genericName: fields.genericName }),
+          ...(fields.packagings === undefined ? {} : { packagings: fields.packagings }),
           ...(fields.mrp === undefined ? {} : { mrp: fields.mrp }),
         }
         products[products.findIndex((item) => item.id === product?.id)] = product
@@ -514,6 +538,8 @@ export function applyInventoryImport(
           barcode: fields.barcode ?? "",
           manufacturer: fields.manufacturer,
           companyName: fields.companyName,
+          genericName: fields.genericName,
+          packagings: fields.packagings,
           mrp: fields.mrp,
           purchasePrice: fields.purchasePrice ?? record.lotPurchasePrice ?? 0,
           sellingPrice: fields.sellingPrice ?? record.lotSellingPrice ?? 0,
@@ -629,6 +655,8 @@ export function buildInventoryExportRows(products: Product[], lots: InventoryLot
         product.sku,
         product.category,
         product.manufacturer ?? "",
+        product.genericName ?? "",
+        product.packagings?.length ? JSON.stringify(product.packagings) : "",
         product.companyName ?? "",
         product.unit,
         lot?.mrp ?? product.mrp ?? product.sellingPrice,
