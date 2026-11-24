@@ -86,11 +86,13 @@ export default function Products() {
     addProduct,
     updateProduct,
     deleteProduct,
+    deleteProducts,
     getProductStock,
   } = useERP()
 
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("All")
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   const [showForm, setShowForm] = useState(false)
 
@@ -497,6 +499,38 @@ export default function Products() {
     closeForm()
   }
 
+  function handleBulkDelete(ids: string[]) {
+    const uniqueIds = [...new Set(ids)].filter((id) => products.some((product) => product.id === id))
+    if (!uniqueIds.length) return
+
+    const confirmation = uniqueIds.length === products.length
+      ? `Delete all ${uniqueIds.length} products that have no stock or linked business history? Products with stock, sales, purchases or stock movements will be retained.`
+      : `Delete ${uniqueIds.length} selected product(s) where safe? Products with stock or linked history will be retained.`
+    if (!window.confirm(confirmation)) return
+
+    try {
+      const result = deleteProducts(uniqueIds)
+      setSelectedProductIds([])
+      if (selectedProduct && result.deletedIds.includes(selectedProduct.id)) setSelectedProduct(null)
+      const blockedSummary = result.blocked.length
+        ? "\\n\\nKept because stock or business history exists:\\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\\n")
+        : ""
+      window.alert(`${result.deletedIds.length} product(s) deleted.${blockedSummary}`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const visibleProductIds = filteredProducts.map((product) => product.id)
+  const allVisibleSelected = visibleProductIds.length > 0 &&
+    visibleProductIds.every((id) => selectedProductIds.includes(id))
+
+  function toggleProductSelection(id: string) {
+    setSelectedProductIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    )
+  }
+
   function handleDelete(product: Product) {
     const stock = getProductStock(product.id)
     const isDemoProduct = isBuiltInDemoProduct(product)
@@ -575,14 +609,25 @@ export default function Products() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openAdd}
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
-          <Plus size={17} />
-          Add Product
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleBulkDelete(products.map((product) => product.id))}
+            disabled={products.length === 0}
+            className="flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
+          >
+            <Trash2 size={16} />
+            Delete All Products
+          </button>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <Plus size={17} />
+            Add Product
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -649,10 +694,32 @@ export default function Products() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        {selectedProductIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-100 bg-red-50/70 px-4 py-3 dark:border-red-950 dark:bg-red-950/20">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedProductIds.length} product(s) selected</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setSelectedProductIds([])} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Cancel selection</button>
+              <button type="button" onClick={() => handleBulkDelete(selectedProductIds)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"><Trash2 size={14}/> Delete Selected</button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1150px] text-sm">
             <thead className="border-b bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
               <tr className="text-left">
+                <th className="w-12 px-4 py-4">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible products"
+                    checked={allVisibleSelected}
+                    onChange={() => setSelectedProductIds((current) =>
+                      allVisibleSelected
+                        ? current.filter((id) => !visibleProductIds.includes(id))
+                        : [...new Set([...current, ...visibleProductIds])],
+                    )}
+                    className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                  />
+                </th>
                 <th className="px-5 py-4 font-medium text-slate-500">
                   Product
                 </th>
@@ -705,6 +772,15 @@ export default function Products() {
                       key={product.id}
                       className="border-b last:border-b-0 dark:border-slate-800"
                     >
+                      <td className="px-4 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.includes(product.id)}
+                          onChange={() => toggleProductSelection(product.id)}
+                          aria-label={`Select ${product.name}`}
+                          className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                        />
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
@@ -829,7 +905,7 @@ export default function Products() {
                 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-5 py-12 text-center text-slate-500"
                   >
                     No products found.
