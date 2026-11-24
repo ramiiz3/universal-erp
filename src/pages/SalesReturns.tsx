@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
-import { RotateCcw, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { ArrowRight, RotateCcw, X } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { getReturnedQuantity, type SalesRefundMethod } from "../lib/salesReturns"
 
@@ -9,6 +10,7 @@ type QuantityDraft = Record<string, string>
 function money(value: number) { return `AED ${value.toFixed(2)}` }
 
 export default function SalesReturns() {
+  const navigate = useNavigate()
   const { sales, products, salesReturns, createSalesReturn } = useERP()
   const [selectedSaleId, setSelectedSaleId] = useState("")
   const [quantities, setQuantities] = useState<QuantityDraft>({})
@@ -25,6 +27,38 @@ export default function SalesReturns() {
         getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity
     }),
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [sales, productById, salesReturns])
+
+  const paidSalesCount = sales.filter((sale) => sale.status === "Paid" && sale.paymentMethod !== "Credit").length
+  const configuredReturnableProducts = products.filter((product) => product.returnEligible === true && product.productType !== "SERVICE").length
+  const paidSalesWithReturnableLines = sales.filter((sale) =>
+    sale.status === "Paid" && sale.paymentMethod !== "Credit" && sale.items.some((line) => {
+      const product = productById.get(line.productId)
+      return product?.returnEligible === true && product.productType !== "SERVICE" &&
+        getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity
+    }),
+  ).length
+
+  const returnGuidance = eligibleSales.length > 0
+    ? null
+    : paidSalesCount === 0
+      ? {
+          title: "No completed paid sale yet",
+          body: "A product still shown in Current Sale has not created an invoice. Complete POS checkout using Cash, Card or Bank Transfer first. Credit sales are handled separately.",
+        }
+      : configuredReturnableProducts === 0
+        ? {
+            title: "No products are marked return-eligible",
+            body: "Only non-medicinal goods that your pharmacy accepts for return can be enabled in Product Master. Medicines and restricted products must remain non-returnable.",
+          }
+        : paidSalesWithReturnableLines === 0
+          ? {
+              title: "No paid invoice contains an outstanding returnable item",
+              body: "Check that the item was sold on a paid invoice and that its product was marked Eligible for return before the sale. Medicines, credit sales, and already fully returned items do not appear here.",
+            }
+          : {
+              title: "No returnable invoice is available",
+              body: "Refresh the page and check the original sale record. Returns are limited to the quantities and batches recorded on that paid invoice.",
+            }
 
   const selectedSale = sales.find((item) => item.id === selectedSaleId)
   const returnableLines = (selectedSale?.items ?? []).filter((line) => {
@@ -84,6 +118,17 @@ export default function SalesReturns() {
         </div>
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">Eligible paid sales</h2><p className="mt-1 text-xs text-slate-500">Credit invoices are excluded. Only products explicitly marked eligible in Product Master are shown. Medicines must remain non-returnable.</p></div>
+          {returnGuidance && (
+            <div className="border-b border-amber-100 bg-amber-50 px-5 py-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{returnGuidance.title}</p>
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-amber-800 dark:text-amber-300">{returnGuidance.body}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => navigate("/products")} className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-200">Review Product Master <ArrowRight size={13} /></button>
+                <button type="button" onClick={() => navigate("/pos")} className="inline-flex items-center gap-2 rounded-lg bg-amber-800 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-900">Open POS <ArrowRight size={13} /></button>
+              </div>
+              <p className="mt-3 text-xs text-amber-800/80 dark:text-amber-300/80">{paidSalesCount} completed paid invoices · {configuredReturnableProducts} return-eligible products · {paidSalesWithReturnableLines} paid invoices with unreturned eligible items.</p>
+            </div>
+          )}
           <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
             <th className="px-5 py-4">Invoice</th><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Date</th><th className="px-5 py-4 text-right">Invoice total</th><th className="px-5 py-4">Eligible lines</th><th className="px-5 py-4 text-right">Action</th>
           </tr></thead><tbody className="divide-y divide-slate-100">
