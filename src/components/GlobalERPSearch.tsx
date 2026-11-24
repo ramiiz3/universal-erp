@@ -58,6 +58,7 @@ export default function GlobalERPSearch() {
     customers,
     sales,
     purchases,
+    purchaseReturns,
     suppliers,
     supplierInvoices,
     inventoryLots,
@@ -115,6 +116,7 @@ export default function GlobalERPSearch() {
     add(products, "Product", ["name"], ["sku", "barcode", "brand", "category", "manufacturer"], "/products")
     add(sales, "Sale / invoice", ["invoiceNumber"], ["customerName", "createdAt", "total", "status"], "/sales")
     add(purchases, "Purchase", ["purchaseNumber"], ["supplierName", "supplierInvoice", "createdAt", "total", "status"], "/purchasing")
+    add(purchaseReturns, "Purchase return", ["returnNumber"], ["purchaseNumber", "supplierName", "creditNoteReference", "createdAt", "totalCreditAmount"], "/purchase-returns")
     add(suppliers, "Supplier", ["name"], ["phone", "email", "status"], "/suppliers")
     add(supplierInvoices, "Supplier invoice", ["invoiceNumber", "supplierInvoice", "referenceNumber", "id"], ["supplierName", "createdAt", "dueDate", "total", "status"], "/supplier-invoices")
     add(inventoryMovements, "Stock movement", ["referenceNumber", "type", "id"], ["productId", "quantity", "reason", "createdAt"], "/stock-ledger")
@@ -161,6 +163,7 @@ export default function GlobalERPSearch() {
     products,
     sales,
     purchases,
+    purchaseReturns,
     suppliers,
     supplierInvoices,
     inventoryLots,
