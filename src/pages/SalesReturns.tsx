@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowRight, RotateCcw, X } from "lucide-react"
 import { useERP } from "../context/ERPContext"
-import { getReturnedQuantity, type SalesRefundMethod } from "../lib/salesReturns"
+import { getReturnedQuantity, isSaleItemReturnEligible, type SalesRefundMethod } from "../lib/salesReturns"
 
 const METHODS: SalesRefundMethod[] = ["Cash", "Card", "Bank Transfer"]
 type QuantityDraft = Record<string, string>
@@ -23,7 +23,7 @@ export default function SalesReturns() {
   const eligibleSales = useMemo(() => sales.filter((sale) =>
     sale.status === "Paid" && sale.paymentMethod !== "Credit" && sale.items.some((line) => {
       const product = productById.get(line.productId)
-      return product?.returnEligible === true && product.productType !== "SERVICE" &&
+      return isSaleItemReturnEligible(line, product) &&
         getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity
     }),
   ).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [sales, productById, salesReturns])
@@ -33,7 +33,7 @@ export default function SalesReturns() {
   const paidSalesWithReturnableLines = sales.filter((sale) =>
     sale.status === "Paid" && sale.paymentMethod !== "Credit" && sale.items.some((line) => {
       const product = productById.get(line.productId)
-      return product?.returnEligible === true && product.productType !== "SERVICE" &&
+      return isSaleItemReturnEligible(line, product) &&
         getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity
     }),
   ).length
@@ -63,7 +63,7 @@ export default function SalesReturns() {
   const selectedSale = sales.find((item) => item.id === selectedSaleId)
   const returnableLines = (selectedSale?.items ?? []).filter((line) => {
     const product = productById.get(line.productId)
-    return product?.returnEligible === true && product.productType !== "SERVICE" &&
+    return isSaleItemReturnEligible(line, product) &&
       getReturnedQuantity(selectedSale!.id, line.id, salesReturns) < line.quantity
   })
   const totalRefunded = salesReturns.reduce((sum, item) => sum + item.refundTotal, 0)
@@ -132,7 +132,7 @@ export default function SalesReturns() {
           <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>
             <th className="px-5 py-4">Invoice</th><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Date</th><th className="px-5 py-4 text-right">Invoice total</th><th className="px-5 py-4">Eligible lines</th><th className="px-5 py-4 text-right">Action</th>
           </tr></thead><tbody className="divide-y divide-slate-100">
-            {eligibleSales.map((sale) => <tr key={sale.id}><td className="px-5 py-4 text-sm font-semibold">{sale.invoiceNumber}</td><td className="px-5 py-4 text-sm">{sale.customerName}</td><td className="px-5 py-4 text-sm">{new Date(sale.createdAt).toLocaleDateString("en-GB")}</td><td className="px-5 py-4 text-right text-sm">{money(sale.total)}</td><td className="px-5 py-4 text-sm">{sale.items.filter((line) => productById.get(line.productId)?.returnEligible === true && getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity).length}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => openReturn(sale.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Process return</button></td></tr>)}
+            {eligibleSales.map((sale) => <tr key={sale.id}><td className="px-5 py-4 text-sm font-semibold">{sale.invoiceNumber}</td><td className="px-5 py-4 text-sm">{sale.customerName}</td><td className="px-5 py-4 text-sm">{new Date(sale.createdAt).toLocaleDateString("en-GB")}</td><td className="px-5 py-4 text-right text-sm">{money(sale.total)}</td><td className="px-5 py-4 text-sm">{sale.items.filter((line) => isSaleItemReturnEligible(line, productById.get(line.productId)) && getReturnedQuantity(sale.id, line.id, salesReturns) < line.quantity).length}</td><td className="px-5 py-4 text-right"><button type="button" onClick={() => openReturn(sale.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">Process return</button></td></tr>)}
             {eligibleSales.length === 0 && <tr><td colSpan={6} className="px-5 py-14 text-center text-sm text-slate-500">No paid invoices currently have eligible returnable items.</td></tr>}
           </tbody></table></div>
         </div>
