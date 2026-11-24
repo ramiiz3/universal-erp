@@ -3,6 +3,9 @@ import type { InventoryLot, Product } from "../context/ERPContext"
 export type LotSaleRequest = {
   product: Product
   quantity: number
+  requestId?: string
+  /** Base-stock quantity represented by one selected POS selling unit. */
+  saleUnitConversionFactor?: number
   unitPrice?: number
   unitPriceOverride?: boolean
 
@@ -11,6 +14,7 @@ export type LotSaleRequest = {
 
 export type LotSaleAllocation = {
   product: Product
+  requestId?: string
   quantity: number
   unitPrice: number
   lotId: string
@@ -178,7 +182,31 @@ export function allocateSaleLots(
   const unallocated: LotSaleAllocationResult["unallocated"] = []
 
   for (const request of requests) {
-    let remaining = request.quantity
+    const factor = request.saleUnitConversionFactor ?? 1
+    if (!Number.isFinite(factor) || factor <= 0) {
+      unallocated.push({
+        productId: request.product.id,
+        productName: request.product.name,
+        quantity: request.quantity,
+      })
+      continue
+    }
+
+    const requestedPackageCount = Math.round(request.quantity / factor)
+    const representedQuantity = requestedPackageCount * factor
+    if (
+      requestedPackageCount <= 0 ||
+      Math.abs(representedQuantity - request.quantity) > 1e-7
+    ) {
+      unallocated.push({
+        productId: request.product.id,
+        productName: request.product.name,
+        quantity: request.quantity,
+      })
+      continue
+    }
+
+    let remainingPackages = requestedPackageCount
     const lots = getSaleableInventoryLots(
       updatedLots,
       request.product.id,
@@ -187,15 +215,22 @@ export function allocateSaleLots(
     )
 
     for (const lot of lots) {
-      if (remaining <= 0) break
+      if (remainingPackages <= 0) break
 
-      const quantity = Math.min(remaining, lot.quantity)
-      lot.quantity -= quantity
-      remaining -= quantity
+      // Never split a sealed selling unit across supplier batches. A strip,
+      // box or sachet must be fulfilled entirely from one lot.
+      const packagesInLot = Math.floor((lot.quantity + 1e-9) / factor)
+      const packagesToAllocate = Math.min(remainingPackages, packagesInLot)
+      if (packagesToAllocate <= 0) continue
+
+      const quantity = Math.min(lot.quantity, packagesToAllocate * factor)
+      lot.quantity = Math.max(0, lot.quantity - quantity)
+      remainingPackages -= packagesToAllocate
 
       const unitCost = lot.purchasePrice
       lines.push({
         product: request.product,
+        requestId: request.requestId,
         quantity,
         unitPrice: request.unitPriceOverride
           ? request.unitPrice ?? lot.sellingPrice ?? request.product.sellingPrice
@@ -214,11 +249,11 @@ export function allocateSaleLots(
       })
     }
 
-    if (remaining > 0) {
+    if (remainingPackages > 0) {
       unallocated.push({
         productId: request.product.id,
         productName: request.product.name,
-        quantity: remaining,
+        quantity: remainingPackages * factor,
       })
     }
   }
