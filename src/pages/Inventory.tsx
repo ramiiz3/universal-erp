@@ -891,7 +891,7 @@ export default function Inventory() {
                 event.target.value,
               )
             }
-            placeholder="Search by product, SKU, barcode or batch..."
+            placeholder="Search by product, code, barcode, batch, GRN, supplier or purchase date..."
             className="h-11 w-full rounded-xl border bg-white pl-10 pr-4 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
