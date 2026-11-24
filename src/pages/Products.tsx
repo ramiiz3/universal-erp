@@ -345,6 +345,11 @@ export default function Products() {
       return
     }
 
+    if (editingProduct && form.unit !== editingProduct.unit && getProductStock(editingProduct.id) > 0) {
+      window.alert("This product has existing stock. Its base unit cannot be changed until the stock is cleared or formally converted.")
+      return
+    }
+
     let barcode = form.barcode.trim()
     if (form.productType !== "SERVICE" && !barcode) {
       try {
@@ -368,6 +373,12 @@ export default function Products() {
     }
     if (form.packagings.some((item) => !Number.isFinite(Number(item.conversionFactor)) || Number(item.conversionFactor) <= 0)) {
       window.alert("Every package conversion must be greater than zero.")
+      return
+    }
+    if (form.packagings.some((item) =>
+      [item.purchasePrice, item.sellingPrice].some((value) => value !== undefined && (!Number.isFinite(Number(value)) || Number(value) < 0)),
+    )) {
+      window.alert("Package purchase and selling prices must be valid amounts of zero or greater.")
       return
     }
 
@@ -416,6 +427,7 @@ export default function Products() {
     const submittedCodes = [
       productData.barcode,
       ...(productData.alternateBarcodes || []),
+      ...(productData.packagings ?? []).map((packaging) => packaging.barcode ?? ""),
     ]
       .map((code) => code.trim().toLowerCase())
       .filter(Boolean)
@@ -431,6 +443,7 @@ export default function Products() {
       const existingCodes = [
         product.barcode,
         ...(product.alternateBarcodes || []),
+        ...(product.packagings ?? []).map((packaging) => packaging.barcode ?? ""),
       ]
 
       return existingCodes.some((code) =>
