@@ -2564,12 +2564,12 @@ export function ERPProvider({
     )
     if (!requestedIds.length) return { deletedIds: [], blocked: [] }
 
-    const productReferenceFields = new Set(["productId", "product_id", "sourceProductId", "source_product_id"])
+    const productReferenceFields = new Set(["productId", "product_id", "sourceProductId", "source_product_id", "productIds", "product_ids"])
     const containsProductReference = (value: unknown, productId: string): boolean => {
       if (Array.isArray(value)) return value.some((item) => containsProductReference(item, productId))
       if (!value || typeof value !== "object") return false
       return Object.entries(value as Record<string, unknown>).some(([key, nested]) =>
-        (productReferenceFields.has(key) && nested === productId) ||
+        (productReferenceFields.has(key) && (nested === productId || (Array.isArray(nested) && nested.includes(productId)))) ||
         containsProductReference(nested, productId),
       )
     }
