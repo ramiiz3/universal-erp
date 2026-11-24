@@ -693,29 +693,30 @@ export default function POS() {
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map((product) => {
-                const stock = getProductStock(product.id, warehouseId)
-                const inCart =
-                  cart.find((item) => item.productId === product.id)
-                    ?.quantity ?? 0
+                const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                const saleableStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
+                const supplierCount = new Set(saleableLots.map((lot) => lot.supplierId || lot.supplierName).filter(Boolean)).size
+                const inCart = cart
+                  .filter((item) => item.productId === product.id)
+                  .reduce((sum, item) => sum + item.quantity, 0)
+                const uomCount = 1 + (product.packagings || []).filter((item) => item.salesEnabled).length
 
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    disabled={stock <= 0}
-                    onClick={() => addToCart(product)}
-                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={saleableStock <= 0}
+                    onClick={() => openUnitChooser(product)}
+                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="line-clamp-2 font-medium text-slate-900">
                           {product.name}
                         </h3>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {product.category}
-                        </p>
+                        <p className="mt-1 text-xs text-slate-500">{product.category}</p>
+                        <p className="mt-1 text-xs text-slate-400">{product.barcode || product.sku}</p>
                       </div>
-
                       <div className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                         {product.unit}
                       </div>
@@ -723,17 +724,20 @@ export default function POS() {
 
                     <div className="mt-4 flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-xl font-semibold text-slate-900">
-                          AED {product.sellingPrice.toFixed(2)}
+                        <p className="text-lg font-semibold text-slate-900">
+                          AED {product.sellingPrice.toFixed(2)} <span className="text-xs font-normal text-slate-500">/ {product.unit}</span>
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Stock: {stock}
-                          {inCart > 0 ? ` • In cart: ${inCart}` : ""}
+                          Saleable stock: {formatQuantity(saleableStock)} {product.unit}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {uomCount} selling unit(s) · {saleableLots.length} batch(es){supplierCount ? ` · ${supplierCount} supplier(s)` : ""}
+                          {inCart > 0 ? ` · ${inCart} in cart` : ""}
                         </p>
                       </div>
 
-                      <span className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                        Add
+                      <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition group-hover:bg-emerald-700 group-hover:text-white">
+                        Choose UOM
                       </span>
                     </div>
                   </button>
@@ -793,7 +797,7 @@ export default function POS() {
                 <div className="space-y-3">
                   {cart.map((item) => {
                     const itemLines = lotPricedLines.filter(
-                      (line) => line.product.id === item.productId,
+                      (line) => line.requestId === item.lineId,
                     )
                     const itemTotal = itemLines.reduce(
                       (sum, line) => sum + line.quantity * line.unitPrice,
@@ -802,61 +806,54 @@ export default function POS() {
 
                     return (
                       <div
-                        key={item.productId}
+                        key={item.lineId}
                         className="rounded-xl border border-slate-200 p-3"
                       >
                         <div className="flex items-start gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-slate-900">
-                              {item.product.name}
+                            <p className="font-medium text-slate-900">{item.product.name}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                {item.sellingUnit}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                1 {item.sellingUnit} = {formatQuantity(item.conversionFactor)} {item.product.unit}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openUnitChooser(item.product, item.lineId)}
+                                className="text-xs font-semibold text-emerald-700 hover:underline"
+                              >
+                                Change unit
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Price: AED {item.unitPrice.toFixed(2)} per {item.sellingUnit}
                             </p>
 
-                            <select
-                              aria-label={`Selling unit for ${item.product.name}`}
-                              value={item.packageId || ""}
-                              onChange={(event) =>
-                                changeCartPackage(item.productId, event.target.value)
-                              }
-                              className="mt-2 h-9 max-w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-emerald-500"
-                            >
-                              <option value="">Base unit ({item.product.unit})</option>
-                              {(item.product.packagings || [])
-                                .filter((packaging) => packaging.salesEnabled)
-                                .map((packaging) => (
-                                  <option key={packaging.id} value={packaging.id}>
-                                    {packaging.name} · 1 {packaging.unit} = {packaging.conversionFactor} {item.product.unit}
-                                  </option>
-                                ))}
-                            </select>
-
-                            {!(item.product.packagings || []).some((packaging) => packaging.salesEnabled) && (
-                              <p className="mt-1 text-[11px] text-amber-700">
-                                Only the base unit is configured. Add Strip / Piece in Product Master to sell smaller units.
-                              </p>
-                            )}
-                            {item.packageId && (
-                              <p className="mt-1 text-[11px] text-emerald-700">
-                                1 {item.sellingUnit} = {item.conversionFactor} {item.product.unit}
-                              </p>
-                            )}
-
-                            <div className="mt-1 space-y-0.5 text-xs text-slate-500">
-                              {itemLines.map((line, index) => (
-                                <p key={`${item.productId}-${line.lotId}-${index}`}>
-                                  {itemLines.length > 1
-                                    ? `Lot ${line.batch || "—"} · `
-                                    : ""}
-                                  {line.quantity} × AED {line.unitPrice.toFixed(2)}
-                                </p>
-                              ))}
+                            <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs text-slate-600">
+                              {itemLines.map((line, index) => {
+                                const packageQuantity = line.quantity / item.conversionFactor
+                                return (
+                                  <p key={`${item.lineId}-${line.lotId}-${index}`}>
+                                    <span className="font-medium text-slate-700">{line.supplierName || "Supplier not recorded"}</span>
+                                    {" · "}Batch {line.batch || "—"}
+                                    {" · "}Expiry {line.expiry || "Not recorded"}
+                                    {" · "}{formatQuantity(packageQuantity)} {item.sellingUnit}
+                                  </p>
+                                )
+                              })}
+                              {itemLines.length === 0 && (
+                                <p className="text-amber-700">Batch allocation will be confirmed before completing this sale.</p>
+                              )}
                             </div>
                           </div>
 
                           <button
                             type="button"
-                            onClick={() => removeItem(item.productId)}
+                            onClick={() => removeItem(item.lineId)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            aria-label={`Remove ${item.product.name}`}
+                            aria-label={`Remove ${item.product.name} ${item.sellingUnit}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -866,30 +863,22 @@ export default function POS() {
                           <div className="inline-flex items-center rounded-lg border border-slate-200">
                             <button
                               type="button"
-                              onClick={() =>
-                                updateQuantity(
-                                  item.productId,
-                                  item.quantity - 1,
-                                )
-                              }
+                              onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
                               className="p-2 text-slate-500 hover:bg-slate-50"
+                              aria-label={`Decrease ${item.sellingUnit} quantity`}
                             >
                               <Minus className="h-4 w-4" />
                             </button>
 
-                            <span className="min-w-16 px-1 text-center text-sm font-medium text-slate-800">
+                            <span className="min-w-20 px-1 text-center text-sm font-medium text-slate-800">
                               {item.quantity} {item.sellingUnit}
                             </span>
 
                             <button
                               type="button"
-                              onClick={() =>
-                                updateQuantity(
-                                  item.productId,
-                                  item.quantity + 1,
-                                )
-                              }
+                              onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
                               className="p-2 text-slate-500 hover:bg-slate-50"
+                              aria-label={`Increase ${item.sellingUnit} quantity`}
                             >
                               <Plus className="h-4 w-4" />
                             </button>
