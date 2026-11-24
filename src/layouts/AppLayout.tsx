@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { FormEvent, ReactNode } from "react"
-import { NavLink, useLocation, useNavigate, useOutlet } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import type { FormEvent } from "react"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import {
   AlertTriangle,
   Bell,
@@ -171,8 +171,6 @@ function getWorkspaceLabel(path: string) {
 export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const activeOutlet = useOutlet()
-  const outletCache = useRef(new Map<string, ReactNode>())
   const { theme, toggleTheme } = useTheme()
   const darkMode = theme === "dark"
 
@@ -187,7 +185,6 @@ export default function AppLayout() {
     { path: "/dashboard", label: "Dashboard" },
   ])
   const activePath = location.pathname
-  outletCache.current.set(activePath, activeOutlet)
 
   useEffect(() => {
     setWorkspaceTabs((current) =>
@@ -202,8 +199,7 @@ export default function AppLayout() {
     const index = workspaceTabs.findIndex((tab) => tab.path === path)
     const nextTabs = workspaceTabs.filter((tab) => tab.path !== path)
     setWorkspaceTabs(nextTabs)
-    outletCache.current.delete(path)
-    if (activePath === path) {
+remove cached outlet deletion    if (activePath === path) {
       const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? { path: "/dashboard" }
       navigate(fallback.path)
     }
@@ -760,11 +756,7 @@ export default function AppLayout() {
             ))}
           </div>
           <main className="min-h-0 flex-1 overflow-auto">
-            {workspaceTabs.map((tab) => (
-              <div key={tab.path} className={activePath === tab.path ? "min-h-full" : "hidden"}>
-                {tab.path === activePath ? activeOutlet : outletCache.current.get(tab.path)}
-              </div>
-            ))}
+            <Outlet />
           </main>
         </div>
       </div>
