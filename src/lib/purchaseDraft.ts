@@ -23,6 +23,7 @@ export type PurchaseDraftLine = {
 export type PurchaseDraft = {
   supplierId: string
   supplierInvoice: string
+  purchaseDate: string
   grnNumber: string
   bonusQuantity: string
   mrp: string
@@ -57,6 +58,7 @@ export function loadPurchaseDraft(): PurchaseDraft | null {
     return {
       supplierId: value.supplierId,
       supplierInvoice: typeof value.supplierInvoice === "string" ? value.supplierInvoice : "",
+      purchaseDate: typeof value.purchaseDate === "string" ? value.purchaseDate : new Date().toISOString().slice(0, 10),
       grnNumber: typeof value.grnNumber === "string" ? value.grnNumber : "",
       bonusQuantity: typeof value.bonusQuantity === "string" ? value.bonusQuantity : "0",
       mrp: typeof value.mrp === "string" ? value.mrp : "",
@@ -103,6 +105,7 @@ export function setPurchaseDraftMinimized(minimized: boolean) {
   savePurchaseDraft({
     supplierId: draft.supplierId,
     supplierInvoice: draft.supplierInvoice,
+    purchaseDate: draft.purchaseDate,
     grnNumber: draft.grnNumber,
     bonusQuantity: draft.bonusQuantity,
     mrp: draft.mrp,
