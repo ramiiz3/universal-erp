@@ -1577,6 +1577,7 @@ export default function Inventory() {
                 <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
                 <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
                 <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
+                <p className="text-xs text-slate-500 sm:col-span-2">Reorder alert threshold only. This does not change On Hand quantity. Use Receive Stock or Manage Stock to change physical stock.</p>
                 <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
               </div>
 
@@ -1642,6 +1643,7 @@ export default function Inventory() {
                 <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
                 <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
                 <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
+                <p className="text-xs text-slate-500 sm:col-span-2">Reorder alert threshold only. This does not change On Hand quantity. Use Receive Stock or Manage Stock to change physical stock.</p>
                 <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
               </div>
 
