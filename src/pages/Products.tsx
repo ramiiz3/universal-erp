@@ -1329,6 +1329,9 @@ export default function Products() {
                 }
                 type="number"
               />
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                Reorder alert threshold only. This does not change On Hand quantity. Use Inventory → Receive Stock or Manage Stock to change physical quantity.
+              </p>
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
