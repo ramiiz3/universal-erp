@@ -1198,8 +1198,15 @@ export function ERPProvider({
     if (!companyId || !user?.id || !client) {
       throw new Error("Sign in to the pharmacy owner account before resolving cloud sync.")
     }
-    if (!cloudSyncError.toLowerCase().includes("conflicting erp changes")) {
-      throw new Error("There is no confirmed cloud revision conflict to resolve. Refresh the ERP and check the sync status first.")
+    const conflictMessage = cloudSyncError.toLowerCase()
+    const isConflict = [
+      "conflicting erp changes",
+      "edited differently on two workstations",
+      "common base revision is unavailable",
+      "several workstations saved at the same time",
+    ].some((phrase) => conflictMessage.includes(phrase))
+    if (!isConflict) {
+      throw new Error("There is no confirmed cloud revision conflict to resolve. Retry the cloud save or reload the latest ERP data.")
     }
 
     if (cloudTimerRef.current) {
