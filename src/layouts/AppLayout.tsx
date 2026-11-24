@@ -63,6 +63,7 @@ const navigationGroups = [
     label: "Procurement",
     items: [
       { label: "Purchasing", path: "/purchasing", icon: Boxes },
+      { label: "Purchase Returns", path: "/purchase-returns", icon: RotateCcw },
       { label: "Requisitions & Orders", path: "/procurement-workflow", icon: ClipboardList },
       { label: "Suppliers", path: "/suppliers", icon: Building2 },
       { label: "Supplier Invoices", path: "/supplier-invoices", icon: ClipboardList },
