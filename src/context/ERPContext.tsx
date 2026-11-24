@@ -834,6 +834,7 @@ export function ERPProvider({
   const cloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextCloudStoreWriteRef = useRef(false)
   const scheduleCloudSaveRef = useRef<() => void>(() => undefined)
+  const refreshSharedERPRef = useRef<() => void>(() => undefined)
   const [localStorageError, setLocalStorageError] = useState(loadResult.error ?? "")
   const [localLastSavedAt, setLocalLastSavedAt] = useState<string | null>(
     loadResult.raw ? new Date().toISOString() : null,
@@ -1223,10 +1224,7 @@ export function ERPProvider({
         throw new Error("The latest cloud data was restored, but this browser could not reload it. " + reloaded.error)
       }
 
-      localStorage.setItem(
-        ERP_CLOUD_META_KEY,
-        JSON.stringify({ companyId, revision: remoteRevision } satisfies ERPCloudSyncMeta),
-      )
+      writeCloudSyncCheckpoint(companyId, remoteRevision, validateERPCloudState(remoteRow.state))
       cloudRevisionRef.current = remoteRevision
       cloudCompanyRef.current = companyId
       cloudDirtyRef.current = false
@@ -1288,10 +1286,41 @@ export function ERPProvider({
     }
   }, [cloudReady, loadResult.error, store, companyId])
 
+  refreshSharedERPRef.current = () => {
+    if (!companyId || !cloudReady || loadResult.error) return
+    const meta = readCloudSyncMeta()
+    if (meta?.companyId === companyId) {
+      cloudRevisionRef.current = meta.revision
+      cloudCompanyRef.current = companyId
+    }
+    const reloaded = loadStoredData()
+    if (reloaded.error) {
+      setLocalStorageError(reloaded.error)
+      return
+    }
+    // Adopt the shared workstation state without uploading the same change again.
+    skipNextCloudStoreWriteRef.current = true
+    setStore(migrateWarehouseData(reloaded.data))
+  }
+
   useEffect(() => {
-    const onERPCloudSync = () => scheduleCloudSaveRef.current()
+    const onERPCloudSync = () => refreshSharedERPRef.current()
     const onStorage = (event: StorageEvent) => {
-      if (event.key && event.key.startsWith("universal-erp-")) {
+      if (!event.key) return
+      if (event.key === ERP_CLOUD_META_KEY) {
+        const meta = readCloudSyncMeta()
+        if (meta?.companyId === companyId) {
+          cloudRevisionRef.current = meta.revision
+          cloudCompanyRef.current = companyId
+        }
+        return
+      }
+      if (event.key === ERP_CLOUD_BASE_KEY) return
+      if (event.key === ERP_STORAGE_KEY) {
+        refreshSharedERPRef.current()
+        return
+      }
+      if ((ERP_BACKUP_STORAGE_KEYS as readonly string[]).includes(event.key)) {
         scheduleCloudSaveRef.current()
       }
     }
@@ -1302,7 +1331,7 @@ export function ERPProvider({
       window.removeEventListener("storage", onStorage)
       if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current)
     }
-  }, [])
+  }, [companyId])
 
   function persistStore(
     nextStore: StoredData,
