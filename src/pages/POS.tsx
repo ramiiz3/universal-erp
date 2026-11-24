@@ -166,6 +166,7 @@ export default function POS() {
     const query = search.trim().toLowerCase()
 
     return products.filter((product) => {
+      if (product.status === "INACTIVE" || product.status === "DISCONTINUED") return false
       if (!query) return true
 
       return (
