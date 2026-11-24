@@ -70,6 +70,51 @@ describe("sales returns", () => {
     expect(() => buildSalesReturn(baseInput, noLots, products, [])).toThrow(/Original batch allocation is unavailable/)
   })
 
+
+  it("returns a fractional base-unit quantity when one strip is sold from a box", () => {
+    const boxSale = {
+      ...sale,
+      subtotal: 12,
+      items: [{
+        id: "strip-line", productId: "p1", name: "Test tablets", quantity: 2, unitPrice: 6,
+        vatRate: 0, total: 12, sellingUnit: "Strip", conversionFactor: 0.1, baseQuantity: 0.2,
+        batchAllocations: [{ lotId: "box-lot", batch: "BOX-1", expiry: "2028-12-31", quantity: 0.2 }],
+      }],
+    }
+    const result = buildSalesReturn({
+      ...baseInput,
+      items: [{ saleItemId: "strip-line", quantity: 1 }],
+    }, boxSale, products, [], new Date("2026-11-22T12:00:00.000Z"))
+
+    expect(result.items[0].sellingUnit).toBe("Strip")
+    expect(result.items[0].quantity).toBe(1)
+    expect(result.items[0].baseQuantity).toBe(0.1)
+    expect(result.items[0].allocations).toEqual([
+      { lotId: "box-lot", batch: "BOX-1", expiry: "2028-12-31", quantity: 0.1 },
+    ])
+    expect(result.refundTotal).toBe(6)
+  })
+
+  it("returns one piece as a fractional part of a box", () => {
+    const boxSale = {
+      ...sale,
+      subtotal: 1,
+      items: [{
+        id: "piece-line", productId: "p1", name: "Test tablets", quantity: 2, unitPrice: 0.5,
+        vatRate: 0, total: 1, sellingUnit: "Piece", conversionFactor: 0.01, baseQuantity: 0.02,
+        batchAllocations: [{ lotId: "box-lot", batch: "BOX-2", expiry: "2028-12-31", quantity: 0.02 }],
+      }],
+    }
+    const result = buildSalesReturn({
+      ...baseInput,
+      items: [{ saleItemId: "piece-line", quantity: 1 }],
+    }, boxSale, products, [], new Date("2026-11-22T12:00:00.000Z"))
+
+    expect(result.items[0].baseQuantity).toBe(0.01)
+    expect(result.items[0].allocations[0].quantity).toBe(0.01)
+    expect(result.refundTotal).toBe(0.5)
+  })
+
   it("tracks cumulative returned selling quantity", () => {
     expect(getReturnedQuantity("sale-1", "line-1", [priorReturn(1)])).toBe(1)
     expect(isSaleFullyReturned(sale, [priorReturn(2)])).toBe(true)
