@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   ScanLine,
+  Trash2,
   Upload,
   X,
 } from "lucide-react"
@@ -130,6 +131,8 @@ export default function Inventory() {
     addProductAndReceive,
     addProduct,
     updateProduct,
+    deleteProduct,
+    deleteProducts,
     adjustStock,
     getProductStock,
     importInventory,
@@ -529,6 +532,34 @@ export default function Inventory() {
       }
     }
 
+    function handleDeleteInventoryProduct(product: Product) {
+      if (!window.confirm(`Delete ${product.name} from the product master? The ERP will retain this product if stock or transaction history is linked to it.`)) return
+      try {
+        deleteProduct(product.id)
+        if (editingProduct?.id === product.id) {
+          setShowEdit(false)
+          setEditingProduct(null)
+        }
+        if (showProductLots === product.id) setShowProductLots(null)
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : String(error))
+      }
+    }
+
+    function handleDeleteAllInventoryProducts() {
+      if (!products.length) return
+      if (!window.confirm(`Delete all ${products.length} products that have no stock or linked business history? Products with stock, sales, purchases or stock movements will be kept.`)) return
+      try {
+        const result = deleteProducts(products.map((product) => product.id))
+        const blocked = result.blocked.length
+          ? "\\n\\nProducts retained because stock or history exists:\\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\\n")
+          : ""
+        window.alert(`${result.deletedIds.length} product(s) deleted.${blocked}`)
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : String(error))
+      }
+    }
+
     function openAdjust(productId: string) {
       setAdjustProductId(productId)
       setAdjustLotId(null)
@@ -899,9 +930,10 @@ export default function Inventory() {
 
       <div className="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between p-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button onClick={openReceiveStock} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><ScanLine size={16}/> Receive Stock</button>
             <button onClick={openAddProduct} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"><Plus size={14}/> Add Product</button>
+            <button onClick={handleDeleteAllInventoryProducts} disabled={products.length === 0} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={15}/> Delete All Products</button>
           </div>
 
           <div className="text-sm text-slate-500">Showing {filteredProducts.length} products</div>
@@ -956,6 +988,7 @@ export default function Inventory() {
                         <button onClick={() => openAdjust(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Adjust Stock">Adjust</button>
                         <button onClick={() => openEditProduct(product)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Edit Product">Edit</button>
                         <button onClick={() => setShowProductLots(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="View Lots">Lots</button>
+                        <button onClick={() => handleDeleteInventoryProduct(product)} className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" title="Delete Product" aria-label={`Delete ${product.name}`}><Trash2 size={16}/></button>
                       </div>
                     </td>
                   </tr>
@@ -1512,6 +1545,7 @@ export default function Inventory() {
 
               <div className="mt-4 flex justify-end gap-2">
                 <button onClick={() => setShowEdit(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
+                <button onClick={() => handleDeleteInventoryProduct(editingProduct)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={14}/> Delete</button>
                 <button onClick={() => {
                   const form = {
                     name: productForm.name.trim(),
