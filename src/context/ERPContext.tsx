@@ -1096,29 +1096,66 @@ export function ERPProvider({
         p_expected_revision: expectedRevision,
         p_state: snapshot,
       })
-      if (error) {
-        if (error.code === "40001") {
-          throw new Error(
-            "A different browser tab or workstation saved newer ERP data. This save was stopped to prevent overwriting it. Reload the ERP before continuing.",
-          )
+
+      let acknowledgedState = snapshot
+      let nextRevision = Number(data)
+      if (error?.code === "40001") {
+        const base = readCloudSyncBase()
+        const { data: remoteRow, error: readError } = await client
+          .from("legacy_erp_state")
+          .select("revision, state")
+          .eq("company_id", companyId)
+          .maybeSingle()
+        if (readError || !remoteRow) {
+          throw new Error("Another workstation saved newer ERP data, but the latest cloud copy could not be loaded.")
         }
+
+        const remoteRevision = Number(remoteRow.revision)
+        if (areERPCloudStatesEqual(snapshot, remoteRow.state)) {
+          acknowledgedState = validateERPCloudState(remoteRow.state)
+          nextRevision = remoteRevision
+        } else {
+          if (!base || base.companyId !== companyId || base.revision !== expectedRevision) {
+            await preserveCloudRecoveryCopy(
+              "Before automatic cloud conflict reconciliation — common snapshot unavailable",
+              remoteRevision,
+              snapshot,
+            )
+            throw new Error("The workstation copy has been protected, but its common base revision is unavailable for a safe merge. Reload the latest saved ERP data before making further changes.")
+          }
+
+          const reconciled = await saveMergedCloudSnapshot(
+            snapshot,
+            base.state,
+            { revision: remoteRevision, state: remoteRow.state },
+            "Before automatic cloud conflict reconciliation",
+          )
+          acknowledgedState = reconciled.state
+          nextRevision = reconciled.revision
+        }
+      } else if (error) {
         throw new Error("The latest ERP changes could not be saved. " + error.message)
       }
 
-      const nextRevision = Number(data)
-      if (!Number.isSafeInteger(nextRevision) || nextRevision <= expectedRevision) {
+      if (!Number.isSafeInteger(nextRevision) || nextRevision < 1) {
         throw new Error("The database did not confirm the latest ERP revision.")
       }
+
       cloudRevisionRef.current = nextRevision
-      localStorage.setItem(
-        ERP_CLOUD_META_KEY,
-        JSON.stringify({ companyId, revision: nextRevision } satisfies ERPCloudSyncMeta),
-      )
+      cloudCompanyRef.current = companyId
+      writeCloudSyncCheckpoint(companyId, nextRevision, acknowledgedState)
       setCloudLastSavedAt(new Date().toISOString())
 
       const latestSnapshot = createERPCloudState(localStorage)
-      cloudDirtyRef.current =
-        !areERPCloudStatesEqual(latestSnapshot, snapshot)
+      if (areERPCloudStatesEqual(latestSnapshot, snapshot) && !areERPCloudStatesEqual(latestSnapshot, acknowledgedState)) {
+        restoreERPCloudState(localStorage, acknowledgedState)
+        const reloaded = loadStoredData()
+        if (reloaded.error) throw new Error("The reconciled ERP data was saved, but could not be loaded into this browser. " + reloaded.error)
+        skipNextCloudStoreWriteRef.current = true
+        setStore(migrateWarehouseData(reloaded.data))
+      }
+      const currentSnapshot = createERPCloudState(localStorage)
+      cloudDirtyRef.current = !areERPCloudStatesEqual(currentSnapshot, acknowledgedState)
       setCloudSyncStatus(cloudDirtyRef.current ? "saving" : "saved")
       if (cloudDirtyRef.current) scheduleCloudSaveRef.current()
     } catch (error) {
