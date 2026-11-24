@@ -292,7 +292,15 @@ export default function Products() {
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     if (params.get("addProduct") === "1") {
-      openAdd()
+      const companyProfile = getLegacyCompanyBarcodeProfile()
+      setForm({
+        ...emptyForm,
+        vatRate: companyProfile.vatRate || "5",
+        vatApplicable: true,
+        packagings: [],
+      })
+      setEditingProduct(null)
+      setShowForm(true)
       navigate("/products", { replace: true })
     }
   }, [location.search, navigate])
