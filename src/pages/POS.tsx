@@ -674,49 +674,65 @@ export default function POS() {
             </div>
           </div>
 
-          {search.trim() && (
-            <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-              <div className="flex items-center justify-between bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <span>Search results</span>
-                <span>{filteredProducts.length} product(s)</span>
-              </div>
-              {filteredProducts.length > 0 ? (
-                <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
-                  {filteredProducts.slice(0, 12).map((product) => {
-                    const stock = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
-                      .reduce((sum, lot) => sum + lot.quantity, 0)
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        disabled={stock <= 0 || !product.unit?.trim()}
-                        onClick={() => {
-                          if (addToCart(product, undefined, 1, true)) setSearch("")
-                        }}
-                        className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
-                          <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
-                        </span>
-                        <span className="text-right text-xs text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
-                        <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add line</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="px-3 py-4 text-sm text-slate-500">No matching product found.</p>
-              )}
+          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+            <div className="flex items-center justify-between bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span>{search.trim() ? "Search results" : "Quick Add Products"}</span>
+              <span>{search.trim() ? filteredProducts.length : filteredProducts.filter((product) =>
+                getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                  .some((lot) => lot.quantity > 0),
+              ).length} product(s)</span>
             </div>
-          )}
+            {filteredProducts.length > 0 ? (
+              <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+                {(search.trim()
+                  ? filteredProducts.slice(0, 12)
+                  : filteredProducts.filter((product) =>
+                      getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                        .some((lot) => lot.quantity > 0),
+                    ).slice(0, 8)
+                ).map((product) => {
+                  const stock = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                    .reduce((sum, lot) => sum + lot.quantity, 0)
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      disabled={stock <= 0 || !product.unit?.trim()}
+                      onClick={() => {
+                        if (addToCart(product, undefined, 1, true)) setSearch("")
+                      }}
+                      className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
+                        <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
+                      </span>
+                      <span className="text-right text-xs text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
+                      <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add line</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="px-3 py-4 text-sm text-slate-500">
+                {search.trim() ? "No matching product found." : "No active products found. Add products in Product Master first."}
+              </p>
+            )}
+            {!search.trim() && filteredProducts.length > 0 && !filteredProducts.some((product) =>
+              getSaleableInventoryLots(inventoryLots, product.id, warehouseId).some((lot) => lot.quantity > 0),
+            ) && (
+              <p className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                No active products have available stock in this warehouse. Receive stock or choose another warehouse.
+              </p>
+            )}
+          </div>
         </section>
 
         <section className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Sales Invoice</h2>
-              <p className="text-xs text-slate-500">{cart.length} line(s) · Click the UOM cell to change Box / Strip / Tablet / Sachet.</p>
+              <h2 className="text-base font-semibold text-slate-900">Current Sale</h2>
+              <p className="text-xs text-slate-500">{cart.length} line(s) · Select a product above or scan a barcode, then choose its UOM in the row.</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-slate-500">Invoice date</p>
@@ -746,8 +762,8 @@ export default function POS() {
                   <tr>
                     <td colSpan={11} className="px-4 py-16 text-center">
                       <ShoppingCart className="mx-auto h-9 w-9 text-slate-300" />
-                      <p className="mt-3 font-semibold text-slate-700">No products in this invoice</p>
-                      <p className="mt-1 text-xs text-slate-500">Scan a barcode or search for a medicine above. The product will appear here and its UOM can be selected in the row.</p>
+                      <p className="mt-3 font-semibold text-slate-700">Ready to start billing</p>
+                      <p className="mt-1 text-xs text-slate-500">Choose a medicine from Quick Add Products above, type its name in search, or scan its barcode. It will appear here for quantity and UOM selection.</p>
                     </td>
                   </tr>
                 ) : (
