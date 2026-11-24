@@ -218,7 +218,7 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] =
     useState(false)
 
-remove sync modal state  const [minimizedPurchaseDraft, setMinimizedPurchaseDraft] = useState(() => {
+ const [minimizedPurchaseDraft, setMinimizedPurchaseDraft] = useState(() => {
     const draft = loadPurchaseDraft()
     return draft?.minimized ? draft : null
   })
