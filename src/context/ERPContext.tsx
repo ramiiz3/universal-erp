@@ -225,6 +225,10 @@ export type SaleItemCostAllocation = {
   lotId: string
   batch: string
   expiry: string
+  supplierId?: string
+  supplierName?: string
+  grnNumber?: string
+  purchaseDate?: string
   quantity: number
   unitCost: number
   totalCost: number
@@ -255,6 +259,10 @@ export type SaleItem = {
     lotId: string
     batch: string
     expiry: string
+    supplierId?: string
+    supplierName?: string
+    grnNumber?: string
+    purchaseDate?: string
     quantity: number
   }[]
   costSnapshot?: SaleItemCostSnapshot
@@ -330,6 +338,7 @@ type CompleteSaleInput = {
     quantity: number
     unitPrice?: number
     packageId?: string
+    requestId?: string
   }[]
   customerId?: string | null
   paymentMethod: PaymentMethod
@@ -3741,7 +3750,7 @@ export function ERPProvider({
     const sellingWarehouse = resolveActiveWarehouse(input.warehouseId)
 
     const requestedItems =
-      input.items.map((item) => {
+      input.items.map((item, index) => {
         if (
           !Number.isInteger(item.quantity) ||
           item.quantity <= 0
@@ -3831,6 +3840,7 @@ export function ERPProvider({
         }
 
         return {
+          requestId: item.requestId ?? String(index),
           product,
           quantity: baseQuantity,
           unitPrice: baseUnitPrice,
@@ -3848,8 +3858,10 @@ export function ERPProvider({
     const allocation = allocateSaleLots(
       requestedItems.map((item) => ({
         product: item.product,
-          warehouseId: sellingWarehouse.id,
+        requestId: item.requestId,
+        warehouseId: sellingWarehouse.id,
         quantity: item.quantity,
+        saleUnitConversionFactor: item.conversionFactor,
         unitPrice: item.unitPrice,
         unitPriceOverride: item.unitPriceOverride,
       })),
@@ -3871,7 +3883,7 @@ export function ERPProvider({
     const saleItems: SaleItem[] = requestedItems.map(
       (request, index) => {
         const allocatedLines = allocation.lines.filter(
-          (line) => line.product.id === request.product.id,
+          (line) => line.requestId === request.requestId,
         )
 
         const lotAllocations = allocatedLines.map((line) => ({
@@ -3880,6 +3892,10 @@ export function ERPProvider({
           locationId: line.locationId ?? null,
           batch: line.batch,
           expiry: line.expiry,
+          supplierId: line.supplierId,
+          supplierName: line.supplierName,
+          grnNumber: line.grnNumber,
+          purchaseDate: line.purchaseDate,
           quantity: line.quantity,
           unitCost: line.unitCost,
           totalCost: line.totalCost,
@@ -3914,6 +3930,10 @@ export function ERPProvider({
             lotId: lot.lotId,
             batch: lot.batch,
             expiry: lot.expiry,
+            supplierId: lot.supplierId,
+            supplierName: lot.supplierName,
+            grnNumber: lot.grnNumber,
+            purchaseDate: lot.purchaseDate,
             quantity: lot.quantity,
           })),
           costSnapshot: {
@@ -3985,6 +4005,10 @@ export function ERPProvider({
           locationId: line.locationId ?? null,
           batch: line.batch,
           expiry: line.expiry,
+          supplierId: line.supplierId,
+          supplierName: line.supplierName,
+          grnNumber: line.grnNumber,
+          purchaseDate: line.purchaseDate,
           baseUnit: line.product.unit,
           unitCost: line.unitCost,
           totalCost: line.totalCost,
