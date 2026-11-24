@@ -520,10 +520,8 @@ export default function Products() {
     if (!window.confirm(confirmation)) return
 
     try {
-      const result = deleteProducts(uniqueIds, { removeInventory })
+      const result = deleteProducts(uniqueIds, { removeInventory, archiveBlocked: true })
       const archived = result.blocked.length
-        ? archiveProducts(result.blocked.map((item) => item.id))
-        : 0
       setSelectedProductIds([])
       if (selectedProduct && (result.deletedIds.includes(selectedProduct.id) || result.blocked.some((item) => item.id === selectedProduct.id))) setSelectedProduct(null)
       const blockedSummary = result.blocked.length
