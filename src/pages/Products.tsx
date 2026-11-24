@@ -13,7 +13,6 @@ import { useLocation, useNavigate } from "react-router-dom"
 import BarcodePreview from "../components/BarcodePreview"
 import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { getERPSettings } from "../lib/erpSettings"
-import { isBuiltInDemoProduct } from "../lib/demoDataCleanup"
 import { useERP, type Product, type ProductPackaging } from "../context/ERPContext"
 import { calculateGrossMarginPercentage, calculateSellingPriceFromGrossMargin } from "../lib/productPricing"
 import {
