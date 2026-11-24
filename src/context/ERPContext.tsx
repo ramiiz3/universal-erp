@@ -11,6 +11,8 @@ import { supabase } from "../lib/supabase"
 import {
   createERPCloudState,
   areERPCloudStatesEqual,
+  mergeERPCloudStates,
+  validateERPCloudState,
   restoreERPCloudState,
   ERP_CLOUD_SYNC_EVENT,
 } from "../lib/erpCloudState"
@@ -25,6 +27,7 @@ import {
   calculateLotSaleTotals,
 } from "../lib/saleLotAllocation"
 import {
+  ERP_BACKUP_STORAGE_KEYS,
   ERP_STORAGE_KEY,
 } from "../lib/erpBackup"
 import { readStoredData } from "../lib/erpStorage"
@@ -747,6 +750,13 @@ const ERPContext =
   )
 
 const ERP_CLOUD_META_KEY = "zaky-pharmacy-erp-cloud-sync-meta"
+const ERP_CLOUD_BASE_KEY = "zaky-pharmacy-erp-cloud-sync-base"
+
+type ERPCloudSyncBase = {
+  companyId: string
+  revision: number
+  state: ReturnType<typeof createERPCloudState>
+}
 
 type ERPCloudSyncMeta = {
   companyId: string
@@ -769,6 +779,38 @@ function readCloudSyncMeta(): ERPCloudSyncMeta | null {
     return null
   }
 }
+
+function readCloudSyncBase(): ERPCloudSyncBase | null {
+  try {
+    const raw = localStorage.getItem(ERP_CLOUD_BASE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ERPCloudSyncBase>
+    if (
+      typeof parsed.companyId !== "string" ||
+      typeof parsed.revision !== "number" ||
+      !Number.isSafeInteger(parsed.revision) ||
+      parsed.revision < 1 ||
+      !parsed.state
+    ) return null
+    return {
+      companyId: parsed.companyId,
+      revision: parsed.revision,
+      state: validateERPCloudState(parsed.state),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeCloudSyncCheckpoint(
+  companyId: string,
+  revision: number,
+  state: ReturnType<typeof createERPCloudState>,
+) {
+  localStorage.setItem(ERP_CLOUD_BASE_KEY, JSON.stringify({ companyId, revision, state } satisfies ERPCloudSyncBase))
+  localStorage.setItem(ERP_CLOUD_META_KEY, JSON.stringify({ companyId, revision } satisfies ERPCloudSyncMeta))
+}
+
 
 export function ERPProvider({
   children,
