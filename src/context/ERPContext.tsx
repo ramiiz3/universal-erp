@@ -839,6 +839,82 @@ export function ERPProvider({
     loadResult.raw ? new Date().toISOString() : null,
   )
 
+  async function preserveCloudRecoveryCopy(reason: string, revision: number | null, state: ReturnType<typeof createERPCloudState>) {
+    const client = supabase
+    if (!client || !companyId || !user?.id) throw new Error("The recovery copy could not be saved because the company session is unavailable.")
+    const { error } = await client.from("legacy_erp_recovery_snapshots").insert({
+      company_id: companyId,
+      reason,
+      revision,
+      state,
+      created_by: user.id,
+    })
+    if (error) throw new Error("The current workstation data could not be protected in recovery history. " + error.message)
+  }
+
+  async function saveMergedCloudSnapshot(
+    localSnapshot: ReturnType<typeof createERPCloudState>,
+    baseSnapshot: ReturnType<typeof createERPCloudState>,
+    initialRemote: { revision: number; state: unknown },
+    reason: string,
+  ) {
+    const client = supabase
+    if (!client || !companyId) throw new Error("The company cloud session is unavailable.")
+    let remote = initialRemote
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const remoteRevision = Number(remote.revision)
+      if (!Number.isSafeInteger(remoteRevision) || remoteRevision < 1) {
+        throw new Error("The latest cloud ERP revision is invalid.")
+      }
+
+      const merged = mergeERPCloudStates(baseSnapshot, localSnapshot, remote.state)
+      if (!merged.state) {
+        await preserveCloudRecoveryCopy(
+          reason + " — overlapping edits require review",
+          remoteRevision,
+          localSnapshot,
+        )
+        throw new Error(
+          "Some of the same product, stock or transaction records were edited differently on two workstations. The current workstation copy has been protected in recovery history; no data was overwritten.",
+        )
+      }
+
+      if (areERPCloudStatesEqual(merged.state, remote.state)) {
+        return { revision: remoteRevision, state: validateERPCloudState(remote.state) }
+      }
+
+      const { data, error } = await client.rpc("save_legacy_erp_state", {
+        p_company_id: companyId,
+        p_expected_revision: remoteRevision,
+        p_state: merged.state,
+      })
+      if (!error) {
+        const revision = Number(data)
+        if (!Number.isSafeInteger(revision) || revision <= remoteRevision) {
+          throw new Error("The database did not confirm the reconciled ERP revision.")
+        }
+        return { revision, state: merged.state }
+      }
+      if (error.code !== "40001") {
+        throw new Error("The reconciled ERP data could not be saved. " + error.message)
+      }
+
+      const { data: latest, error: readError } = await client
+        .from("legacy_erp_state")
+        .select("revision, state")
+        .eq("company_id", companyId)
+        .maybeSingle()
+      if (readError || !latest) {
+        throw new Error("Another workstation saved during reconciliation, and the latest cloud copy could not be reloaded.")
+      }
+      remote = { revision: Number(latest.revision), state: latest.state }
+    }
+
+    await preserveCloudRecoveryCopy(reason + " — repeated concurrent saves", remote.revision, localSnapshot)
+    throw new Error("Several workstations saved at the same time. The local copy is protected; reload the latest ERP data before continuing.")
+  }
+
   useEffect(() => {
     const client = supabase
     if (!companyId || !user?.id || !client) {
