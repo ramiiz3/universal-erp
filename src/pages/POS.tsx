@@ -197,7 +197,10 @@ export default function POS() {
         product.name.toLowerCase().includes(query) ||
         product.barcode.toLowerCase().includes(query) ||
         product.sku.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query)
+        product.category.toLowerCase().includes(query) ||
+        (product.genericName ?? "").toLowerCase().includes(query) ||
+        (product.companyName ?? "").toLowerCase().includes(query) ||
+        (product.brand ?? "").toLowerCase().includes(query)
       )
     })
   }, [products, search])
@@ -298,11 +301,7 @@ export default function POS() {
     }))
   }
 
-  function getAvailableUomQuantity(
-    productId: string,
-    conversionFactor: number,
-    excludedLineId?: string,
-  ) {
+  function getAvailableLotsForLine(productId: string, excludedLineId?: string) {
     const otherLines = cart.filter(
       (item) => item.productId === productId && item.lineId !== excludedLineId,
     )
@@ -310,12 +309,24 @@ export default function POS() {
       getSaleRequests(otherLines),
       inventoryLots,
     )
-    if (otherAllocation.unallocated.length > 0) return 0
-    return getSaleableInventoryLots(
-      otherAllocation.updatedLots,
-      productId,
-      warehouseId,
-    ).reduce((sum, lot) => sum + wholePackagesInLot(lot.quantity, conversionFactor), 0)
+    if (otherAllocation.unallocated.length > 0) return []
+    return sortInventoryLotsByFEFO(
+      otherAllocation.updatedLots.filter((lot) =>
+        lot.productId === productId &&
+        lot.warehouseId === warehouseId &&
+        lot.quantity > 0,
+      ),
+    )
+  }
+
+  function getAvailableUomQuantity(
+    productId: string,
+    conversionFactor: number,
+    excludedLineId?: string,
+  ) {
+    return getAvailableLotsForLine(productId, excludedLineId)
+      .filter((lot) => !isInventoryLotExpired(lot))
+      .reduce((sum, lot) => sum + wholePackagesInLot(lot.quantity, conversionFactor), 0)
   }
 
   function addToCart(
@@ -750,13 +761,7 @@ export default function POS() {
                     const pQty = Math.max(0, getAvailableUomQuantity(item.productId, item.conversionFactor, item.lineId) - item.quantity)
                     const choices = getUnitChoices(item.product)
                     const selectedChoice = choices.find((choice) => choice.id === (item.packageId ?? "")) ?? choices[0]
-                    const productLots = sortInventoryLotsByFEFO(
-                      inventoryLots.filter((lot) =>
-                        lot.productId === item.productId &&
-                        lot.warehouseId === warehouseId &&
-                        lot.quantity > 0,
-                      ),
-                    )
+                    const productLots = getAvailableLotsForLine(item.productId, item.lineId)
                     const eligibleLotForCurrentUnit = productLots.find((lot) =>
                       !isInventoryLotExpired(lot) &&
                       Boolean(lot.expiry) &&
@@ -791,7 +796,7 @@ export default function POS() {
                               value={item.quantity}
                               onChange={(event) => {
                                 const raw = event.target.value
-                                if (/^\\d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
+                                if (/^\d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
                               }}
                               className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500"
                             />
