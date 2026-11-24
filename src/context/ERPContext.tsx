@@ -318,6 +318,7 @@ type ERPContextValue = {
   cloudSyncError: string
   cloudLastSavedAt: string | null
   syncCloudNow: () => Promise<void>
+  resolveCloudSyncConflict: () => Promise<void>
   localStorageError: string
   localLastSavedAt: string | null
   chartOfAccounts: ChartOfAccount[]
@@ -767,6 +768,7 @@ export function ERPProvider({
   const cloudDirtyRef = useRef(false)
   const cloudSavingRef = useRef(false)
   const cloudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipNextCloudStoreWriteRef = useRef(false)
   const scheduleCloudSaveRef = useRef<() => void>(() => undefined)
   const [localStorageError, setLocalStorageError] = useState(loadResult.error ?? "")
   const [localLastSavedAt, setLocalLastSavedAt] = useState<string | null>(
@@ -992,6 +994,83 @@ export function ERPProvider({
     }
   }
 
+  async function resolveCloudSyncConflict() {
+    const client = supabase
+    if (!companyId || !user?.id || !client) {
+      throw new Error("Sign in to the pharmacy owner account before resolving cloud sync.")
+    }
+    if (!cloudSyncError.toLowerCase().includes("conflicting erp changes")) {
+      throw new Error("There is no confirmed cloud revision conflict to resolve. Refresh the ERP and check the sync status first.")
+    }
+
+    if (cloudTimerRef.current) {
+      clearTimeout(cloudTimerRef.current)
+      cloudTimerRef.current = null
+    }
+
+    setCloudReady(false)
+    setCloudSyncStatus("saving")
+    setCloudSyncError("")
+    cloudDirtyRef.current = false
+
+    try {
+      const localSnapshot = createERPCloudState(localStorage)
+      const { data: remoteRow, error: readError } = await client
+        .from("legacy_erp_state")
+        .select("revision, state, updated_at")
+        .eq("company_id", companyId)
+        .maybeSingle()
+
+      if (readError) throw new Error("Could not load the latest cloud ERP data. " + readError.message)
+      if (!remoteRow) throw new Error("No saved cloud ERP copy was found for this company.")
+
+      const remoteRevision = Number(remoteRow.revision)
+      if (!Number.isSafeInteger(remoteRevision) || remoteRevision < 1) {
+        throw new Error("The cloud ERP copy has an invalid revision number.")
+      }
+
+      // Keep this browser's exact current ERP data before restoring the cloud copy.
+      const { error: recoveryError } = await client
+        .from("legacy_erp_recovery_snapshots")
+        .insert({
+          company_id: companyId,
+          reason: "Before user-selected cloud conflict resolution",
+          revision: remoteRevision,
+          state: localSnapshot,
+          created_by: user.id,
+        })
+
+      if (recoveryError) {
+        throw new Error("The current browser copy could not be preserved, so cloud data was not restored. " + recoveryError.message)
+      }
+
+      restoreERPCloudState(localStorage, remoteRow.state)
+      const reloaded = loadStoredData()
+      if (reloaded.error) {
+        throw new Error("The latest cloud data was restored, but this browser could not reload it. " + reloaded.error)
+      }
+
+      localStorage.setItem(
+        ERP_CLOUD_META_KEY,
+        JSON.stringify({ companyId, revision: remoteRevision } satisfies ERPCloudSyncMeta),
+      )
+      cloudRevisionRef.current = remoteRevision
+      cloudCompanyRef.current = companyId
+      cloudDirtyRef.current = false
+      skipNextCloudStoreWriteRef.current = true
+      setStore(migrateWarehouseData(reloaded.data))
+      setCloudLastSavedAt(remoteRow.updated_at ?? new Date().toISOString())
+      setCloudReady(true)
+      setCloudSyncStatus("saved")
+      setCloudSyncError("")
+    } catch (error) {
+      setCloudReady(false)
+      setCloudSyncStatus("error")
+      setCloudSyncError(error instanceof Error ? error.message : String(error))
+      throw error
+    }
+  }
+
   async function syncCloudNow() {
     const client = supabase
     if (!cloudReady || !companyId || !client) {
@@ -1023,6 +1102,10 @@ export function ERPProvider({
 
   useEffect(() => {
     if (!cloudReady || loadResult.error || !companyId) return
+    if (skipNextCloudStoreWriteRef.current) {
+      skipNextCloudStoreWriteRef.current = false
+      return
+    }
     try {
       localStorage.setItem(ERP_STORAGE_KEY, JSON.stringify(store))
       scheduleCloudSave()
@@ -3608,6 +3691,7 @@ export function ERPProvider({
         cloudSyncError,
         cloudLastSavedAt,
         syncCloudNow,
+        resolveCloudSyncConflict,
         localStorageError,
         localLastSavedAt,
         products: store.products,
