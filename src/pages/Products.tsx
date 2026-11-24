@@ -490,13 +490,21 @@ export default function Products() {
       return
     }
 
-    if (editingProduct) {
-      updateProduct(editingProduct.id, productData)
-    } else {
-      addProduct(productData)
+    if (!Number.isFinite(productData.minimumStock) || productData.minimumStock < 0) {
+      window.alert("Minimum stock / reorder level must be a valid number of zero or greater.")
+      return
     }
 
-    closeForm()
+    try {
+      if (editingProduct) {
+        updateProduct(editingProduct.id, productData)
+      } else {
+        addProduct(productData)
+      }
+      closeForm()
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "The product could not be saved.")
+    }
   }
 
   function handleBulkDelete(ids: string[], removeInventory = false) {
