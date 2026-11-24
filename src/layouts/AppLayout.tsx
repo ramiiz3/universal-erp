@@ -29,7 +29,6 @@ import {
   CreditCard,
   Calculator,
   RotateCcw,
-  RefreshCw,
   PackagePlus,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
@@ -181,11 +180,6 @@ export default function AppLayout() {
     products,
     inventoryLots,
     sales,
-    cloudSyncStatus,
-    cloudSyncError,
-    cloudLastSavedAt,
-    localStorageError,
-    resolveCloudSyncConflict,
   } = useERP()
   const { user, signOut } = useAuth()
 
@@ -224,11 +218,7 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] =
     useState(false)
 
-  const [syncResolutionOpen, setSyncResolutionOpen] = useState(false)
-  const [syncResolutionBusy, setSyncResolutionBusy] = useState(false)
-  const [syncResolutionError, setSyncResolutionError] = useState("")
-  const [syncResolutionSuccess, setSyncResolutionSuccess] = useState("")
-  const [minimizedPurchaseDraft, setMinimizedPurchaseDraft] = useState(() => {
+remove sync modal state  const [minimizedPurchaseDraft, setMinimizedPurchaseDraft] = useState(() => {
     const draft = loadPurchaseDraft()
     return draft?.minimized ? draft : null
   })
@@ -417,22 +407,6 @@ export default function AppLayout() {
     setProfileOpen(false)
   }
 
-  async function confirmCloudSyncRecovery() {
-    if (syncResolutionBusy) return
-    setSyncResolutionBusy(true)
-    setSyncResolutionError("")
-    setSyncResolutionSuccess("")
-    try {
-      await resolveCloudSyncConflict()
-      setSyncResolutionOpen(false)
-      setSyncResolutionSuccess("Cloud data restored. This browser is now synchronised.")
-    } catch (error) {
-      setSyncResolutionError(error instanceof Error ? error.message : "Could not resolve the cloud sync conflict.")
-    } finally {
-      setSyncResolutionBusy(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-[#0b120e] dark:text-slate-100">
       <div className="flex min-h-screen">
@@ -505,29 +479,6 @@ export default function AppLayout() {
 
             <GlobalERPSearch />
             <div className="flex items-center gap-2">
-              <span
-                aria-live="polite"
-                title={cloudSyncError || localStorageError || (cloudLastSavedAt ? "Last saved to the secure pharmacy database " + new Date(cloudLastSavedAt).toLocaleString() : "Waiting for the first secure cloud save")}
-                className={`hidden items-center rounded-lg px-2.5 py-2 text-xs font-medium sm:flex ${
-                  cloudSyncStatus === "saved"
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                    : cloudSyncStatus === "error" || localStorageError
-                      ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                }`}
-              >
-                {localStorageError ? "Local data issue" : cloudSyncStatus === "saved" ? "Cloud saved" : cloudSyncStatus === "saving" ? "Saving to cloud…" : cloudSyncStatus === "error" ? "Cloud sync error" : "Connecting…"}
-              </span>
-              {cloudSyncStatus === "error" && cloudSyncError.toLowerCase().includes("conflicting erp changes") && (
-                <button
-                  type="button"
-                  onClick={() => { setSyncResolutionError(""); setSyncResolutionOpen(true) }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-                >
-                  <RefreshCw size={14} />
-                  Resolve Sync
-                </button>
-              )}
               <div className="relative">
                 <button
                   type="button"
@@ -996,41 +947,6 @@ export default function AppLayout() {
           >
             Resume Purchase
           </button>
-        </div>
-      )}
-
-      {syncResolutionSuccess && (
-        <div role="status" className="fixed bottom-5 right-5 z-[90] max-w-md rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-xl dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-          {syncResolutionSuccess}
-          <button type="button" onClick={() => setSyncResolutionSuccess("")} className="ml-3 font-semibold underline">Dismiss</button>
-        </div>
-      )}
-
-      {syncResolutionOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="sync-resolution-title" className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#111a15]">
-            <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-              <div className="rounded-xl bg-amber-50 p-2.5 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"><RefreshCw size={20} /></div>
-              <div className="min-w-0 flex-1">
-                <h2 id="sync-resolution-title" className="font-semibold text-slate-900 dark:text-white">Resolve cloud sync conflict</h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">This browser and the cloud contain different ERP versions.</p>
-              </div>
-              <button type="button" onClick={() => setSyncResolutionOpen(false)} disabled={syncResolutionBusy} aria-label="Close" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"><X size={18} /></button>
-            </div>
-            <div className="space-y-3 px-5 py-5 text-sm text-slate-600 dark:text-slate-300">
-              <p><strong className="text-slate-900 dark:text-white">Recommended: restore the latest cloud copy.</strong></p>
-              <p>Before restoring, the ERP saves the current browser copy into its protected recovery history. It then reloads the latest saved company data from the cloud and reconnects this browser to that revision.</p>
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">Changes that exist only in this browser will not be merged automatically. They remain in the protected recovery copy for review. Do not choose this action if this browser contains unsaved transactions that must be retained in the live ERP.</p>
-              {syncResolutionError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">{syncResolutionError}</div>}
-            </div>
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end dark:border-slate-800 dark:bg-slate-900/60">
-              <button type="button" onClick={() => setSyncResolutionOpen(false)} disabled={syncResolutionBusy} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Cancel</button>
-              <button type="button" onClick={() => void confirmCloudSyncRecovery()} disabled={syncResolutionBusy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60">
-                <RefreshCw size={15} className={syncResolutionBusy ? "animate-spin" : ""} />
-                {syncResolutionBusy ? "Saving recovery copy and restoring…" : "Restore Latest Cloud Copy"}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
