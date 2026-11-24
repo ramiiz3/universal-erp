@@ -8,6 +8,23 @@ export const ERP_CLOUD_STATE_FORMAT = "zaky-pharmacy-erp-cloud-state"
 export const ERP_CLOUD_STATE_SCHEMA_VERSION = 1
 export const ERP_CLOUD_SYNC_EVENT = "zaky-pharmacy-erp-cloud-sync"
 
+/**
+ * Identifies cloud revision conflicts that require preserving this browser's
+ * workstation snapshot before explicitly restoring the latest company copy.
+ */
+export function isRecoverableERPCloudConflict(message: string): boolean {
+  const normalized = message.trim().toLowerCase()
+  return [
+    "conflicting erp changes",
+    "edited differently on two workstations",
+    "common base revision is unavailable",
+    "several workstations saved at the same time",
+    "older erp revision",
+    "last common snapshot is unavailable",
+    "common snapshot is unavailable",
+  ].some((phrase) => normalized.includes(phrase))
+}
+
 export type ERPCloudState = {
   format: typeof ERP_CLOUD_STATE_FORMAT
   schemaVersion: typeof ERP_CLOUD_STATE_SCHEMA_VERSION
