@@ -567,703 +567,463 @@ export default function POS() {
   }
 
   return (
-    <section className="min-h-full bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-[1800px]">
-        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
-          <label htmlFor="pos-warehouse" className="text-sm font-semibold text-slate-700">
-            Sales Warehouse
-          </label>
-          <select
-            id="pos-warehouse"
-            value={warehouseId}
-            onChange={(event) => {
-              setWarehouseId(event.target.value)
-              setError("")
-            }}
-            className="h-10 min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 text-sm"
-          >
-            {activeWarehouses.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="h-6 w-6 text-slate-700" />
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Point of Sale
-              </h1>
+    <section className="min-h-full bg-slate-50 p-3 md:p-5">
+      <div className="mx-auto max-w-[1800px] space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-center gap-3">
+            <ShoppingCart className="h-6 w-6 text-slate-700" />
+            <div>
+              <h1 className="text-xl font-semibold text-slate-900">Sales / POS</h1>
+              <p className="text-xs text-slate-500">Scan or search a medicine, then select its UOM directly in the invoice row.</p>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              Scan products, build the cart, select payment and complete the sale.
-            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={clearSale}
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100"
-          >
-            New Sale
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-5 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <X className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs font-semibold text-slate-600" htmlFor="pos-warehouse">Warehouse</label>
+            <select
+              id="pos-warehouse"
+              value={warehouseId}
+              onChange={(event) => {
+                setWarehouseId(event.target.value)
+                setError("")
+              }}
+              className="h-10 min-w-[210px] rounded-lg border border-slate-200 bg-white px-3 text-sm"
+            >
+              {activeWarehouses.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
             <button
               type="button"
-              onClick={() => setError("")}
-              className="ml-auto rounded-lg p-1 hover:bg-red-100"
+              onClick={clearSale}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
+              New Sale
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <X className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+            <button type="button" onClick={() => setError("")} className="ml-auto rounded p-1 hover:bg-red-100" aria-label="Dismiss error">
               <X className="h-4 w-4" />
             </button>
           </div>
         )}
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_500px]">
-          <div className="min-w-0">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                <div className="relative">
-                  <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    ref={barcodeInputRef}
-                    value={barcode}
-                    onChange={(event) => setBarcode(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault()
-                        handleBarcode(barcode)
-                      }
-                    }}
-                    placeholder="Scan barcode with USB scanner..."
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("")
-                    setCameraOpen(true)
-                  }}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800"
-                >
-                  <Camera className="h-4 w-4" />
-                  Camera Scan
-                </button>
-              </div>
-
-              <div className="relative mt-4">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_minmax(320px,2fr)_auto]">
+            <div>
+              <label htmlFor="pos-barcode" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Barcode</label>
+              <div className="relative">
+                <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search products by name, SKU, barcode or category..."
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  id="pos-barcode"
+                  ref={barcodeInputRef}
+                  value={barcode}
+                  onChange={(event) => setBarcode(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      handleBarcode(barcode)
+                    }
+                  }}
+                  placeholder="Scan product or pack barcode"
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {filteredProducts.map((product) => {
-                const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
-                const saleableStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
-                const supplierCount = new Set(saleableLots.map((lot) => lot.supplierId || lot.supplierName).filter(Boolean)).size
-                const inCart = cart
-                  .filter((item) => item.productId === product.id)
-                  .reduce((sum, item) => sum + item.quantity, 0)
-                const uomCount = 1 + (product.packagings || []).filter((item) => item.salesEnabled).length
-
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    disabled={saleableStock <= 0}
-                    onClick={() => openUnitChooser(product)}
-                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="line-clamp-2 font-medium text-slate-900">
-                          {product.name}
-                        </h3>
-                        <p className="mt-1 text-xs text-slate-500">{product.category}</p>
-                        <p className="mt-1 text-xs text-slate-400">{product.barcode || product.sku}</p>
-                      </div>
-                      <div className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                        {product.unit}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-end justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-semibold text-slate-900">
-                          AED {product.sellingPrice.toFixed(2)} <span className="text-xs font-normal text-slate-500">/ {product.unit}</span>
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Saleable stock: {formatQuantity(saleableStock)} {product.unit}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {uomCount} selling unit(s) · {saleableLots.length} batch(es){supplierCount ? ` · ${supplierCount} supplier(s)` : ""}
-                          {inCart > 0 ? ` · ${inCart} in cart` : ""}
-                        </p>
-                      </div>
-
-                      <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition group-hover:bg-emerald-700 group-hover:text-white">
-                        Choose UOM
-                      </span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-                <Search className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-3 font-medium text-slate-700">
-                  No products found
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try another product name, SKU or barcode.
-                </p>
+            <div>
+              <label htmlFor="pos-product-search" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Find medicine / product</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="pos-product-search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Type product name, generic name, SKU or barcode..."
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-500"
+                />
               </div>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setError("")
+                  setCameraOpen(true)
+                }}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 lg:w-auto"
+              >
+                <Camera className="h-4 w-4" />
+                Camera Scan
+              </button>
+            </div>
+          </div>
+
+          {search.trim() && (
+            <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span>Search results</span>
+                <span>{filteredProducts.length} product(s)</span>
+              </div>
+              {filteredProducts.length > 0 ? (
+                <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+                  {filteredProducts.slice(0, 12).map((product) => {
+                    const stock = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                      .reduce((sum, lot) => sum + lot.quantity, 0)
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        disabled={stock <= 0 || !product.unit?.trim()}
+                        onClick={() => {
+                          if (addToCart(product)) setSearch("")
+                        }}
+                        className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
+                          <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
+                        </span>
+                        <span className="text-right text-xs text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
+                        <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="px-3 py-4 text-sm text-slate-500">No matching product found.</p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Sales Invoice</h2>
+              <p className="text-xs text-slate-500">{cart.length} line(s) · Click the UOM cell to change Box / Strip / Tablet / Sachet.</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Invoice date</p>
+              <p className="text-sm font-semibold text-slate-800">{new Date().toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] border-collapse text-sm">
+              <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                <tr>
+                  <th className="border-b border-slate-200 px-3 py-3">Code</th>
+                  <th className="border-b border-slate-200 px-3 py-3">Product</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">Qty</th>
+                  <th className="border-b border-slate-200 px-3 py-3">UOM</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">Price</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">P_Qty</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">Amount</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">VAT%</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">VAT</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-right">Line Total</th>
+                  <th className="border-b border-slate-200 px-3 py-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cart.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-16 text-center">
+                      <ShoppingCart className="mx-auto h-9 w-9 text-slate-300" />
+                      <p className="mt-3 font-semibold text-slate-700">No products in this invoice</p>
+                      <p className="mt-1 text-xs text-slate-500">Scan a barcode or search for a medicine above. The product will appear here and its UOM can be selected in the row.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  cart.map((item) => {
+                    const itemLines = lotPricedLines.filter((line) => line.requestId === item.lineId)
+                    const amount = itemLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)
+                    const effectiveAmount = itemLines.length > 0 ? amount : item.quantity * item.unitPrice
+                    const discountRatio = subtotal > 0 ? discountAmount / subtotal : 0
+                    const vatRate = item.product.vatApplicable === false ? 0 : item.product.vatRate
+                    const lineVat = effectiveAmount * (1 - discountRatio) * vatRate / 100
+                    const lineTotal = effectiveAmount * (1 - discountRatio) + lineVat
+                    const pQty = Math.max(0, getAvailableUomQuantity(item.productId, item.conversionFactor, item.lineId) - item.quantity)
+                    const choices = getUnitChoices(item.product)
+                    const selectedChoice = choices.find((choice) => choice.id === (item.packageId ?? "")) ?? choices[0]
+                    const productLots = sortInventoryLotsByFEFO(
+                      inventoryLots.filter((lot) =>
+                        lot.productId === item.productId &&
+                        lot.warehouseId === warehouseId &&
+                        lot.quantity > 0,
+                      ),
+                    )
+                    const eligibleLotForCurrentUnit = productLots.find((lot) =>
+                      !isInventoryLotExpired(lot) &&
+                      Boolean(lot.expiry) &&
+                      wholePackagesInLot(lot.quantity, item.conversionFactor) > 0,
+                    )?.id
+
+                    return (
+                      <>
+                        <tr key={item.lineId} className="align-middle hover:bg-slate-50/70">
+                          <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{item.product.sku || item.product.barcode || "—"}</td>
+                          <td className="min-w-[210px] px-3 py-3">
+                            <p className="font-semibold text-slate-900">{item.product.name}</p>
+                            <p className="mt-0.5 text-[11px] text-slate-500">{item.product.genericName || item.product.category}</p>
+                            {itemLines.length > 0 ? (
+                              <div className="mt-1 space-y-0.5 text-[10px] text-slate-500">
+                                {itemLines.map((line, index) => (
+                                  <p key={`${item.lineId}-${line.lotId}-${index}`}>
+                                    FEFO: {line.supplierName || "Supplier not recorded"} · {line.batch || "No batch"} · Exp {line.expiry || "not recorded"} · {formatQuantity(line.quantity / item.conversionFactor)} {item.sellingUnit}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-[10px] text-amber-700">Stock batch allocation pending</p>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <input
+                              aria-label={`Quantity of ${item.product.name}`}
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={item.quantity}
+                              onChange={(event) => {
+                                const raw = event.target.value
+                                if (/^d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
+                              }}
+                              className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500"
+                            />
+                          </td>
+                          <td className="relative px-3 py-3">
+                            <button
+                              type="button"
+                              aria-expanded={uomPickerLineId === item.lineId}
+                              onClick={() => setUomPickerLineId((current) => current === item.lineId ? null : item.lineId)}
+                              className={`inline-flex min-w-[104px] items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs font-bold ${uomPickerLineId === item.lineId ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-white text-slate-800 hover:border-emerald-500"}`}
+                            >
+                              {item.sellingUnit}
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-800">AED {item.unitPrice.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right">
+                            <span className={pQty > 0 ? "font-semibold text-emerald-700" : "font-medium text-slate-400"}>{formatQuantity(pQty)}</span>
+                            <span className="ml-1 text-[10px] text-slate-400">{item.sellingUnit}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">AED {effectiveAmount.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right text-slate-600">{vatRate.toFixed(2)}%</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right text-slate-600">AED {lineVat.toFixed(2)}</td>
+                          <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-slate-900">AED {lineTotal.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(item.lineId)}
+                              aria-label={`Remove ${item.product.name}`}
+                              className="rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+
+                        {uomPickerLineId === item.lineId && (
+                          <tr className="bg-emerald-50/40">
+                            <td colSpan={11} className="px-3 py-3">
+                              <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
+                                <section className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
+                                  <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                                    <div>
+                                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Unit of Measurement</h3>
+                                      <p className="mt-0.5 text-[10px] text-slate-500">Choose the quantity the customer wants to buy</p>
+                                    </div>
+                                    <button type="button" onClick={() => setUomPickerLineId(null)} className="rounded p-1 text-slate-400 hover:bg-slate-200" aria-label="Close UOM options">
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                  <div className="grid grid-cols-[minmax(100px,1fr)_100px_90px] gap-2 border-b border-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                    <span>UOM</span><span className="text-right">Price</span><span className="text-right">P_Qty</span>
+                                  </div>
+                                  <div className="divide-y divide-slate-100">
+                                    {choices.map((choice) => {
+                                      const available = getAvailableUomQuantity(item.productId, choice.conversionFactor, item.lineId)
+                                      const valid = Number.isFinite(choice.conversionFactor) && choice.conversionFactor > 0
+                                      const selected = choice.id === (item.packageId ?? "")
+                                      return (
+                                        <button
+                                          key={choice.id || "stock-unit"}
+                                          type="button"
+                                          disabled={!valid || available < item.quantity}
+                                          onClick={() => selectCartUom(item.lineId, choice)}
+                                          className={`grid w-full grid-cols-[minmax(100px,1fr)_100px_90px] items-center gap-2 px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "bg-emerald-50" : "hover:bg-slate-50"}`}
+                                        >
+                                          <span className="flex items-center gap-2 font-semibold text-slate-800">
+                                            <span>{choice.name}</span>
+                                            {selected && <span className="rounded bg-emerald-700 px-1.5 py-0.5 text-[9px] font-bold text-white">SELECTED</span>}
+                                          </span>
+                                          <span className="text-right font-semibold text-slate-700">AED {choice.sellingPrice.toFixed(2)}</span>
+                                          <span className="text-right font-bold text-emerald-700">{available}</span>
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                  {choices.length === 1 && (
+                                    <p className="border-t border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-900">
+                                      Smaller units are not configured yet. Edit this medicine in Product Master and add Strip / Sachet / Tablet under its outer stock unit.
+                                    </p>
+                                  )}
+                                </section>
+
+                                <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                  <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">Supplier stock & expiry (FEFO)</h3>
+                                    <p className="mt-0.5 text-[10px] text-slate-500">All supplier batches for this medicine, ordered by earliest expiry first.</p>
+                                  </div>
+                                  <div className="grid grid-cols-[minmax(110px,1fr)_90px_100px_74px_74px] gap-2 border-b border-slate-200 px-3 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                    <span>Supplier</span><span>Batch / GRN</span><span>Expiry</span><span className="text-right">Stock</span><span className="text-right">P_Qty</span>
+                                  </div>
+                                  {productLots.length > 0 ? (
+                                    <div className="max-h-52 divide-y divide-slate-100 overflow-y-auto">
+                                      {productLots.map((lot) => {
+                                        const expired = isInventoryLotExpired(lot)
+                                        const lotPackages = wholePackagesInLot(lot.quantity, selectedChoice?.conversionFactor ?? 1)
+                                        const sellFirst = !expired && lot.expiry && lot.id === eligibleLotForCurrentUnit
+                                        return (
+                                          <div key={lot.id} className={`grid grid-cols-[minmax(110px,1fr)_90px_100px_74px_74px] gap-2 px-3 py-2 text-[10px] ${expired ? "bg-red-50/70" : sellFirst ? "bg-emerald-50/70" : "bg-white"}`}>
+                                            <span className="min-w-0">
+                                              <span className="block truncate font-semibold text-slate-700">{lot.supplierName || "Supplier not recorded"}</span>
+                                              <span className="block truncate text-[9px] text-slate-400">{lot.supplierId || ""}</span>
+                                            </span>
+                                            <span className="min-w-0">
+                                              <span className="block truncate text-slate-700">{lot.batch || "—"}</span>
+                                              <span className="block truncate text-[9px] text-slate-400">{lot.grnNumber || "—"}</span>
+                                            </span>
+                                            <span className={expired ? "font-semibold text-red-700" : "text-slate-600"}>{lot.expiry || "Not recorded"}</span>
+                                            <span className="text-right font-medium text-slate-700">{formatQuantity(lot.quantity)}</span>
+                                            <span className={`text-right font-bold ${expired ? "text-red-600" : "text-emerald-700"}`}>{expired ? "BLOCKED" : lotPackages}</span>
+                                            <span className="col-span-5 -mt-1 text-[9px] font-semibold">
+                                              {expired ? <span className="text-red-700">Expired · Do not sell</span> : sellFirst ? <span className="text-emerald-700">Sell this batch first · FEFO</span> : !lot.expiry ? <span className="text-amber-700">Expiry date missing</span> : <span className="text-slate-400">Next by expiry</span>}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="px-3 py-5 text-center text-xs text-slate-500">No supplier batch stock recorded in this warehouse.</p>
+                                  )}
+                                </section>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
+                                <span>Changing UOM updates this invoice line, selling price, available quantity, batch allocation and stock deduction together.</span>
+                                <button type="button" onClick={() => setUomPickerLineId(null)} className="font-semibold text-emerald-700 hover:underline">Close UOM picker</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    )
+                  })
+                )}
+              </tbody>
+              {cart.length > 0 && (
+                <tfoot className="bg-slate-50">
+                  <tr className="font-semibold text-slate-800">
+                    <td colSpan={6} className="px-3 py-3 text-right">Subtotal</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">AED {subtotal.toFixed(2)}</td>
+                    <td></td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right">AED {vatAmount.toFixed(2)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-slate-900">AED {saleTotals.total.toFixed(2)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          {saleAllocationPreview.unallocated.length > 0 && (
+            <p className="border-t border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700">
+              There is not enough complete, non-expired stock for one or more invoice lines. Adjust quantities or UOM before completing the sale.
+            </p>
+          )}
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Customer
+              <select
+                value={customerId}
+                onChange={(event) => setCustomerId(event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+              >
+                <option value="">Walk-in Customer</option>
+                {customers.filter((customer) => customer.status === "Active").map((customer) => (
+                  <option key={customer.id} value={customer.id}>{customer.name} — {customer.phone}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Discount (AED)
+              <input
+                type="number"
+                min="0"
+                max={subtotal}
+                step="0.01"
+                value={discount}
+                onChange={(event) => setDiscount(event.target.value)}
+                placeholder="0.00"
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+              />
+            </label>
+            <div className="md:col-span-2">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Payment method</p>
+              <div className="flex flex-wrap gap-2">
+                {enabledPaymentOptions.map(({ method, label, icon: Icon }) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setPaymentMethod(method)}
+                    className={`inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold ${paymentMethod === method ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    <Icon className="h-4 w-4" />{label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {paymentMethod === "Cash" && (
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Cash received
+                <input
+                  type="number"
+                  min={saleTotals.total}
+                  step="0.01"
+                  value={cashTendered}
+                  onChange={(event) => setCashTendered(event.target.value)}
+                  placeholder={saleTotals.total.toFixed(2)}
+                  className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+                />
+              </label>
             )}
           </div>
 
-          <aside className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Current Sale
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    {cart.length} item{cart.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-
-                {cart.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setCart([])}
-                    className="text-xs font-medium text-red-600 hover:text-red-700"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>AED {subtotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-slate-600"><span>Discount</span><span>- AED {discountAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-slate-600"><span>VAT</span><span>AED {vatAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-3 text-lg font-bold text-slate-900"><span>Total</span><span>AED {total.toFixed(2)}</span></div>
             </div>
-
-            <div className="max-h-[450px] overflow-y-auto p-4">
-              {cart.length === 0 ? (
-                <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
-                  <ShoppingCart className="h-10 w-10 text-slate-300" />
-                  <p className="mt-3 font-medium text-slate-700">
-                    Cart is empty
-                  </p>
-                  <p className="mt-1 max-w-xs text-sm text-slate-500">
-                    Scan a barcode or click a product to add it to the sale.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cart.map((item) => {
-                    const itemLines = lotPricedLines.filter(
-                      (line) => line.requestId === item.lineId,
-                    )
-                    const itemTotal = itemLines.reduce(
-                      (sum, line) => sum + line.quantity * line.unitPrice,
-                      0,
-                    )
-
-                    return (
-                      <div
-                        key={item.lineId}
-                        className="rounded-xl border border-slate-200 p-3"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-slate-900">{item.product.name}</p>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                                {item.sellingUnit}
-                              </span>
-                              <span className="text-xs text-slate-500">
-                                1 {item.sellingUnit} = {formatQuantity(item.conversionFactor)} {item.product.unit}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openUnitChooser(item.product, item.lineId)}
-                                className="text-xs font-semibold text-emerald-700 hover:underline"
-                              >
-                                Change unit
-                              </button>
-                            </div>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Price: AED {item.unitPrice.toFixed(2)} per {item.sellingUnit}
-                            </p>
-
-                            <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs text-slate-600">
-                              {itemLines.map((line, index) => {
-                                const packageQuantity = line.quantity / item.conversionFactor
-                                return (
-                                  <p key={`${item.lineId}-${line.lotId}-${index}`}>
-                                    <span className="font-medium text-slate-700">{line.supplierName || "Supplier not recorded"}</span>
-                                    {" · "}Batch {line.batch || "—"}
-                                    {" · "}Expiry {line.expiry || "Not recorded"}
-                                    {" · "}{formatQuantity(packageQuantity)} {item.sellingUnit}
-                                  </p>
-                                )
-                              })}
-                              {itemLines.length === 0 && (
-                                <p className="text-amber-700">Batch allocation will be confirmed before completing this sale.</p>
-                              )}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.lineId)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            aria-label={`Remove ${item.product.name} ${item.sellingUnit}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between">
-                          <div className="inline-flex items-center rounded-lg border border-slate-200">
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
-                              className="p-2 text-slate-500 hover:bg-slate-50"
-                              aria-label={`Decrease ${item.sellingUnit} quantity`}
-                            >
-                              <Minus className="h-4 w-4" />
-                            </button>
-
-                            <span className="min-w-20 px-1 text-center text-sm font-medium text-slate-800">
-                              {item.quantity} {item.sellingUnit}
-                            </span>
-
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
-                              className="p-2 text-slate-500 hover:bg-slate-50"
-                              aria-label={`Increase ${item.sellingUnit} quantity`}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </button>
-                          </div>
-
-                          <p className="font-semibold text-slate-900">
-                            AED {itemTotal.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {saleAllocationPreview.unallocated.length > 0 && (
-                    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                      Not enough stock to allocate the full cart. Review quantities before completing this sale.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-slate-200 p-5">
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Customer
-                  </label>
-                  <div className="relative">
-                    <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <select
-                      value={customerId}
-                      onChange={(event) => setCustomerId(event.target.value)}
-                      className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                    >
-                      <option value="">Walk-in Customer</option>
-                      {customers
-                        .filter((customer) => customer.status === "Active")
-                        .map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name} — {customer.phone}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Discount
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={subtotal}
-                    step="0.01"
-                    value={discount}
-                    onChange={(event) => setDiscount(event.target.value)}
-                    placeholder="0.00"
-                    className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Payment Method
-                  </label>
-
-                  {enabledPaymentOptions.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      {enabledPaymentOptions.map(
-                        ({
-                          method,
-                          label,
-                          icon: Icon,
-                        }) => (
-                          <button
-                            key={method}
-                            type="button"
-                            onClick={() =>
-                              setPaymentMethod(
-                                method,
-                              )
-                            }
-                            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border text-sm font-medium transition ${
-                              paymentMethod ===
-                              method
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                            }`}
-                          >
-                            <Icon className="h-4 w-4" />
-                            {label}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      No payment methods are enabled. Enable at least one in Settings.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {paymentMethod === "Cash" && (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Cash tendered
-                    <input
-                      type="number"
-                      min={saleTotals.total}
-                      step="0.01"
-                      value={cashTendered}
-                      onChange={(event) => setCashTendered(event.target.value)}
-                      placeholder={saleTotals.total.toFixed(2)}
-                      className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                    />
-                  </label>
-                  <div className="mt-3 flex items-center justify-between text-sm">
-                    <span className="text-slate-600">Change due</span>
-                    <span className="font-semibold text-slate-900">
-                      {cashTendered.trim() === "" ? "AED 0.00" : Number.isFinite(Number(cashTendered)) ? `AED ${(Number(cashTendered) - saleTotals.total).toFixed(2)}` : "—"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">Leave blank to record an exact cash payment.</p>
-                </div>
-              )}
-
-              <div className="my-5 border-t border-dashed border-slate-200" />
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Subtotal</span>
-                  <span>AED {subtotal.toFixed(2)}</span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>Discount</span>
-                  <span>- AED {discountAmount.toFixed(2)}</span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>VAT</span>
-                  <span>AED {vatAmount.toFixed(2)}</span>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 text-lg font-semibold text-slate-900">
-                  <span>Total</span>
-                  <span>AED {total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCompleteSale}
-                disabled={
-                  cart.length === 0 ||
-                  saleAllocationPreview.unallocated.length > 0
-                }
-                className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <CheckCircle2 className="h-5 w-5" />
-                Complete Sale
-              </button>
-            </div>
-          </aside>
-        </div>
+            <button
+              type="button"
+              onClick={handleCompleteSale}
+              disabled={cart.length === 0 || saleAllocationPreview.unallocated.length > 0 || enabledPaymentOptions.length === 0}
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <CheckCircle2 className="h-5 w-5" /> Complete Sale & Generate Invoice
+            </button>
+          </div>
+        </section>
       </div>
-
-      {unitChooserProduct && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="pos-uom-title"
-            className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
-          >
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  {unitChooserCartLineId ? "Change selling unit" : "Select selling unit"}
-                </p>
-                <h2 id="pos-uom-title" className="mt-1 text-lg font-semibold text-slate-900">
-                  {unitChooserProduct.name}
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit || "unit not configured"} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeUnitChooser}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                aria-label="Close selling unit selection"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </header>
-
-            <div className="max-h-[calc(94vh-76px)] space-y-5 overflow-y-auto p-5">
-              <section>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">Choose UOM</h3>
-                    <p className="mt-1 text-xs text-slate-500">Choose the exact unit the customer is buying. The price and available quantity update for each unit.</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                    {unitChoices.length} selling unit(s)
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[620px] text-sm">
-                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">UOM</th>
-                        <th className="px-4 py-3">Conversion</th>
-                        <th className="px-4 py-3 text-right">Selling price</th>
-                        <th className="px-4 py-3 text-right">Available</th>
-                        <th className="px-4 py-3 text-right">Select</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {unitChoices.map((choice) => {
-                        const available = unitChooserLots.reduce((sum, lot) =>
-                          sum + (isInventoryLotExpired(lot) ? 0 : wholePackagesInLot(lot.quantity, choice.conversionFactor)),
-                        0)
-                        const selected = choice.id === unitChooserPackageId
-                        const validFactor = Number.isFinite(choice.conversionFactor) && choice.conversionFactor > 0
-                        return (
-                          <tr key={choice.id || "base-unit"} className={selected ? "bg-emerald-50/70" : "bg-white"}>
-                            <td className="px-4 py-3">
-                              <p className="font-semibold text-slate-900">{choice.name}</p>
-                              {choice.id === "" && <p className="mt-0.5 text-[11px] text-slate-500">Stock unit</p>}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">
-                              1 {choice.unit} = {formatQuantity(choice.conversionFactor)} {unitChooserProduct.unit}
-                            </td>
-                            <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                              AED {choice.sellingPrice.toFixed(2)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className={available > 0 && validFactor ? "font-semibold text-emerald-700" : "font-medium text-red-600"}>
-                                {validFactor ? available : 0} {choice.unit}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                disabled={!validFactor || available <= 0}
-                                onClick={() => {
-                                  setUnitChooserPackageId(choice.id)
-                                  setUnitChooserQuantity("1")
-                                  setError("")
-                                }}
-                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "bg-emerald-700 text-white" : "border border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-800"}`}
-                              >
-                                {selected ? "Selected" : "Select"}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {unitChoices.length === 1 && (
-                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                    Only the stock unit is configured for this medicine. To sell a strip, sachet or individual tablet, open Product Master → Edit Product → Pharmacy pack hierarchy & POS units. Set the stock unit (for example Box), add Strip inside Box and enter the number of strips per box, then add Tablet inside Strip and enter the number of tablets per strip. Save once; POS will calculate the smaller units and their available quantities automatically.
-                  </p>
-                )}
-              </section>
-
-              <section>
-                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">Supplier batches and expiry</h3>
-                    <p className="mt-1 text-xs text-slate-500">All positive stock lots for this medicine are listed separately by supplier. Valid batches are ordered by earliest expiry (FEFO).</p>
-                  </div>
-                  <span className="text-xs font-medium text-slate-500">
-                    Showing {unitChooserLots.length} batch(es)
-                  </span>
-                </div>
-
-                {unitChooserLots.length > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="w-full min-w-[760px] text-sm">
-                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="px-4 py-3">Supplier</th>
-                          <th className="px-4 py-3">Batch / GRN</th>
-                          <th className="px-4 py-3">Expiry</th>
-                          <th className="px-4 py-3 text-right">Stock ({unitChooserProduct.unit})</th>
-                          <th className="px-4 py-3 text-right">Complete {selectedUnitChoice?.unit || "unit"}s</th>
-                          <th className="px-4 py-3">Priority</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {unitChooserLots.map((lot) => {
-                          const expired = isInventoryLotExpired(lot)
-                          const packageQty = selectedUnitChoice
-                            ? wholePackagesInLot(lot.quantity, selectedUnitChoice.conversionFactor)
-                            : 0
-                          const firstEligibleLotId = selectedUnitChoice
-                            ? unitChooserLots.find((candidate) =>
-                                !isInventoryLotExpired(candidate) &&
-                                Boolean(candidate.expiry) &&
-                                wholePackagesInLot(candidate.quantity, selectedUnitChoice.conversionFactor) > 0,
-                              )?.id
-                            : undefined
-                          const sellFirst = !expired && Boolean(lot.expiry) && lot.id === firstEligibleLotId
-                          return (
-                            <tr key={lot.id} className={expired ? "bg-red-50/50" : sellFirst ? "bg-emerald-50/60" : "bg-white"}>
-                              <td className="px-4 py-3">
-                                <p className="font-medium text-slate-800">{lot.supplierName || "Supplier not recorded"}</p>
-                                {lot.supplierId && <p className="mt-0.5 text-[11px] text-slate-400">{lot.supplierId}</p>}
-                              </td>
-                              <td className="px-4 py-3">
-                                <p className="font-medium text-slate-700">{lot.batch || "—"}</p>
-                                <p className="mt-0.5 text-[11px] text-slate-400">GRN: {lot.grnNumber || "—"}</p>
-                              </td>
-                              <td className="px-4 py-3 font-medium text-slate-700">
-                                {lot.expiry || "Not recorded"}
-                              </td>
-                              <td className="px-4 py-3 text-right text-slate-700">
-                                {formatQuantity(lot.quantity)}
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold">
-                                <span className={expired ? "text-red-600" : packageQty > 0 ? "text-slate-800" : "text-slate-400"}>
-                                  {expired ? "Blocked" : packageQty}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                {expired ? (
-                                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">Expired · Do not sell</span>
-                                ) : sellFirst ? (
-                                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">Sell first · FEFO</span>
-                                ) : !lot.expiry ? (
-                                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Expiry missing</span>
-                                ) : (
-                                  <span className="text-xs text-slate-500">Next by expiry</span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
-                    No stock lots are recorded for this product in the selected warehouse.
-                  </p>
-                )}
-              </section>
-
-              <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-                <div className="grid gap-4 sm:grid-cols-[1fr_180px_auto] sm:items-end">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Selected unit</p>
-                    <p className="mt-1 text-lg font-bold text-slate-900">
-                      {selectedUnitChoice?.name || "Choose a unit"}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      AED {selectedUnitChoice?.sellingPrice.toFixed(2) || "0.00"} per {selectedUnitChoice?.unit || "unit"} · {selectedUnitAvailable} available
-                    </p>
-                  </div>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Quantity ({selectedUnitChoice?.unit || "unit"})
-                    <input
-                      type="number"
-                      min="1"
-                      max={selectedUnitAvailable}
-                      step="1"
-                      value={unitChooserQuantity}
-                      onChange={(event) => setUnitChooserQuantity(event.target.value)}
-                      className="mt-1 h-11 w-full rounded-lg border border-emerald-200 bg-white px-3 text-base font-semibold text-slate-900 outline-none focus:border-emerald-600"
-                    />
-                  </label>
-                  <div className="flex gap-2 sm:justify-end">
-                    <button
-                      type="button"
-                      onClick={closeUnitChooser}
-                      className="h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmUnitSelection}
-                      disabled={!selectedUnitChoice || selectedUnitAvailable <= 0 || Number(unitChooserQuantity) < 1 || Number(unitChooserQuantity) > selectedUnitAvailable || !Number.isInteger(Number(unitChooserQuantity))}
-                      className="h-11 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {unitChooserCartLineId ? "Save unit" : "Add to sale"}
-                    </button>
-                  </div>
-                </div>
-                {error && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{error}</p>}
-              </section>
-
-              <p className="text-xs text-slate-500">
-                FEFO means First Expiry, First Out. The POS will deduct complete units from the earliest-expiring valid supplier batch first and will never use an expired batch. A sealed strip, box or sachet is not split across two suppliers' batches.
-              </p>
-            </div>
-          </section>
-        </div>
-      )}
 
       {cameraOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
