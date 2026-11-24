@@ -867,7 +867,7 @@ export default function Purchasing() {
                     </h3>
                   </div>
 
-                  <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_100px_120px_150px_150px_auto]">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(140px,1.1fr)_minmax(170px,1.2fr)_130px_80px_90px_100px_100px_130px_130px_auto]">
                     <input
                       value={barcode}
                       onChange={(event) =>
@@ -940,6 +940,28 @@ export default function Purchasing() {
                     <input
                       type="number"
                       min="0"
+                      step="any"
+                      value={bonusQuantity}
+                      onChange={(event) => setBonusQuantity(event.target.value)}
+                      placeholder="Bonus"
+                      title="Free bonus quantity"
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                    />
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={mrp}
+                      onChange={(event) => setMrp(event.target.value)}
+                      placeholder="MRP"
+                      title="Maximum retail price"
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                    />
+
+                    <input
+                      type="number"
+                      min="0"
                       step="0.01"
                       value={purchasePrice}
                       onChange={(event) =>
@@ -970,11 +992,11 @@ export default function Purchasing() {
                     {selectedProductId && (
                       <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 sm:col-span-2">
                         Stock will be received as{" "}
-                        {(Number(quantity) || 0) *
+                        {((Number(quantity) || 0) + (Number(bonusQuantity) || 0)) *
                           (products.find((item) => item.id === selectedProductId)
                             ?.packagings?.find((item) => item.id === selectedPackageId)
                             ?.conversionFactor || 1)}{" "}
-                        {products.find((item) => item.id === selectedProductId)?.unit || "base units"}.
+                        {products.find((item) => item.id === selectedProductId)?.unit || "base units"} including bonus.
                         Package price: {purchasePrice || "0.00"}.
                       </div>
                     )}
@@ -1007,9 +1029,9 @@ export default function Purchasing() {
                             Expiry
                           </th>
 
-                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Qty
-                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Paid Qty</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Bonus</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">MRP</th>
 
                           <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Cost
@@ -1052,6 +1074,8 @@ export default function Purchasing() {
                                 </div>
                               )}
                             </td>
+                            <td className="px-4 py-3 text-right text-sm">{line.bonusQuantity} {line.purchaseUnit || ""}</td>
+                            <td className="px-4 py-3 text-right text-sm">{formatCurrency(line.mrp)}</td>
 
                             <td className="px-4 py-3 text-right text-sm text-slate-700">
                               {formatCurrency(
@@ -1083,7 +1107,7 @@ export default function Purchasing() {
                         {lines.length === 0 && (
                           <tr>
                             <td
-                              colSpan={7}
+                              colSpan={9}
                               className="px-5 py-12 text-center"
                             >
                               <PackagePlus className="mx-auto h-8 w-8 text-slate-300" />
