@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import type { FormEvent } from "react"
 import {
   Eye,
@@ -9,9 +9,16 @@ import {
   Search,
   Trash2,
   X,
+  Minimize2,
 } from "lucide-react"
 import { useERP, type Purchase } from "../context/ERPContext"
 import { getERPSettings } from "../lib/erpSettings"
+import {
+  clearPurchaseDraft,
+  loadPurchaseDraft,
+  savePurchaseDraft,
+  setPurchaseDraftMinimized,
+} from "../lib/purchaseDraft"
 
 type PurchaseLine = {
   id: string
@@ -47,21 +54,23 @@ function formatDate(value: string) {
 export default function Purchasing() {
   const businessName = getERPSettings().businessName.trim() || "Company"
   const navigate = useNavigate()
+  const location = useLocation()
+  const [initialPurchaseDraft] = useState(() => loadPurchaseDraft())
 
   const { products, purchases, createPurchase, warehouses, storageLocations, suppliers } = useERP()
 
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState("")
-  const [supplierId, setSupplierId] = useState("")
-  const [supplierInvoice, setSupplierInvoice] = useState("")
-  const [barcode, setBarcode] = useState("")
-  const [selectedProductId, setSelectedProductId] = useState("")
-  const [quantity, setQuantity] = useState("")
-  const [purchasePrice, setPurchasePrice] = useState("")
-  const [selectedPackageId, setSelectedPackageId] = useState("")
-  const [batch, setBatch] = useState("")
-  const [expiry, setExpiry] = useState("")
-  const [lines, setLines] = useState<PurchaseLine[]>([])
+  const [supplierId, setSupplierId] = useState(initialPurchaseDraft?.supplierId ?? "")
+  const [supplierInvoice, setSupplierInvoice] = useState(initialPurchaseDraft?.supplierInvoice ?? "")
+  const [barcode, setBarcode] = useState(initialPurchaseDraft?.barcode ?? "")
+  const [selectedProductId, setSelectedProductId] = useState(initialPurchaseDraft?.selectedProductId ?? "")
+  const [quantity, setQuantity] = useState(initialPurchaseDraft?.quantity ?? "")
+  const [purchasePrice, setPurchasePrice] = useState(initialPurchaseDraft?.purchasePrice ?? "")
+  const [selectedPackageId, setSelectedPackageId] = useState(initialPurchaseDraft?.selectedPackageId ?? "")
+  const [batch, setBatch] = useState(initialPurchaseDraft?.batch ?? "")
+  const [expiry, setExpiry] = useState(initialPurchaseDraft?.expiry ?? "")
+  const [lines, setLines] = useState<PurchaseLine[]>(initialPurchaseDraft?.lines ?? [])
   const [error, setError] = useState("")
   const [successNumber, setSuccessNumber] = useState("")
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
@@ -69,10 +78,12 @@ export default function Purchasing() {
   const [warehouseId, setWarehouseId] = useState(
     () =>
       warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
-      warehouses.find((item) => item.active)?.id ??
-      "",
+      (initialPurchaseDraft?.warehouseId && warehouses.some((item) => item.id === initialPurchaseDraft.warehouseId && item.active)
+        ? initialPurchaseDraft.warehouseId
+        : warehouses.find((item) => item.active)?.id) ?? "",
+
   )
-  const [locationId, setLocationId] = useState("")
+  const [locationId, setLocationId] = useState(initialPurchaseDraft?.locationId ?? "")
   const activeWarehouses = warehouses.filter((item) => item.active)
   const availableLocations = storageLocations.filter(
     (item) => item.active && item.warehouseId === warehouseId,
@@ -133,9 +144,72 @@ export default function Purchasing() {
   }
 
   function openForm() {
+    clearPurchaseDraft()
     resetForm()
     setShowForm(true)
   }
+
+  function minimiseAndAddProduct() {
+    try {
+      savePurchaseDraft({
+        supplierId,
+        supplierInvoice,
+        barcode,
+        selectedProductId,
+        quantity,
+        purchasePrice,
+        selectedPackageId,
+        batch,
+        expiry,
+        lines,
+        warehouseId,
+        locationId,
+        minimized: true,
+      })
+      setShowForm(false)
+      navigate("/products?addProduct=1")
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the purchase draft.")
+    }
+  }
+
+  function discardPurchaseDraft() {
+    clearPurchaseDraft()
+    setShowForm(false)
+    resetForm()
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get("resumePurchase") === "1" && initialPurchaseDraft) {
+      setShowForm(true)
+      setPurchaseDraftMinimized(false)
+      navigate("/purchasing", { replace: true })
+    }
+  }, [initialPurchaseDraft, location.search, navigate])
+
+  useEffect(() => {
+    if (!showForm) return
+    try {
+      savePurchaseDraft({
+        supplierId,
+        supplierInvoice,
+        barcode,
+        selectedProductId,
+        quantity,
+        purchasePrice,
+        selectedPackageId,
+        batch,
+        expiry,
+        lines,
+        warehouseId,
+        locationId,
+        minimized: false,
+      })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the purchase draft.")
+    }
+  }, [showForm, supplierId, supplierInvoice, barcode, selectedProductId, quantity, purchasePrice, selectedPackageId, batch, expiry, lines, warehouseId, locationId])
 
   function selectProduct(productId: string) {
     setSelectedProductId(productId)
@@ -364,6 +438,7 @@ export default function Purchasing() {
       })
 
       setSuccessNumber(purchase.purchaseNumber)
+      clearPurchaseDraft()
       setShowForm(false)
       resetForm()
     } catch (purchaseError) {
@@ -604,13 +679,25 @@ export default function Purchasing() {
                 </p>
               </div>
 
+              <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={minimiseAndAddProduct}
+                title="Minimise this purchase and open Add Product"
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+              >
+                <Minimize2 className="h-4 w-4" />
+                Minimise & Add Product
+              </button>
+              <button
+                type="button"
+                onClick={discardPurchaseDraft}
+                title="Discard purchase draft"
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
               </button>
+              </div>
             </div>
 
             <form
@@ -1000,7 +1087,7 @@ export default function Purchasing() {
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={discardPurchaseDraft}
                   className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
