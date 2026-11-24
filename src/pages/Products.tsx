@@ -289,6 +289,14 @@ export default function Products() {
     setShowForm(true)
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    if (params.get("addProduct") === "1") {
+      openAdd()
+      navigate("/products", { replace: true })
+    }
+  }, [location.search, navigate])
+
   function openEdit(product: Product) {
     setForm({
       name: product.name,
