@@ -43,6 +43,25 @@ describe("sales returns", () => {
     expect(() => buildSalesReturn(baseInput, sale, [{ id: "p1", returnEligible: false }], [])).toThrow(/not marked as eligible/)
   })
 
+
+  it("does not make an old non-returnable invoice eligible when Product Master is changed later", () => {
+    const saleWithSnapshot = {
+      ...sale,
+      items: sale.items.map((item) => ({ ...item, returnEligible: false })),
+    }
+    expect(() => buildSalesReturn(baseInput, saleWithSnapshot, products, []))
+      .toThrow(/not marked as eligible/)
+  })
+
+  it("uses the sale-time eligibility snapshot even if the current product is later disabled", () => {
+    const saleWithSnapshot = {
+      ...sale,
+      items: sale.items.map((item) => ({ ...item, returnEligible: true })),
+    }
+    expect(() => buildSalesReturn(baseInput, saleWithSnapshot, [{ id: "p1", returnEligible: false }], []))
+      .not.toThrow()
+  })
+
   it("rejects services", () => {
     expect(() => buildSalesReturn(baseInput, sale, [{ id: "p1", productType: "SERVICE", returnEligible: true }], [])).toThrow(/not marked as eligible/)
   })
