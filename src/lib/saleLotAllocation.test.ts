@@ -156,16 +156,19 @@ describe("sale lot allocation", () => {
 
   it("allocates package sales across FEFO batches using the selected package price", () => {
     const packageLots: InventoryLot[] = [
-      { ...lots[0], quantity: 19, sellingPrice: 9 },
-      { ...lots[1], quantity: 10, sellingPrice: 19 },
+      { ...lots[0], quantity: 12, sellingPrice: 9, expiry: "2027-01-01" },
+      { ...lots[1], quantity: 24, sellingPrice: 19, expiry: "2028-01-01" },
     ]
 
     // One carton contains 12 pieces.
-    // Two cartons at AED 120 each = 24 pieces at AED 10 per piece.
+    // Two cartons at AED 120 each = 24 base pieces at AED 10 per piece.
+    // A sealed carton must come from one supplier lot; it is never split.
     const result = allocateSaleLots(
       [{
         product,
+        requestId: "box-line",
         quantity: 24,
+        saleUnitConversionFactor: 12,
         unitPrice: 10,
         unitPriceOverride: true,
       }],
@@ -174,14 +177,16 @@ describe("sale lot allocation", () => {
 
     expect(result.unallocated).toEqual([])
     expect(result.lines.map((line) => ({
+      requestId: line.requestId,
+      lotId: line.lotId,
       quantity: line.quantity,
       unitPrice: line.unitPrice,
     }))).toEqual([
-      { quantity: 19, unitPrice: 10 },
-      { quantity: 5, unitPrice: 10 },
+      { requestId: "box-line", lotId: "lot-earlier", quantity: 12, unitPrice: 10 },
+      { requestId: "box-line", lotId: "lot-later", quantity: 12, unitPrice: 10 },
     ])
 
-    expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([0, 5])
+    expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([0, 12])
 
     const baseQuantity = result.lines.reduce(
       (sum, line) => sum + line.quantity,
@@ -193,7 +198,7 @@ describe("sale lot allocation", () => {
     )
 
     expect(baseQuantity).toBe(24)
-    expect(costOfGoodsSold).toBe(135)
+    expect(costOfGoodsSold).toBe(156)
 
     const totals = calculateLotSaleTotals(result.lines, 20)
     expect(totals.subtotal).toBe(240)
