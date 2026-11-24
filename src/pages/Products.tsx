@@ -1382,7 +1382,7 @@ export default function Products() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Sub-units & packaging</h4>
-                    <p className="mt-1 text-xs text-slate-500">Define how each purchase or selling unit converts to the stock unit. Example: base unit Box; 1 Strip = 0.1 Box; 1 Piece = 0.01 Box (for a 10-strip / 100-piece box).</p>
+                    <p className="mt-1 text-xs text-slate-500">Add every real selling form for this medicine (for example Tablet, Strip, Box, Sachet or Pack). Units with “Allow sales / POS” checked will appear automatically when the cashier clicks or scans this product. Set the exact conversion for this product: 1 Strip = 0.1 Box only when 10 strips make 1 box; 1 Tablet = 0.01 Box only when 100 tablets make 1 box. If the stock unit is Tablet and 1 strip contains 10 tablets, enter 10 instead. Pack sizes differ by medicine, so verify the printed pack before saving.</p>
                   </div>
                   <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add sub-unit</button>
                 </div>
