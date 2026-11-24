@@ -67,6 +67,7 @@ export default function Purchasing() {
   const [searchTo, setSearchTo] = useState("")
   const [supplierId, setSupplierId] = useState(initialPurchaseDraft?.supplierId ?? "")
   const [supplierInvoice, setSupplierInvoice] = useState(initialPurchaseDraft?.supplierInvoice ?? "")
+  const [purchaseDate, setPurchaseDate] = useState(initialPurchaseDraft?.purchaseDate ?? new Date().toISOString().slice(0, 10))
   const [grnNumber, setGrnNumber] = useState(initialPurchaseDraft?.grnNumber ?? "")
   const [bonusQuantity, setBonusQuantity] = useState(initialPurchaseDraft?.bonusQuantity ?? "0")
   const [mrp, setMrp] = useState(initialPurchaseDraft?.mrp ?? "")
@@ -140,6 +141,7 @@ export default function Purchasing() {
   function resetForm() {
     setSupplierId("")
     setSupplierInvoice("")
+    setPurchaseDate(new Date().toISOString().slice(0, 10))
     setGrnNumber("")
     setBonusQuantity("0")
     setMrp("")
@@ -165,6 +167,7 @@ export default function Purchasing() {
       savePurchaseDraft({
         supplierId,
         supplierInvoice,
+        purchaseDate,
         grnNumber,
         bonusQuantity,
         mrp,
@@ -208,6 +211,10 @@ export default function Purchasing() {
       savePurchaseDraft({
         supplierId,
         supplierInvoice,
+        purchaseDate,
+        grnNumber,
+        bonusQuantity,
+        mrp,
         barcode,
         selectedProductId,
         quantity,
@@ -452,6 +459,7 @@ export default function Purchasing() {
         supplierId: selectedSupplier.id,
         supplierName: selectedSupplier.name,
         supplierInvoice,
+        purchaseDate,
         grnNumber,
         warehouseId,
         locationId: locationId || null,
@@ -818,6 +826,15 @@ export default function Purchasing() {
                         setSupplierInvoice(event.target.value)
                       }
                       placeholder="Optional supplier invoice number"
+                      className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Purchase Date</label>
+                    <input
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(event) => setPurchaseDate(event.target.value)}
                       className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
