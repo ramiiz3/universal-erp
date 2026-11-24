@@ -515,8 +515,8 @@ export default function Products() {
     if (!uniqueIds.length) return
 
     const confirmation = removeInventory
-      ? `PERMANENTLY remove ${uniqueIds.length} selected product(s), their inventory lots and stock movement history? A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers will still be retained.`
-      : `Delete ${uniqueIds.length} selected product(s) only where there is no stock or stock history? Products with stock or commercial documents will be retained.`
+      ? `PERMANENTLY remove ${uniqueIds.length} selected product(s) and their stock lots and movement history? A recovery backup will be created first. Products referenced by sales, purchases, returns, orders or transfers will be archived instead so historical documents remain valid.`
+      : `Delete ${uniqueIds.length} selected product(s) only where there is no stock or movement history? Products that cannot be erased safely will be archived instead.`
     if (!window.confirm(confirmation)) return
 
     try {
