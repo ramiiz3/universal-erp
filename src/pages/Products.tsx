@@ -30,8 +30,13 @@ import {
 const emptyForm = {
   name: "",
   category: "",
+  productGroup: "",
   sku: "",
   barcode: "",
+  companyName: "",
+  genericName: "",
+  preferredSupplierId: "",
+  mrp: "",
   purchasePrice: "",
   sellingPrice: "",
   marginPercentage: "",
@@ -77,6 +82,7 @@ export default function Products() {
   const navigate = useNavigate()
   const {
     products,
+    suppliers,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -284,6 +290,7 @@ export default function Products() {
     const companyProfile = getLegacyCompanyBarcodeProfile()
     setForm({
       ...emptyForm,
+      companyName: companyProfile.companyName,
       vatRate: companyProfile.vatRate || "5",
       vatApplicable: true,
       packagings: [],
@@ -312,8 +319,13 @@ export default function Products() {
     setForm({
       name: product.name,
       category: product.category,
+      productGroup: product.productGroup || "",
       sku: product.sku,
       barcode: product.barcode,
+      companyName: product.companyName || "",
+      genericName: product.genericName || "",
+      preferredSupplierId: product.preferredSupplierId || "",
+      mrp: String(product.mrp ?? product.sellingPrice),
       purchasePrice: String(
         product.purchasePrice,
       ),
@@ -399,8 +411,13 @@ export default function Products() {
         category:
           form.category.trim() ||
           "General",
+        productGroup: form.productGroup.trim() || undefined,
         sku: form.sku.trim(),
         barcode,
+        companyName: form.companyName.trim() || undefined,
+        genericName: form.genericName.trim() || undefined,
+        preferredSupplierId: form.preferredSupplierId || undefined,
+        mrp: Number(form.mrp) || Number(form.sellingPrice) || 0,
         purchasePrice:
           Number(form.purchasePrice) || 0,
         sellingPrice:
