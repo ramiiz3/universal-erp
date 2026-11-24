@@ -513,7 +513,7 @@ export default function Products() {
       setSelectedProductIds([])
       if (selectedProduct && result.deletedIds.includes(selectedProduct.id)) setSelectedProduct(null)
       const blockedSummary = result.blocked.length
-        ? "\n\nKept because stock or business history exists:\\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\\n")
+        ? "\n\nKept because stock or business history exists:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
         : ""
       window.alert(`${result.deletedIds.length} product(s) deleted.${blockedSummary}`)
     } catch (error) {
