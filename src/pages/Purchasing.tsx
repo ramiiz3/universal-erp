@@ -26,6 +26,8 @@ type PurchaseLine = {
   name: string
   barcode: string
   quantity: number
+  bonusQuantity: number
+  mrp: number
   purchasePrice: number
   packageId?: string
   packageName?: string
@@ -63,6 +65,9 @@ export default function Purchasing() {
   const [search, setSearch] = useState("")
   const [supplierId, setSupplierId] = useState(initialPurchaseDraft?.supplierId ?? "")
   const [supplierInvoice, setSupplierInvoice] = useState(initialPurchaseDraft?.supplierInvoice ?? "")
+  const [grnNumber, setGrnNumber] = useState(initialPurchaseDraft?.grnNumber ?? "")
+  const [bonusQuantity, setBonusQuantity] = useState(initialPurchaseDraft?.bonusQuantity ?? "0")
+  const [mrp, setMrp] = useState(initialPurchaseDraft?.mrp ?? "")
   const [barcode, setBarcode] = useState(initialPurchaseDraft?.barcode ?? "")
   const [selectedProductId, setSelectedProductId] = useState(initialPurchaseDraft?.selectedProductId ?? "")
   const [quantity, setQuantity] = useState(initialPurchaseDraft?.quantity ?? "")
@@ -132,6 +137,9 @@ export default function Purchasing() {
   function resetForm() {
     setSupplierId("")
     setSupplierInvoice("")
+    setGrnNumber("")
+    setBonusQuantity("0")
+    setMrp("")
     setBarcode("")
     setSelectedProductId("")
     setQuantity("")
@@ -154,6 +162,9 @@ export default function Purchasing() {
       savePurchaseDraft({
         supplierId,
         supplierInvoice,
+        grnNumber,
+        bonusQuantity,
+        mrp,
         barcode,
         selectedProductId,
         quantity,
@@ -209,7 +220,7 @@ export default function Purchasing() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save the purchase draft.")
     }
-  }, [showForm, supplierId, supplierInvoice, barcode, selectedProductId, quantity, purchasePrice, selectedPackageId, batch, expiry, lines, warehouseId, locationId])
+  }, [showForm, supplierId, supplierInvoice, grnNumber, bonusQuantity, mrp, barcode, selectedProductId, quantity, purchasePrice, selectedPackageId, batch, expiry, lines, warehouseId, locationId])
 
   function selectProduct(productId: string) {
     setSelectedProductId(productId)
@@ -220,9 +231,8 @@ export default function Purchasing() {
     )
 
     if (product) {
-      setPurchasePrice(
-        product.purchasePrice.toFixed(2),
-      )
+      setPurchasePrice(product.purchasePrice.toFixed(2))
+      setMrp(String(product.mrp ?? product.sellingPrice))
     }
   }
 
