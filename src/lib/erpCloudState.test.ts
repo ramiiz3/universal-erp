@@ -109,43 +109,40 @@ describe("pharmacy ERP cloud-state snapshots", () => {
   })
 
   it("merges non-overlapping edits to the same product from two workstations", () => {
-    const base = createERPCloudState(storage)
-    const local = {
-      ...base,
-      entries: base.entries.map((entry, index) => index === 0 ? {
-        ...entry,
-        value: JSON.stringify({ products: [{ id: "p1", name: "New name", category: "General" }] }),
-      } : entry),
+    const snapshot = (name: string, category: string) => {
+      const base = createERPCloudState(storage)
+      return {
+        ...base,
+        entries: base.entries.map((entry, index) => index === 0
+          ? { ...entry, value: JSON.stringify({ products: [{ id: "p1", name, category }] }) }
+          : entry),
+      }
     }
-    const remote = {
-      ...base,
-      entries: base.entries.map((entry, index) => index === 0 ? {
-        ...entry,
-        value: JSON.stringify({ products: [{ id: "p1", name: "Old name", category: "Pain Relief" }] }),
-      } : entry),
-    }
+    const base = snapshot("Old name", "General")
+    const local = snapshot("New name", "General")
+    const remote = snapshot("Old name", "Pain Relief")
 
     const result = mergeERPCloudStates(base, local, remote)
     expect(result.conflicts).toEqual([])
     expect(result.state).not.toBeNull()
-    const mergedEntry = result.state!.entries[0]!
-    expect(JSON.parse(mergedEntry.value ?? "{}")).toEqual({
+    expect(JSON.parse(result.state!.entries[0]!.value ?? "{}")).toEqual({
       products: [{ id: "p1", name: "New name", category: "Pain Relief" }],
     })
   })
 
   it("merges independent product additions while preserving both workstation records", () => {
-    const base = createERPCloudState(storage)
+    const empty = createERPCloudState(storage)
     const snapshot = (products: Array<{ id: string; name: string }>) => ({
-      ...base,
-      entries: base.entries.map((entry, index) => index === 0
+      ...empty,
+      entries: empty.entries.map((entry, index) => index === 0
         ? { ...entry, value: JSON.stringify({ products }) }
         : entry),
     })
+    const base = snapshot([])
     const local = snapshot([{ id: "p1", name: "Product One" }])
     const remote = snapshot([{ id: "p2", name: "Product Two" }])
 
-    const result = mergeERPCloudStates(snapshot([]), local, remote)
+    const result = mergeERPCloudStates(base, local, remote)
     expect(result.conflicts).toEqual([])
     expect(JSON.parse(result.state!.entries[0]!.value ?? "{}").products).toEqual([
       { id: "p1", name: "Product One" },
@@ -154,13 +151,15 @@ describe("pharmacy ERP cloud-state snapshots", () => {
   })
 
   it("reports overlapping edits instead of silently choosing one workstation", () => {
-    const base = createERPCloudState(storage)
-    const snapshot = (name: string) => ({
-      ...base,
-      entries: base.entries.map((entry, index) => index === 0
-        ? { ...entry, value: JSON.stringify({ products: [{ id: "p1", name }] }) }
-        : entry),
-    })
+    const snapshot = (name: string) => {
+      const empty = createERPCloudState(storage)
+      return {
+        ...empty,
+        entries: empty.entries.map((entry, index) => index === 0
+          ? { ...entry, value: JSON.stringify({ products: [{ id: "p1", name }] }) }
+          : entry),
+      }
+    }
 
     const result = mergeERPCloudStates(
       snapshot("Original"),
@@ -168,14 +167,14 @@ describe("pharmacy ERP cloud-state snapshots", () => {
       snapshot("Remote correction"),
     )
     expect(result.state).toBeNull()
-    expect(result.conflicts).toContain("universal-erp-demo-store.products[id=p1].name")
+    expect(result.conflicts).toContain(`${ERP_BACKUP_STORAGE_KEYS[0]}.products[id=p1].name`)
   })
 
   it("rejects a delete on one workstation when the other workstation edited that same record", () => {
-    const base = createERPCloudState(storage)
+    const empty = createERPCloudState(storage)
     const snapshot = (products: Array<{ id: string; name: string }>) => ({
-      ...base,
-      entries: base.entries.map((entry, index) => index === 0
+      ...empty,
+      entries: empty.entries.map((entry, index) => index === 0
         ? { ...entry, value: JSON.stringify({ products }) }
         : entry),
     })
@@ -186,7 +185,7 @@ describe("pharmacy ERP cloud-state snapshots", () => {
       snapshot([{ id: "p1", name: "Updated elsewhere" }]),
     )
     expect(result.state).toBeNull()
-    expect(result.conflicts).toContain("universal-erp-demo-store.products[id=p1]")
+    expect(result.conflicts).toContain(`${ERP_BACKUP_STORAGE_KEYS[0]}.products[id=p1]`)
   })
 
   it("rejects a restore if local writes fail and rolls back already-written keys", () => {
