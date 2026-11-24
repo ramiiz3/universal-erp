@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Banknote,
@@ -764,8 +764,8 @@ export default function POS() {
                     )?.id
 
                     return (
-                      <>
-                        <tr key={item.lineId} className="align-middle hover:bg-slate-50/70">
+                      <Fragment key={item.lineId}>
+                        <tr className="align-middle hover:bg-slate-50/70">
                           <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{item.product.sku || item.product.barcode || "—"}</td>
                           <td className="min-w-[210px] px-3 py-3">
                             <p className="font-semibold text-slate-900">{item.product.name}</p>
@@ -791,7 +791,7 @@ export default function POS() {
                               value={item.quantity}
                               onChange={(event) => {
                                 const raw = event.target.value
-                                if (/^d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
+                                if (/^\\d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
                               }}
                               className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500"
                             />
@@ -921,7 +921,7 @@ export default function POS() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })
                 )}
