@@ -3332,8 +3332,7 @@ export function ERPProvider({
     const purchaseMovements: InventoryMovement[] =
       purchaseItems.map((item, index) => {
         const matchedLot = updatedLots.find(
-          (lot) =>
-            lot.productId === item.productId && lot.batch.trim().toUpperCase() === item.batch.trim().toUpperCase() && lot.expiry === item.expiry && lot.warehouseId === receivingWarehouse.id && (lot.locationId ?? null) === (receivingLocation?.id ?? null),
+          (lot) => lot.id === item.lotId && lot.productId === item.productId,
         )
 
         return {
@@ -3361,10 +3360,14 @@ export function ERPProvider({
             expiry: item.expiry,
             purchaseQuantity: item.quantity,
             bonusQuantity: item.bonusQuantity ?? 0,
+            physicalBaseQuantity: item.baseQuantity ?? item.quantity,
             purchaseUnit: item.purchaseUnit ?? item.baseUnit ?? "",
             mrp: item.mrp ?? null,
+            actualPurchasePrice: item.actualPurchasePrice ?? item.purchasePrice,
+            totalPaidCost: item.total,
             grnNumber: purchase.grnNumber ?? purchase.purchaseNumber,
             purchaseDate: purchase.createdAt.slice(0, 10),
+            lotId: item.lotId ?? null,
             conversionFactor: item.conversionFactor ?? 1,
             baseUnit: item.baseUnit ?? "",
             unitCost: item.baseUnitPurchasePrice ?? item.purchasePrice,
