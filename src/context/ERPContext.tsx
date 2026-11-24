@@ -433,6 +433,7 @@ type ERPContextValue = {
     id: string,
     product: Omit<Product, "id">,
   ) => void
+  archiveProducts: (ids: string[]) => number
 
   deleteProduct: (id: string, options?: ProductDeletionOptions) => void
   deleteProducts: (ids: string[], options?: ProductDeletionOptions) => ProductDeletionResult
@@ -2568,6 +2569,26 @@ export function ERPProvider({
     })
   }
 
+  function archiveProducts(ids: string[]): number {
+    const requestedIds = new Set(ids)
+    const archivedIds = new Set(
+      store.products
+        .filter((product) => requestedIds.has(product.id) && product.status !== "INACTIVE")
+        .map((product) => product.id),
+    )
+    if (!archivedIds.size) return 0
+
+    persistStore({
+      ...store,
+      products: store.products.map((product) =>
+        archivedIds.has(product.id)
+          ? { ...product, status: "INACTIVE" }
+          : product,
+      ),
+    })
+    return archivedIds.size
+  }
+
   function deleteProducts(
     ids: string[],
     options: ProductDeletionOptions = {},
@@ -4127,6 +4148,7 @@ export function ERPProvider({
         adjustStock,
         recordMovement,
         updateProduct,
+        archiveProducts,
         deleteProduct,
         deleteProducts,
         receiveStock,
