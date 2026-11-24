@@ -3,6 +3,10 @@ import { parseExpiryDate } from "./expiry"
 
 export const INVENTORY_COLUMNS = [
   { key: "serial", label: "SL (Serial Number — ignored)", aliases: ["sl", "serial", "serial number"] },
+  { key: "purchaseDate", label: "Purchase Date", aliases: ["purchase date", "date", "grn date", "receipt date", "transaction date"] },
+  { key: "grnNumber", label: "GRN Number", aliases: ["grn", "grn no", "grn number", "goods receipt number", "receipt number", "purchase receipt"] },
+  { key: "supplierName", label: "Supplier", aliases: ["supplier", "supplier name", "vendor", "vendor name"] },
+  { key: "companyName", label: "Company", aliases: ["company", "company name", "manufacturer company"] },
   { key: "productId", label: "Product ID", aliases: ["product id", "productid", "erp product id"] },
   { key: "lotId", label: "Inventory Lot ID", aliases: ["inventory lot id", "lot id", "lotid"] },
   { key: "name", label: "Product Name", aliases: ["product", "product name", "name", "medicine", "description", "item name"] },
@@ -10,6 +14,8 @@ export const INVENTORY_COLUMNS = [
   { key: "sku", label: "SKU", aliases: ["sku", "item code", "product code", "stock code"] },
   { key: "category", label: "Category", aliases: ["category", "product category"] },
   { key: "manufacturer", label: "Manufacturer", aliases: ["manufacturer", "brand"] },
+  { key: "mrp", label: "MRP", aliases: ["mrp", "maximum retail price", "max retail price", "retail mrp"] },
+  { key: "bonusQuantity", label: "Bonus Quantity", aliases: ["bonus", "bonus qty", "bonus quantity", "free qty", "free quantity", "scheme qty"] },
   { key: "unit", label: "Unit", aliases: ["unit", "uom", "unit of measure"] },
   { key: "purchasePrice", label: "Product Purchase Price", aliases: ["product purchase price", "purchase price", "cost price"] },
   { key: "sellingPrice", label: "Product Selling Price", aliases: ["product selling price", "selling price", "sale price", "retail price"] },
@@ -18,7 +24,7 @@ export const INVENTORY_COLUMNS = [
   { key: "batch", label: "Batch", aliases: ["batch", "batch number", "lot", "lot number"] },
   { key: "expiry", label: "Inventory Lot Expiry", aliases: ["inventory lot expiry", "expiry", "expiry date", "expiration", "expiration date", "exp date"] },
   { key: "quantity", label: "Inventory Lot Quantity", aliases: ["inventory lot quantity", "quantity", "qty", "stock", "stock quantity", "on hand", "on-hand"] },
-  { key: "lotPurchasePrice", label: "Lot Purchase Cost per Unit", aliases: ["lot purchase cost per unit", "lot purchase price", "batch purchase price", "lot cost", "cost"] },
+  { key: "lotPurchasePrice", label: "Lot Purchase Cost per Unit (ACT)", aliases: ["lot purchase cost per unit", "lot purchase price", "batch purchase price", "lot cost", "cost", "act", "actual", "actual price", "actual purchase price", "buying rate", "buy rate"] },
   { key: "lotSellingPrice", label: "Lot Selling Price per Unit", aliases: ["lot selling price per unit", "lot selling price", "selling price per unit", "s price"] },
   { key: "lotTotalPurchaseValue", label: "TOTAL (Purchase Value)", aliases: ["total purchase value", "total (purchase value)", "lot total purchase value"] },
   { key: "lotTotalSellingValue", label: "TOTAL (Selling Value)", aliases: ["total selling value", "total (selling value)", "lot total selling value"] },
@@ -41,6 +47,13 @@ export type InventoryImportRecord = {
   lotSellingPrice?: number
   lotTotalPurchaseValue?: number
   lotTotalSellingValue?: number
+  purchaseDate?: string
+  grnNumber?: string
+  supplierName?: string
+  companyName?: string
+  mrp?: number
+  bonusQuantity?: number
+  purchaseQuantity?: number
   forceNewLot?: boolean
 }
 
@@ -77,19 +90,27 @@ export type InventoryImportResult = {
 export const INVENTORY_EXPORT_HEADERS = [
   "Product ID",
   "Inventory Lot ID",
+  "Purchase Date",
+  "GRN Number",
+  "Supplier",
   "Product Name",
   "Barcode",
   "SKU",
   "Category",
   "Manufacturer",
+  "Company",
   "Unit",
+  "MRP",
+  "Purchase Quantity",
+  "Bonus Quantity",
+  "Actual Purchase Price (ACT)",
   "Product Purchase Price",
   "Selling Price",
   "Minimum Stock",
   "VAT Rate",
   "Batch",
   "Expiry Date",
-  "Stock Quantity",
+  "Stock Quantity (Including Bonus)",
   "Lot Purchase Price",
   "Lot Selling Price",
   "TOTAL (Purchase Value)",
@@ -212,6 +233,21 @@ function expiryText(value: unknown) {
   return normalizedText(value)
 }
 
+function purchaseDateText(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10)
+  if (typeof value === "number") {
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000)
+    if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10)
+  }
+  const text = normalizedText(value)
+  if (!text) return ""
+  const dmy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/)
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
+  const parsed = new Date(text)
+  return Number.isNaN(parsed.getTime()) ? text : parsed.toISOString().slice(0, 10)
+}
+
 function productKey(product: InventoryProductFields, sourceProductId: string) {
   if (product.barcode?.trim()) return `barcode:${product.barcode.trim().toLowerCase()}`
   if (product.sku?.trim()) return `sku:${product.sku.trim().toLowerCase()}`
@@ -247,7 +283,7 @@ export function previewInventoryImport(
         : normalizedText(mappedValue(row, "productId"))
       const sourceLotId = normalizedText(mappedValue(row, "lotId"))
 
-      for (const key of ["name", "barcode", "sku", "category", "manufacturer", "unit"] as const) {
+      for (const key of ["name", "barcode", "sku", "category", "manufacturer", "unit", "companyName"] as const) {
         const value = normalizedText(mappedValue(row, key))
         if (value) product[key] = value
       }
@@ -264,10 +300,12 @@ export function previewInventoryImport(
         throw new Error("Product Name is required.")
       }
 
-      const quantity = parseNumber(mappedValue(row, "quantity"), "Inventory Lot Quantity")
-      if (quantity === undefined) {
+      const purchaseQuantity = parseNumber(mappedValue(row, "quantity"), "Inventory Lot Quantity")
+      if (purchaseQuantity === undefined) {
         throw new Error("Inventory Lot Quantity is required.")
       }
+      const bonusQuantity = parseNumber(mappedValue(row, "bonusQuantity"), "Bonus Quantity") ?? 0
+      const quantity = purchaseQuantity + bonusQuantity
 
       for (const key of ["purchasePrice", "sellingPrice", "minimumStock", "vatRate"] as const) {
         const label = INVENTORY_COLUMNS.find((column) => column.key === key)?.label ?? key
@@ -282,12 +320,18 @@ export function previewInventoryImport(
 
       const lotPurchasePrice = parseNumber(
         mappedValue(row, "lotPurchasePrice"),
-        "Lot Purchase Price",
+        "Actual / Lot Purchase Price",
       )
+      const mrp = parseNumber(mappedValue(row, "mrp"), "MRP")
       const lotSellingPrice = parseNumber(
         mappedValue(row, "lotSellingPrice"),
         "Lot Selling Price per Unit",
-      ) ?? product.sellingPrice
+      ) ?? mrp ?? product.sellingPrice
+      if (mrp !== undefined) product.mrp = mrp
+      const purchaseDate = purchaseDateText(mappedValue(row, "purchaseDate"))
+      if (purchaseDate && !parseExpiryDate(purchaseDate)) throw new Error("Purchase Date is not a recognizable date.")
+      const grnNumber = normalizedText(mappedValue(row, "grnNumber"))
+      const supplierName = normalizedText(mappedValue(row, "supplierName"))
       const lotTotalPurchaseValue = parseNumber(
         mappedValue(row, "lotTotalPurchaseValue"),
         "TOTAL (Purchase Value)",
@@ -314,7 +358,7 @@ export function previewInventoryImport(
         ? `source-row:${rowNumber}`
         : sourceLotId
           ? `id:${sourceLotId.toLowerCase()}`
-          : `${batch.trim().toLowerCase()}|${expiry.trim().toLowerCase()}|${importedLotPrice ?? ""}`
+          : [batch.trim().toLowerCase(), expiry.trim().toLowerCase(), importedLotPrice ?? "", grnNumber.toLowerCase(), purchaseDate, supplierName.toLowerCase()].join("|")
       const duplicateKey = `${key}|${lotIdentity}`
       if (seenLots.has(duplicateKey)) {
         duplicateRows.push({
@@ -335,6 +379,12 @@ export function previewInventoryImport(
         batch,
         expiry,
         quantity,
+        purchaseQuantity,
+        bonusQuantity,
+        ...(purchaseDate ? { purchaseDate } : {}),
+        ...(grnNumber ? { grnNumber } : {}),
+        ...(supplierName ? { supplierName } : {}),
+        ...(mrp === undefined ? {} : { mrp }),
         ...(lotPurchasePrice === undefined ? {} : { lotPurchasePrice }),
         ...(lotSellingPrice === undefined ? {} : { lotSellingPrice }),
         ...(lotTotalPurchaseValue === undefined ? {} : { lotTotalPurchaseValue }),
@@ -437,6 +487,8 @@ export function applyInventoryImport(
           ...(fields.vatRate === undefined ? {} : { vatRate: fields.vatRate }),
           ...(fields.unit === undefined ? {} : { unit: fields.unit }),
           ...(fields.manufacturer === undefined ? {} : { manufacturer: fields.manufacturer }),
+          ...(fields.companyName === undefined ? {} : { companyName: fields.companyName }),
+          ...(fields.mrp === undefined ? {} : { mrp: fields.mrp }),
         }
         products[products.findIndex((item) => item.id === product?.id)] = product
         updatedProducts += 1
@@ -452,6 +504,8 @@ export function applyInventoryImport(
           sku: fields.sku ?? "",
           barcode: fields.barcode ?? "",
           manufacturer: fields.manufacturer,
+          companyName: fields.companyName,
+          mrp: fields.mrp,
           purchasePrice: fields.purchasePrice ?? record.lotPurchasePrice ?? 0,
           sellingPrice: fields.sellingPrice ?? record.lotSellingPrice ?? 0,
           minimumStock: fields.minimumStock ?? 0,
@@ -481,7 +535,9 @@ export function applyInventoryImport(
         lot.batch.trim().toLowerCase() === record.batch.trim().toLowerCase() &&
         lot.expiry.trim().toLowerCase() === record.expiry.trim().toLowerCase() &&
         ((record.lotPurchasePrice ?? record.product.purchasePrice) === undefined ||
-          lot.purchasePrice === (record.lotPurchasePrice ?? record.product.purchasePrice)),
+          lot.purchasePrice === (record.lotPurchasePrice ?? record.product.purchasePrice)) &&
+        (record.grnNumber === undefined || lot.grnNumber === record.grnNumber) &&
+        (record.purchaseDate === undefined || lot.purchaseDate === record.purchaseDate),
     ))
 
     if (matchingLot) {
@@ -496,6 +552,13 @@ export function applyInventoryImport(
       if (record.lotSellingPrice !== undefined) matchingLot.sellingPrice = record.lotSellingPrice
       if (record.lotTotalPurchaseValue !== undefined) matchingLot.totalPurchaseValue = record.lotTotalPurchaseValue
       if (record.lotTotalSellingValue !== undefined) matchingLot.totalSellingValue = record.lotTotalSellingValue
+      if (record.purchaseDate) matchingLot.purchaseDate = record.purchaseDate
+      if (record.grnNumber) matchingLot.grnNumber = record.grnNumber
+      if (record.supplierName) matchingLot.supplierName = record.supplierName
+      if (record.mrp !== undefined) matchingLot.mrp = record.mrp
+      if (record.bonusQuantity !== undefined) matchingLot.bonusQuantity = record.bonusQuantity
+      if (record.purchaseQuantity !== undefined) matchingLot.purchaseQuantity = record.purchaseQuantity
+      if (record.lotPurchasePrice !== undefined) matchingLot.actualPurchasePrice = record.lotPurchasePrice
       updatedLots += 1
     } else if (record.quantity > 0 || record.batch || record.expiry || record.sourceLotId || record.forceNewLot) {
       const lotId = record.sourceLotId && !usedLotIds.has(record.sourceLotId)
@@ -512,6 +575,13 @@ export function applyInventoryImport(
         ...(record.lotSellingPrice === undefined ? {} : { sellingPrice: record.lotSellingPrice }),
         ...(record.lotTotalPurchaseValue === undefined ? {} : { totalPurchaseValue: record.lotTotalPurchaseValue }),
         ...(record.lotTotalSellingValue === undefined ? {} : { totalSellingValue: record.lotTotalSellingValue }),
+        ...(record.purchaseDate ? { purchaseDate: record.purchaseDate } : {}),
+        ...(record.grnNumber ? { grnNumber: record.grnNumber } : {}),
+        ...(record.supplierName ? { supplierName: record.supplierName } : {}),
+        ...(record.mrp === undefined ? {} : { mrp: record.mrp }),
+        ...(record.bonusQuantity === undefined ? {} : { bonusQuantity: record.bonusQuantity }),
+        ...(record.purchaseQuantity === undefined ? {} : { purchaseQuantity: record.purchaseQuantity }),
+        ...(record.lotPurchasePrice === undefined ? {} : { actualPurchasePrice: record.lotPurchasePrice }),
       })
       createdLots += 1
     }
@@ -540,12 +610,20 @@ export function buildInventoryExportRows(products: Product[], lots: InventoryLot
       rows.push([
         product.id,
         lot?.id ?? "",
+        lot?.purchaseDate ?? "",
+        lot?.grnNumber ?? "",
+        lot?.supplierName ?? "",
         product.name,
         product.barcode,
         product.sku,
         product.category,
         product.manufacturer ?? "",
+        product.companyName ?? "",
         product.unit,
+        lot?.mrp ?? product.mrp ?? product.sellingPrice,
+        lot?.purchaseQuantity ?? lot?.quantity ?? 0,
+        lot?.bonusQuantity ?? 0,
+        lot?.actualPurchasePrice ?? lot?.purchasePrice ?? product.purchasePrice,
         product.purchasePrice,
         product.sellingPrice,
         product.minimumStock,
