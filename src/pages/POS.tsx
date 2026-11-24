@@ -1178,7 +1178,13 @@ export default function POS() {
                           const packageQty = selectedUnitChoice
                             ? wholePackagesInLot(lot.quantity, selectedUnitChoice.conversionFactor)
                             : 0
-                          const firstEligibleLotId = unitChooserLots.find((candidate) => !isInventoryLotExpired(candidate))?.id
+                          const firstEligibleLotId = selectedUnitChoice
+                            ? unitChooserLots.find((candidate) =>
+                                !isInventoryLotExpired(candidate) &&
+                                Boolean(candidate.expiry) &&
+                                wholePackagesInLot(candidate.quantity, selectedUnitChoice.conversionFactor) > 0,
+                              )?.id
+                            : undefined
                           const sellFirst = !expired && Boolean(lot.expiry) && lot.id === firstEligibleLotId
                           return (
                             <tr key={lot.id} className={expired ? "bg-red-50/50" : sellFirst ? "bg-emerald-50/60" : "bg-white"}>
