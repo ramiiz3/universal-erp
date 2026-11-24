@@ -813,6 +813,15 @@ export default function Purchasing() {
                       className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                     />
                   </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">GRN Number</label>
+                    <input
+                      value={grnNumber}
+                      onChange={(event) => setGrnNumber(event.target.value)}
+                      placeholder="Goods receipt number"
+                      className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
