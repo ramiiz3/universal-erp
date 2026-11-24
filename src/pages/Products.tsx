@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import BarcodePreview from "../components/BarcodePreview"
 import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { getERPSettings } from "../lib/erpSettings"
@@ -72,6 +73,8 @@ function money(value: number) {
 }
 
 export default function Products() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const {
     products,
     addProduct,
@@ -249,7 +252,7 @@ export default function Products() {
       return {
         ...current,
         purchasePrice: value,
-        sellingPrice: nextSelling === "" ? "" : nextSelling.toFixed(2),
+        sellingPrice: typeof nextSelling === "number" ? nextSelling.toFixed(2) : nextSelling,
         marginPercentage: calculatedMargin === null ? current.marginPercentage : String(calculatedMargin),
       }
     })
