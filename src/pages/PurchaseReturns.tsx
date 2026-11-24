@@ -4,13 +4,10 @@ import { useERP } from "../context/ERPContext"
 import { getERPSettings } from "../lib/erpSettings"
 import { getPurchaseReturnedQuantity } from "../lib/purchaseReturns"
 
-const today = () => new Date().toISOString().slice(0, 10)
-
 export default function PurchaseReturns() {
   const {
     purchases,
     purchaseReturns,
-    inventoryLots,
     createPurchaseReturn,
   } = useERP()
   const [selectedPurchaseId, setSelectedPurchaseId] = useState("")
