@@ -1203,7 +1203,7 @@ export default function Products() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Sub-units & packaging</h4>
-                    <p className="mt-1 text-xs text-slate-500">Example: base unit Tablet; 1 Strip = 10 Tablets. Purchasing and POS will convert quantities automatically.</p>
+                    <p className="mt-1 text-xs text-slate-500">Define how each purchase or selling unit converts to the stock unit. Example: base unit Box; 1 Strip = 0.1 Box; 1 Piece = 0.01 Box (for a 10-strip / 100-piece box).</p>
                   </div>
                   <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add sub-unit</button>
                 </div>
@@ -1218,8 +1218,9 @@ export default function Products() {
                     <label className="space-y-1 text-xs font-medium">Purchase / sales unit
                       <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                     </label>
-                    <label className="space-y-1 text-xs font-medium">Units per package
+                    <label className="space-y-1 text-xs font-medium">Stock-unit quantity per sub-unit
                       <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      <span className="block font-normal text-slate-500">For base unit Box: enter 0.1 for one strip when 10 strips make a box.</span>
                     </label>
                     <label className="space-y-1 text-xs font-medium">Package barcode (optional)
                       <input value={packaging.barcode ?? ""} onChange={(event) => updatePackaging(index, { barcode: event.target.value })} placeholder="Scan or enter barcode" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
@@ -1233,7 +1234,7 @@ export default function Products() {
                     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.purchaseEnabled} onChange={(event) => updatePackaging(index, { purchaseEnabled: event.target.checked })} /> Allow purchasing</label>
                     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Allow sales / POS</label>
                     <div className="flex items-center justify-between gap-2 text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
-                      <span>1 {packaging.unit || packaging.name || "package"} = {packaging.conversionFactor || 0} {form.unit || "base units"}</span>
+                      <span>1 {packaging.unit || packaging.name || "sub-unit"} = {packaging.conversionFactor || 0} {form.unit || "stock units"}</span>
                       <button type="button" onClick={() => removePackaging(index)} className="font-semibold text-red-600 hover:text-red-700">Remove sub-unit</button>
                     </div>
                   </div>
