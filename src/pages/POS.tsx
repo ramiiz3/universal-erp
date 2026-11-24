@@ -6,8 +6,7 @@ import {
   CheckCircle2,
   CreditCard,
   Landmark,
-  Minus,
-  Plus,
+  ChevronDown,
   Search,
   ScanLine,
   ShoppingCart,
@@ -133,10 +132,7 @@ export default function POS() {
   const [error, setError] = useState("")
   const [successInvoice, setSuccessInvoice] = useState("")
   const [cameraOpen, setCameraOpen] = useState(false)
-  const [unitChooserProduct, setUnitChooserProduct] = useState<Product | null>(null)
-  const [unitChooserPackageId, setUnitChooserPackageId] = useState("")
-  const [unitChooserQuantity, setUnitChooserQuantity] = useState("1")
-  const [unitChooserCartLineId, setUnitChooserCartLineId] = useState<string | null>(null)
+  const [uomPickerLineId, setUomPickerLineId] = useState<string | null>(null)
 
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -206,47 +202,6 @@ export default function POS() {
     })
   }, [products, search])
 
-  const unitChooserLots = useMemo(() => {
-    if (!unitChooserProduct) return []
-    return sortInventoryLotsByFEFO(
-      inventoryLots.filter((lot) =>
-        lot.productId === unitChooserProduct.id &&
-        lot.warehouseId === warehouseId &&
-        lot.quantity > 0,
-      ),
-    )
-  }, [inventoryLots, unitChooserProduct, warehouseId])
-
-  const unitChoices = useMemo<UnitChoice[]>(() => {
-    if (!unitChooserProduct) return []
-    return [
-      {
-        id: "",
-        name: unitChooserProduct.unit,
-        unit: unitChooserProduct.unit,
-        conversionFactor: 1,
-        sellingPrice: unitChooserProduct.sellingPrice,
-      },
-      ...(unitChooserProduct.packagings ?? [])
-        .filter((packaging) => packaging.salesEnabled)
-        .map((packaging) => ({
-          id: packaging.id,
-          name: packaging.name || packaging.unit,
-          unit: packaging.unit || packaging.name,
-          conversionFactor: packaging.conversionFactor,
-          sellingPrice: packaging.sellingPrice ?? unitChooserProduct.sellingPrice * packaging.conversionFactor,
-          packaging,
-        })),
-    ]
-  }, [unitChooserProduct])
-
-  const selectedUnitChoice = unitChoices.find((choice) => choice.id === unitChooserPackageId) ?? unitChoices[0]
-  const selectedUnitAvailable = selectedUnitChoice
-    ? unitChooserLots.reduce((sum, lot) =>
-        sum + (isInventoryLotExpired(lot) ? 0 : wholePackagesInLot(lot.quantity, selectedUnitChoice.conversionFactor)),
-      0)
-    : 0
-
   const saleAllocationPreview = useMemo(
     () =>
       allocateSaleLots(
@@ -271,30 +226,6 @@ export default function POS() {
   )
   const { subtotal, discount: discountAmount, vat: vatAmount } = saleTotals
   const total = Math.max(0, Number(saleTotals.total.toFixed(2)))
-
-  function closeUnitChooser() {
-    setUnitChooserProduct(null)
-    setUnitChooserPackageId("")
-    setUnitChooserQuantity("1")
-    setUnitChooserCartLineId(null)
-  }
-
-  function openUnitChooser(product: Product, cartLineId: string | null = null) {
-    if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
-      setError(`${product.name} is archived or discontinued and cannot be sold.`)
-      return
-    }
-    if (!product.unit?.trim()) {
-      setError(`${product.name} has no stock unit configured. Open Product Master, choose the inventory unit (for example Box), and configure its smaller selling units such as Strip and Tablet before using POS.`)
-      return
-    }
-    setError("")
-    setUnitChooserProduct(product)
-    setUnitChooserCartLineId(cartLineId)
-    const existingLine = cartLineId ? cart.find((item) => item.lineId === cartLineId) : undefined
-    setUnitChooserPackageId(existingLine?.packageId ?? "")
-    setUnitChooserQuantity(String(existingLine?.quantity ?? 1))
-  }
 
   function handleBarcode(code: string) {
     const cleanCode = code.trim()
@@ -323,13 +254,68 @@ export default function POS() {
       packaging.barcode?.trim().toLowerCase() === normalizedCode,
     )
 
-    // A pack barcode identifies the exact UOM. A product/base barcode opens
-    // the UOM selector so the cashier chooses the unit before adding it.
+    // A pack barcode adds that exact selling unit. A product barcode adds
+    // the stock unit; the cashier can change the UOM in the invoice row.
     if (matchedPackage) addToCart(product, matchedPackage, 1)
-    else openUnitChooser(product)
+    else addToCart(product)
 
     setBarcode("")
     requestAnimationFrame(() => barcodeInputRef.current?.focus())
+  }
+
+  function getUnitChoices(product: Product): UnitChoice[] {
+    const stockUnit = product.unit?.trim() || "Unit"
+    return [
+      {
+        id: "",
+        name: stockUnit,
+        unit: stockUnit,
+        conversionFactor: 1,
+        sellingPrice: product.sellingPrice,
+      },
+      ...(product.packagings ?? [])
+        .filter((packaging) => packaging.salesEnabled)
+        .map((packaging) => ({
+          id: packaging.id,
+          name: packaging.name || packaging.unit,
+          unit: packaging.unit || packaging.name,
+          conversionFactor: packaging.conversionFactor,
+          sellingPrice: packaging.sellingPrice ?? product.sellingPrice * packaging.conversionFactor,
+          packaging,
+        })),
+    ]
+  }
+
+  function getSaleRequests(items: CartItem[]) {
+    return items.map((item) => ({
+      product: item.product,
+      requestId: item.lineId,
+      warehouseId,
+      quantity: item.quantity * item.conversionFactor,
+      saleUnitConversionFactor: item.conversionFactor,
+      unitPrice: item.unitPrice / item.conversionFactor,
+      unitPriceOverride: true,
+    }))
+  }
+
+  function getAvailableUomQuantity(
+    productId: string,
+    conversionFactor: number,
+    excludedLineId?: string,
+  ) {
+    const otherLines = cart.filter(
+      (item) => item.productId === productId && item.lineId !== excludedLineId,
+    )
+    const otherAllocation = allocateSaleLots(
+      getSaleRequests(otherLines),
+      inventoryLots,
+    )
+    if (otherAllocation.unallocated.length > 0) return 0
+    return getSaleableInventoryLots(
+      otherAllocation.updatedLots,
+      productId,
+      warehouseId,
+    ).reduce((sum, lot) => sum + wholePackagesInLot(lot.quantity, conversionFactor), 0)
   }
 
   function addToCart(
@@ -339,6 +325,10 @@ export default function POS() {
   ): boolean {
     if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
+      return false
+    }
+    if (!product.unit?.trim()) {
+      setError(`${product.name} has no inventory unit. Open Product Master and set the outer stock unit (for example Box) before selling it.`)
       return false
     }
     if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
@@ -356,160 +346,129 @@ export default function POS() {
       return false
     }
 
-    const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
-    const saleableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
-    const otherCartBaseQuantity = cart
-      .filter((item) => item.productId === product.id)
-      .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
-    const requestedBaseQuantity = requestedQuantity * factor
-
-    if (requestedBaseQuantity + otherCartBaseQuantity > saleableBaseStock + 1e-8) {
-      setError(`${product.name} does not have enough non-expired stock for this quantity.`)
-      return false
-    }
-
-    const availableWholePackages = saleableLots.reduce(
-      (sum, lot) => sum + wholePackagesInLot(lot.quantity, factor),
-      0,
-    )
-    const otherSameUomQuantity = cart
-      .filter((item) => item.productId === product.id && (item.packageId ?? "") === (selectedPackage?.id ?? ""))
-      .reduce((sum, item) => sum + item.quantity, 0)
-    if (requestedQuantity + otherSameUomQuantity > availableWholePackages) {
-      setError(`Only ${availableWholePackages} complete ${selectedPackage?.unit ?? product.unit} unit(s) are available across the supplier batches.`)
-      return false
-    }
-
     const packagePrice = selectedPackage?.sellingPrice ??
       product.sellingPrice * factor
-
-    setCart((current) => {
-      const existing = current.find((item) =>
-        item.productId === product.id &&
-        (item.packageId ?? "") === (selectedPackage?.id ?? ""),
-      )
-      if (existing) {
-        return current.map((item) =>
+    const existing = cart.find((item) =>
+      item.productId === product.id &&
+      (item.packageId ?? "") === (selectedPackage?.id ?? ""),
+    )
+    const nextCart = existing
+      ? cart.map((item) =>
           item.lineId === existing.lineId
             ? { ...item, quantity: item.quantity + requestedQuantity }
             : item,
         )
-      }
-      return [
-        ...current,
-        {
-          lineId: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          productId: product.id,
-          product,
-          quantity: requestedQuantity,
-          unitPrice: packagePrice,
-          packageId: selectedPackage?.id,
-          sellingUnit: selectedPackage?.unit ?? product.unit,
-          conversionFactor: factor,
-        },
-      ]
-    })
+      : [
+          ...cart,
+          {
+            lineId: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            productId: product.id,
+            product,
+            quantity: requestedQuantity,
+            unitPrice: packagePrice,
+            packageId: selectedPackage?.id,
+            sellingUnit: selectedPackage?.unit ?? product.unit,
+            conversionFactor: factor,
+          },
+        ]
+
+    const productAllocation = allocateSaleLots(
+      getSaleRequests(nextCart.filter((item) => item.productId === product.id)),
+      inventoryLots,
+    )
+    if (productAllocation.unallocated.length > 0) {
+      const available = getAvailableUomQuantity(product.id, factor, existing?.lineId)
+      setError(`Not enough stock to add ${requestedQuantity} ${selectedPackage?.unit ?? product.unit}. Available for this selling unit: ${available}.`)
+      return false
+    }
+
+    setCart(nextCart)
+    setUomPickerLineId(null)
     setError("")
     return true
   }
 
-  function confirmUnitSelection() {
-    if (!unitChooserProduct || !selectedUnitChoice) return
-    const quantity = Number(unitChooserQuantity)
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      setError("Quantity must be a whole number greater than zero.")
-      return
-    }
-    const factor = selectedUnitChoice.conversionFactor
-    if (!Number.isFinite(factor) || factor <= 0) {
-      setError("The selected selling unit has an invalid stock conversion.")
+  function selectCartUom(lineId: string, choice: UnitChoice) {
+    const currentLine = cart.find((item) => item.lineId === lineId)
+    if (!currentLine) return
+    if (!Number.isFinite(choice.conversionFactor) || choice.conversionFactor <= 0) {
+      setError("This selling unit has an invalid stock conversion.")
       return
     }
 
-    if (unitChooserCartLineId) {
-      const line = cart.find((item) => item.lineId === unitChooserCartLineId)
-      if (!line) {
-        setError("This cart line no longer exists. Select the product again.")
-        closeUnitChooser()
-        return
-      }
-      const saleableLots = getSaleableInventoryLots(inventoryLots, line.productId, warehouseId)
-      const otherCartBaseQuantity = cart
-        .filter((item) => item.productId === line.productId && item.lineId !== line.lineId)
-        .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
-      const availableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
-      const availableInSelectedUnit = saleableLots.reduce(
-        (sum, lot) => sum + wholePackagesInLot(lot.quantity, factor),
-        0,
+    const nextCart = cart.map((item) =>
+      item.lineId === lineId
+        ? {
+            ...item,
+            packageId: choice.packaging?.id,
+            sellingUnit: choice.unit,
+            conversionFactor: choice.conversionFactor,
+            unitPrice: choice.sellingPrice,
+          }
+        : item,
+    )
+    const productAllocation = allocateSaleLots(
+      getSaleRequests(nextCart.filter((item) => item.productId === currentLine.productId)),
+      inventoryLots,
+    )
+    if (productAllocation.unallocated.length > 0) {
+      const available = getAvailableUomQuantity(
+        currentLine.productId,
+        choice.conversionFactor,
+        lineId,
       )
-      if (quantity > availableInSelectedUnit || otherCartBaseQuantity + quantity * factor > availableBaseStock + 1e-8) {
-        setError(`Only ${availableInSelectedUnit} complete ${selectedUnitChoice.unit} unit(s) are available for this product.`)
-        return
-      }
-      setCart((current) => current.map((item) =>
-        item.lineId === line.lineId
-          ? {
-              ...item,
-              quantity,
-              unitPrice: selectedUnitChoice.sellingPrice,
-              packageId: selectedUnitChoice.packaging?.id,
-              sellingUnit: selectedUnitChoice.unit,
-              conversionFactor: factor,
-            }
-          : item,
-      ))
-      setError("")
-      closeUnitChooser()
+      setError(`Only ${available} complete ${choice.unit} unit(s) are available after the other lines in this sale.`)
       return
     }
 
-    const added = addToCart(unitChooserProduct, selectedUnitChoice.packaging, quantity)
-    if (added) closeUnitChooser()
+    setCart(nextCart)
+    setUomPickerLineId(null)
+    setError("")
   }
 
   function updateQuantity(lineId: string, nextQuantity: number) {
     const cartItem = cart.find((item) => item.lineId === lineId)
     if (!cartItem) return
 
-    if (nextQuantity <= 0) {
-      setCart((current) => current.filter((item) => item.lineId !== lineId))
-      return
-    }
     if (!Number.isInteger(nextQuantity)) {
       setError("Quantity must be a whole number.")
       return
     }
+    if (nextQuantity <= 0) {
+      setCart((current) => current.filter((item) => item.lineId !== lineId))
+      setUomPickerLineId(null)
+      return
+    }
 
-    const saleableLots = getSaleableInventoryLots(inventoryLots, cartItem.productId, warehouseId)
-    const saleableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
-    const otherCartBaseQuantity = cart
-      .filter((item) => item.productId === cartItem.productId && item.lineId !== lineId)
-      .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
-    const packageCapacity = saleableLots.reduce(
-      (sum, lot) => sum + wholePackagesInLot(lot.quantity, cartItem.conversionFactor),
-      0,
+    const nextCart = cart.map((item) =>
+      item.lineId === lineId ? { ...item, quantity: nextQuantity } : item,
     )
-    if (
-      nextQuantity > packageCapacity ||
-      otherCartBaseQuantity + nextQuantity * cartItem.conversionFactor > saleableBaseStock + 1e-8
-    ) {
-      setError(`Not enough complete ${cartItem.sellingUnit} units are available in non-expired batches.`)
+    const productAllocation = allocateSaleLots(
+      getSaleRequests(nextCart.filter((item) => item.productId === cartItem.productId)),
+      inventoryLots,
+    )
+    if (productAllocation.unallocated.length > 0) {
+      const available = getAvailableUomQuantity(
+        cartItem.productId,
+        cartItem.conversionFactor,
+        lineId,
+      )
+      setError(`Only ${available} complete ${cartItem.sellingUnit} unit(s) are available.`)
       return
     }
 
     setError("")
-    setCart((current) => current.map((item) =>
-      item.lineId === lineId ? { ...item, quantity: nextQuantity } : item,
-    ))
+    setCart(nextCart)
   }
 
   function removeItem(lineId: string) {
     setCart((current) => current.filter((item) => item.lineId !== lineId))
+    setUomPickerLineId(null)
   }
 
   function clearSale() {
     setCart([])
-    closeUnitChooser()
+    setUomPickerLineId(null)
     setCustomerId("")
     setPaymentMethod("Cash")
     setDiscount("")
