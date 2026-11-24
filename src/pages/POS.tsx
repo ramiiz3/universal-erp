@@ -284,6 +284,10 @@ export default function POS() {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
       return
     }
+    if (!product.unit?.trim()) {
+      setError(`${product.name} has no stock unit configured. Open Product Master, choose the inventory unit (for example Box), and configure its smaller selling units such as Strip and Tablet before using POS.`)
+      return
+    }
     setError("")
     setUnitChooserProduct(product)
     setUnitChooserCartLineId(cartLineId)
@@ -1066,7 +1070,7 @@ export default function POS() {
                   {unitChooserProduct.name}
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
+                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit || "unit not configured"} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
                 </p>
               </div>
               <button
