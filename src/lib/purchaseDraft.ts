@@ -92,6 +92,19 @@ export function clearPurchaseDraft() {
 export function setPurchaseDraftMinimized(minimized: boolean) {
   const draft = loadPurchaseDraft()
   if (!draft) return
-  const { updatedAt: _updatedAt, ...rest } = draft
-  savePurchaseDraft({ ...rest, minimized })
+  savePurchaseDraft({
+    supplierId: draft.supplierId,
+    supplierInvoice: draft.supplierInvoice,
+    barcode: draft.barcode,
+    selectedProductId: draft.selectedProductId,
+    quantity: draft.quantity,
+    purchasePrice: draft.purchasePrice,
+    selectedPackageId: draft.selectedPackageId,
+    batch: draft.batch,
+    expiry: draft.expiry,
+    lines: draft.lines,
+    warehouseId: draft.warehouseId,
+    locationId: draft.locationId,
+    minimized,
+  })
 }
