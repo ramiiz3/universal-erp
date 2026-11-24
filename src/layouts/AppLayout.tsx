@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { FormEvent } from "react"
 import { NavLink, Outlet, useNavigate } from "react-router-dom"
 import {
@@ -30,10 +30,12 @@ import {
   Calculator,
   RotateCcw,
   RefreshCw,
+  PackagePlus,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { useAuth } from "../auth/AuthProvider"
 import GlobalERPSearch from "../components/GlobalERPSearch"
+import { loadPurchaseDraft, PURCHASE_DRAFT_EVENT } from "../lib/purchaseDraft"
 import { useTheme } from "../context/ThemeContext"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
@@ -189,6 +191,23 @@ export default function AppLayout() {
   const [syncResolutionBusy, setSyncResolutionBusy] = useState(false)
   const [syncResolutionError, setSyncResolutionError] = useState("")
   const [syncResolutionSuccess, setSyncResolutionSuccess] = useState("")
+  const [minimizedPurchaseDraft, setMinimizedPurchaseDraft] = useState(() => {
+    const draft = loadPurchaseDraft()
+    return draft?.minimized ? draft : null
+  })
+
+  useEffect(() => {
+    const refreshPurchaseDraft = () => {
+      const draft = loadPurchaseDraft()
+      setMinimizedPurchaseDraft(draft?.minimized ? draft : null)
+    }
+    window.addEventListener(PURCHASE_DRAFT_EVENT, refreshPurchaseDraft)
+    window.addEventListener("storage", refreshPurchaseDraft)
+    return () => {
+      window.removeEventListener(PURCHASE_DRAFT_EVENT, refreshPurchaseDraft)
+      window.removeEventListener("storage", refreshPurchaseDraft)
+    }
+  }, [])
 
   const [owner, setOwner] =
     useState<OwnerProfile>(loadOwner)
@@ -905,6 +924,25 @@ export default function AppLayout() {
           </div>
         </div>
       )}
+      {minimizedPurchaseDraft && (
+        <div className="fixed bottom-5 left-5 z-[80] flex max-w-[calc(100vw-2.5rem)] items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3 shadow-2xl dark:border-emerald-900 dark:bg-[#111a15]">
+          <div className="rounded-xl bg-emerald-50 p-2.5 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+            <PackagePlus size={19} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">Purchase draft minimised</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{minimizedPurchaseDraft.lines.length} product line{minimizedPurchaseDraft.lines.length === 1 ? "" : "s"} saved in this browser session</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/purchasing?resumePurchase=1")}
+            className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+          >
+            Resume Purchase
+          </button>
+        </div>
+      )}
+
       {syncResolutionSuccess && (
         <div role="status" className="fixed bottom-5 right-5 z-[90] max-w-md rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 shadow-xl dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
           {syncResolutionSuccess}
