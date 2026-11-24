@@ -178,8 +178,8 @@ export function buildPurchaseReturn(
           lot.productId === source.productId &&
           lot.batch.trim().toUpperCase() === source.batch.trim().toUpperCase() &&
           lot.expiry === source.expiry &&
-          (lot.warehouseId ?? null) === (purchase.warehouseId ?? null) &&
-          (lot.locationId ?? null) === (purchase.locationId ?? null)
+          (!purchase.warehouseId || lot.warehouseId === purchase.warehouseId) &&
+          (purchase.locationId === undefined || (lot.locationId ?? null) === (purchase.locationId ?? null))
       })
       .sort((left, right) => left.id.localeCompare(right.id))
 
