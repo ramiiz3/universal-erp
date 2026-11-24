@@ -333,6 +333,7 @@ export default function POS() {
     product: Product,
     selectedPackage?: SelectedProductPackaging,
     requestedQuantity = 1,
+    forceNewLine = false,
   ): boolean {
     if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
@@ -371,7 +372,7 @@ export default function POS() {
 
     const packagePrice = effectivePackage?.sellingPrice ??
       product.sellingPrice * factor
-    const existing = cart.find((item) =>
+    const existing = forceNewLine ? undefined : cart.find((item) =>
       item.productId === product.id &&
       (item.packageId ?? "") === (effectivePackage?.id ?? ""),
     )
@@ -690,7 +691,7 @@ export default function POS() {
                         type="button"
                         disabled={stock <= 0 || !product.unit?.trim()}
                         onClick={() => {
-                          if (addToCart(product)) setSearch("")
+                          if (addToCart(product, undefined, 1, true)) setSearch("")
                         }}
                         className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -699,7 +700,7 @@ export default function POS() {
                           <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
                         </span>
                         <span className="text-right text-xs text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
-                        <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add</span>
+                        <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add line</span>
                       </button>
                     )
                   })}
