@@ -158,6 +158,9 @@ export function detectInventoryColumnMapping(headers: unknown[]): InventoryColum
       ["total selling value", "total selling", "selling total"].includes(header),
     )
     if (purchaseTotalIndex >= 0) mapping.lotTotalPurchaseValue = purchaseTotalIndex
+    else if (totalIndexes.length === 1 && mapping.lotPurchasePrice != null) {
+      mapping.lotTotalPurchaseValue = totalIndexes[0]
+    }
     if (sellingTotalIndex >= 0) mapping.lotTotalSellingValue = sellingTotalIndex
   }
 
@@ -182,9 +185,8 @@ export function detectInventoryHeaderRow(rows: unknown[][]): DetectedInventoryHe
       hasSerial &&
       hasExpiry &&
       hasCost &&
-      mapping.lotSellingPrice != null &&
-      mapping.lotTotalPurchaseValue != null &&
-      mapping.lotTotalSellingValue != null
+      (mapping.lotSellingPrice != null || mapping.mrp != null) &&
+      mapping.lotTotalPurchaseValue != null
 
     const candidate: DetectedInventoryHeader = {
       rowIndex,
