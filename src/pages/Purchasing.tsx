@@ -643,8 +643,7 @@ export default function Purchasing() {
 
                     <td className="px-5 py-4 text-sm text-slate-700">
                       {purchase.items.reduce(
-                        (sum: number, item: PurchaseLine) =>
-                          sum + item.quantity + (item.bonusQuantity ?? 0),
+                        (sum, item) => sum + item.quantity + (item.bonusQuantity ?? 0),
                         0,
                       )}{" "}
                       units incl. bonus
