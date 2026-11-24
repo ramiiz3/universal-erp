@@ -1045,7 +1045,7 @@ export default function Inventory() {
 
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-slate-500">No products found.</td>
+                  <td colSpan={12} className="px-5 py-12 text-center text-slate-500">No products found.</td>
                 </tr>
               )}
             </tbody>
@@ -1629,6 +1629,9 @@ export default function Inventory() {
             </div>
 
             <div className="p-5">
+              <div className="mb-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                This screen changes physical stock on hand. Minimum Stock is only the reorder alert threshold; it does not add or remove stock. To increase stock, use Receive Stock. To correct or reduce a batch, use the adjustment below.
+              </div>
               <div className="grid gap-3">
                 <label className="space-y-2">
                   <span className="text-sm font-medium">Warehouse</span>
