@@ -284,6 +284,10 @@ export default function POS() {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
       return
     }
+    if (!product.unit?.trim()) {
+      setError(`${product.name} has no stock unit configured. Open Product Master, choose the inventory unit (for example Box), and configure its smaller selling units such as Strip and Tablet before using POS.`)
+      return
+    }
     setError("")
     setUnitChooserProduct(product)
     setUnitChooserCartLineId(cartLineId)
@@ -1066,7 +1070,7 @@ export default function POS() {
                   {unitChooserProduct.name}
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
+                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit || "unit not configured"} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
                 </p>
               </div>
               <button
@@ -1146,6 +1150,11 @@ export default function POS() {
                     </tbody>
                   </table>
                 </div>
+                {unitChoices.length === 1 && (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                    Only the stock unit is configured for this medicine. To sell a strip, sachet or individual tablet, open Product Master → Edit Product → Pharmacy pack hierarchy & POS units. Set the stock unit (for example Box), add Strip inside Box and enter the number of strips per box, then add Tablet inside Strip and enter the number of tablets per strip. Save once; POS will calculate the smaller units and their available quantities automatically.
+                  </p>
+                )}
               </section>
 
               <section>

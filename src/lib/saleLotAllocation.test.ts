@@ -278,6 +278,63 @@ describe("sale lot allocation", () => {
     expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([5, 5])
   })
 
+  it("sells a box, two strips and five loose tablets from the same box stock", () => {
+    // Base stock is Box. One Box = 10 Strips = 100 Tablets.
+    const stockLots: InventoryLot[] = [
+      {
+        id: "box-stock",
+        productId: product.id,
+        batch: "BOX-100",
+        expiry: "2028-12-31",
+        quantity: 2,
+        purchasePrice: 40,
+        supplierName: "Pharmacy Supplier",
+      },
+    ]
+
+    const result = allocateSaleLots(
+      [
+        {
+          product,
+          requestId: "box-line",
+          quantity: 1,
+          saleUnitConversionFactor: 1,
+          unitPrice: 100,
+          unitPriceOverride: true,
+        },
+        {
+          product,
+          requestId: "strip-line",
+          quantity: 0.2,
+          saleUnitConversionFactor: 0.1,
+          unitPrice: 100,
+          unitPriceOverride: true,
+        },
+        {
+          product,
+          requestId: "tablet-line",
+          quantity: 0.05,
+          saleUnitConversionFactor: 0.01,
+          unitPrice: 100,
+          unitPriceOverride: true,
+        },
+      ],
+      stockLots,
+    )
+
+    expect(result.unallocated).toEqual([])
+    expect(result.lines.map((line) => ({
+      requestId: line.requestId,
+      quantity: line.quantity,
+      lotId: line.lotId,
+    }))).toEqual([
+      { requestId: "box-line", quantity: 1, lotId: "box-stock" },
+      { requestId: "strip-line", quantity: 0.2, lotId: "box-stock" },
+      { requestId: "tablet-line", quantity: 0.05, lotId: "box-stock" },
+    ])
+    expect(result.updatedLots[0].quantity).toBeCloseTo(0.75)
+  })
+
   it("never allocates expired batches and treats month-only expiry as valid through month end", () => {
     const expired = {
       ...lots[0],
