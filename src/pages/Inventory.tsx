@@ -568,10 +568,8 @@ export default function Inventory() {
         : `Delete ${uniqueIds.length} selected product(s) only where no stock or stock movement remains?`
       if (!window.confirm(confirmation)) return
       try {
-        const result = deleteProducts(uniqueIds, { removeInventory })
+        const result = deleteProducts(uniqueIds, { removeInventory, archiveBlocked: true })
         const archived = result.blocked.length
-          ? archiveProducts(result.blocked.map((item) => item.id))
-          : 0
         setSelectedProductIds([])
         const blocked = result.blocked.length
           ? "\n\nProducts with transaction history were archived (not erased):\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
