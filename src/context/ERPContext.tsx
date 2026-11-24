@@ -26,6 +26,7 @@ import {
 import {
   allocateSaleLots,
   calculateLotSaleTotals,
+  getSaleableInventoryLots,
 } from "../lib/saleLotAllocation"
 import {
   ERP_BACKUP_STORAGE_KEYS,
@@ -3831,11 +3832,15 @@ export function ERPProvider({
           )
         }
 
-        const currentStock = getProductStock(product.id, sellingWarehouse.id)
+        const currentStock = getSaleableInventoryLots(
+          store.inventoryLots,
+          product.id,
+          sellingWarehouse.id,
+        ).reduce((sum, lot) => sum + lot.quantity, 0)
 
-        if (baseQuantity > currentStock) {
+        if (baseQuantity > currentStock + 1e-8) {
           throw new Error(
-            `${product.name} requires ${baseQuantity} ${product.unit}, but only ${currentStock} ${product.unit} are available.`,
+            `${product.name} requires ${baseQuantity} ${product.unit}, but only ${currentStock} non-expired ${product.unit} are available.`,
           )
         }
 
@@ -3844,7 +3849,9 @@ export function ERPProvider({
           product,
           quantity: baseQuantity,
           unitPrice: baseUnitPrice,
-          unitPriceOverride: Boolean(selectedPackage),
+          // POS displays the configured selling price for the selected UOM.
+          // Do not silently substitute a supplier lot's MRP for the checkout price.
+          unitPriceOverride: true,
           displayQuantity: item.quantity,
           displayUnitPrice: sellingUnitPrice,
           sellingUnit: selectedPackage?.unit ?? product.unit,
