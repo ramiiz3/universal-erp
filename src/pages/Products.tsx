@@ -399,8 +399,15 @@ export default function Products() {
     }
 
     if (editingProduct && form.unit !== editingProduct.unit && getProductStock(editingProduct.id) > 0) {
-      window.alert("This product has existing stock. Its base unit cannot be changed until the stock is cleared or formally converted.")
-      return
+      if (!editingProduct.unit?.trim()) {
+        const confirmed = window.confirm(
+          `This product has existing stock but no stock unit was saved. Set the existing quantity as ${form.unit}? For example, existing stock 2 will mean 2 ${form.unit}. Confirm only if that matches the physical stock.`,
+        )
+        if (!confirmed) return
+      } else {
+        window.alert("This product has existing stock. Its base unit cannot be changed until the stock is cleared or formally converted.")
+        return
+      }
     }
 
     let barcode = form.barcode.trim()
