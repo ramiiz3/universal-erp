@@ -1190,6 +1190,9 @@ export function ERPProvider({
 
     const defaultWarehouse = store.warehouses.find((warehouse) => warehouse.active && warehouse.type === "MAIN")
       ?? store.warehouses.find((warehouse) => warehouse.active)
+    if (records.some((record) => record.quantity > 0) && !defaultWarehouse) {
+      throw new Error("Create and activate a main warehouse before importing stock. Imported quantities cannot be sold while they are not assigned to a warehouse.")
+    }
     const result = buildImportedInventory(
       store.products,
       store.inventoryLots,
