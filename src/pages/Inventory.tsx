@@ -152,6 +152,9 @@ export default function Inventory() {
     category: "",
     sku: "",
     barcode: "",
+    companyName: "",
+    genericName: "",
+    mrp: "",
     purchasePrice: "",
     sellingPrice: "",
     minimumStock: "0",
@@ -467,6 +470,9 @@ export default function Inventory() {
           category: "",
           sku: "",
           barcode: "",
+          companyName: "",
+          genericName: "",
+          mrp: "",
           purchasePrice: "",
           sellingPrice: "",
           minimumStock: "0",
@@ -487,6 +493,9 @@ export default function Inventory() {
           category: product.category,
           sku: product.sku,
           barcode: product.barcode,
+          companyName: product.companyName ?? "",
+          genericName: product.genericName ?? "",
+          mrp: String(product.mrp ?? product.sellingPrice),
           purchasePrice: String(product.purchasePrice),
           sellingPrice: String(product.sellingPrice),
           minimumStock: String(product.minimumStock),
@@ -501,20 +510,23 @@ export default function Inventory() {
     }
 
     function saveProduct(form: Omit<Product, "id">, opening?: { quantity: number; batch: string; expiry: string; purchasePrice: number } | null) {
-      if (editingProduct) {
-        updateProduct(editingProduct.id, form)
-        setShowEdit(false)
-        return
+      try {
+        if (editingProduct) {
+          updateProduct(editingProduct.id, form)
+          setShowEdit(false)
+          window.alert("Product changes saved successfully.")
+          return
+        }
+        if (opening && opening.quantity > 0) {
+          addProductAndReceive(form, opening.batch, opening.expiry, opening.quantity, opening.purchasePrice)
+        } else {
+          addProduct(form)
+        }
+        setShowAdd(false)
+        window.alert("Product saved successfully.")
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "The product could not be saved.")
       }
-
-      // create new product, optionally create opening stock
-      if (opening && opening.quantity > 0) {
-        addProductAndReceive(form, opening.batch, opening.expiry, opening.quantity, opening.purchasePrice)
-      } else {
-        addProduct(form)
-      }
-
-      setShowAdd(false)
     }
 
     function openAdjust(productId: string) {
@@ -1424,6 +1436,9 @@ export default function Inventory() {
                 <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
                 <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} placeholder="Auto-generated" />
                 <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <Field label="Company" value={productForm.companyName} onChange={(v) => setProductForm({...productForm, companyName: v})} />
+                <Field label="Generic Name" value={productForm.genericName} onChange={(v) => setProductForm({...productForm, genericName: v})} />
+                <Field label="MRP" value={productForm.mrp} onChange={(v) => setProductForm({...productForm, mrp: v})} type="number" />
                 <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
                 <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
                 <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
@@ -1448,6 +1463,9 @@ export default function Inventory() {
                     category: productForm.category.trim(),
                     sku: productForm.sku.trim(),
                     barcode: productForm.barcode.trim(),
+                    companyName: productForm.companyName.trim(),
+                    genericName: productForm.genericName.trim(),
+                    mrp: Number(productForm.mrp) || Number(productForm.sellingPrice) || 0,
                     purchasePrice: Number(productForm.purchasePrice) || 0,
                     sellingPrice: Number(productForm.sellingPrice) || 0,
                     minimumStock: Number(productForm.minimumStock) || 0,
@@ -1483,6 +1501,9 @@ export default function Inventory() {
                 <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
                 <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} />
                 <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <Field label="Company" value={productForm.companyName} onChange={(v) => setProductForm({...productForm, companyName: v})} />
+                <Field label="Generic Name" value={productForm.genericName} onChange={(v) => setProductForm({...productForm, genericName: v})} />
+                <Field label="MRP" value={productForm.mrp} onChange={(v) => setProductForm({...productForm, mrp: v})} type="number" />
                 <Field label="Purchase Price" value={productForm.purchasePrice} onChange={(v) => setProductForm({...productForm, purchasePrice: v})} type="number" />
                 <Field label="Selling Price" value={productForm.sellingPrice} onChange={(v) => setProductForm({...productForm, sellingPrice: v})} type="number" />
                 <Field label="Minimum Stock" value={productForm.minimumStock} onChange={(v) => setProductForm({...productForm, minimumStock: v})} type="number" />
@@ -1497,6 +1518,9 @@ export default function Inventory() {
                     category: productForm.category.trim(),
                     sku: productForm.sku.trim(),
                     barcode: productForm.barcode.trim(),
+                    companyName: productForm.companyName.trim(),
+                    genericName: productForm.genericName.trim(),
+                    mrp: Number(productForm.mrp) || Number(productForm.sellingPrice) || 0,
                     purchasePrice: Number(productForm.purchasePrice) || 0,
                     sellingPrice: Number(productForm.sellingPrice) || 0,
                     minimumStock: Number(productForm.minimumStock) || 0,
