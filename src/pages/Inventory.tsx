@@ -552,7 +552,7 @@ export default function Inventory() {
       try {
         const result = deleteProducts(products.map((product) => product.id))
         const blocked = result.blocked.length
-          ? "\\n\\nProducts retained because stock or history exists:\\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\\n")
+          ? "\n\nProducts retained because stock or history exists:\\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\\n")
           : ""
         window.alert(`${result.deletedIds.length} product(s) deleted.${blocked}`)
       } catch (error) {
