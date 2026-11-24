@@ -188,13 +188,19 @@ export default function Inventory() {
           product.barcode.toLowerCase().includes(q) ||
           product.category.toLowerCase().includes(q)
 
-        const matchesBatch = inventoryLots.some(
-          (lot) =>
-            lot.productId === product.id &&
-            lot.batch.toLowerCase().includes(q),
+        const matchesLot = inventoryLots.some((lot) =>
+          lot.productId === product.id &&
+          [
+            lot.batch,
+            lot.purchaseDate,
+            lot.grnNumber,
+            lot.supplierName,
+            lot.expiry,
+            String(lot.mrp ?? ""),
+          ].some((value) => String(value ?? "").toLowerCase().includes(q)),
         )
 
-        return matchesProduct || matchesBatch
+        return matchesProduct || matchesLot
       })
     }, [products, inventoryLots, search])
 
@@ -897,7 +903,8 @@ export default function Inventory() {
                 <th className="px-5 py-4 font-medium text-slate-500">SKU</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Barcode</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Category</th>
-                <th className="px-5 py-4 font-medium text-slate-500">Purchase Price</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Actual Cost</th>
+                <th className="px-5 py-4 font-medium text-slate-500">MRP</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Selling Price</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Stock</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Status</th>
@@ -926,6 +933,7 @@ export default function Inventory() {
                     <td className="px-5 py-4 font-mono text-xs">{product.barcode}</td>
                     <td className="px-5 py-4">{product.category}</td>
                     <td className="px-5 py-4">{money(product.purchasePrice)}</td>
+                    <td className="px-5 py-4">{money(product.mrp ?? product.sellingPrice)}</td>
                     <td className="px-5 py-4">{money(product.sellingPrice)}</td>
                     <td className="px-5 py-4 font-semibold">{stock}</td>
                     <td className="px-5 py-4">{status}</td>
@@ -944,7 +952,7 @@ export default function Inventory() {
 
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-slate-500">No products found.</td>
+                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500">No products found.</td>
                 </tr>
               )}
             </tbody>
@@ -1616,14 +1624,23 @@ export default function Inventory() {
 
             <div className="p-5">
               <div className="grid gap-3">
-                {inventoryLots.filter(l => l.productId === showProductLots).map(l => (
+                {inventoryLots.filter(l => l.productId === showProductLots).sort((a,b) => (b.purchaseDate ?? "").localeCompare(a.purchaseDate ?? "")).map(l => (
                   <div key={l.id} className="rounded-xl border p-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">Batch {l.batch}</div>
-                      <div className="text-sm text-slate-500">{formatDate(l.expiry)}</div>
+                      <div className="font-semibold">Batch {l.batch || "—"}</div>
+                      <div className="text-sm text-slate-500">Expiry {formatDate(l.expiry)}</div>
                     </div>
-
-                    <div className="mt-2 text-sm">Qty: {l.quantity} · Cost: {importMoney(l.purchasePrice)}{l.sellingPrice === undefined ? "" : ` · Selling: ${importMoney(l.sellingPrice)}`}</div>
+                    <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                      <p>Purchase date: <strong>{l.purchaseDate || "Not recorded"}</strong></p>
+                      <p>GRN: <strong>{l.grnNumber || "Not recorded"}</strong></p>
+                      <p>Supplier: <strong>{l.supplierName || "Not recorded"}</strong></p>
+                      <p>Stock: <strong>{l.quantity} {productMap.get(l.productId)?.unit || ""}</strong></p>
+                      <p>Purchase qty: <strong>{l.purchaseQuantity ?? l.quantity}</strong></p>
+                      <p>Bonus qty: <strong>{l.bonusQuantity ?? 0}</strong></p>
+                      <p>Actual purchase price: <strong>{importMoney(l.actualPurchasePrice ?? l.purchasePrice)}</strong></p>
+                      <p>MRP: <strong>{importMoney(l.mrp ?? productMap.get(l.productId)?.mrp ?? productMap.get(l.productId)?.sellingPrice ?? 0)}</strong></p>
+                    </div>
+                    <div className="mt-2 text-sm">Cost per stock unit: {importMoney(l.purchasePrice)}{l.sellingPrice === undefined ? "" : ` · Selling: ${importMoney(l.sellingPrice)}`}</div>
                     {(l.totalPurchaseValue !== undefined || l.totalSellingValue !== undefined) && (
                       <div className="mt-1 text-xs text-slate-500">
                         {l.totalPurchaseValue === undefined ? "" : `Purchase value: ${importMoney(l.totalPurchaseValue)}`}
