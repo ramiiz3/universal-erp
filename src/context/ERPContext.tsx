@@ -107,6 +107,10 @@ export type Product = {
   description?: string
   returnEligible?: boolean
   status?: "ACTIVE" | "INACTIVE" | "DISCONTINUED"
+  mrp?: number
+  genericName?: string
+  companyName?: string
+  preferredSupplierId?: string
   packagings?: ProductPackaging[]
 }
 
@@ -120,6 +124,15 @@ export type InventoryLot = {
   sellingPrice?: number
   totalPurchaseValue?: number
   totalSellingValue?: number
+  purchaseDate?: string
+  grnNumber?: string
+  supplierId?: string
+  supplierName?: string
+  mrp?: number
+  bonusQuantity?: number
+  purchaseQuantity?: number
+  purchaseUnit?: string
+  actualPurchasePrice?: number
   warehouseId?: string
   locationId?: string | null
 }
@@ -305,6 +318,8 @@ type CreatePurchaseInput = {
     productId: string
     quantity: number
     purchasePrice: number
+    bonusQuantity?: number
+    mrp?: number
     packageId?: string
     batch: string
     expiry: string
