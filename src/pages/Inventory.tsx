@@ -535,14 +535,9 @@ export default function Inventory() {
 
     function handleDeleteInventoryProduct(product: Product) {
       const stock = getProductStock(product.id)
-      const removeInventory = stock > 0 || inventoryLots.some((lot) => lot.productId === product.id)
-      if (!window.confirm(
-        removeInventory
-          ? `Delete ${product.name} and permanently remove its ${stock} on-hand units, batches and stock movement history? A backup is saved first. Products linked to sales, purchases, returns, orders or transfers are protected.`
-          : `Delete ${product.name} from the product master? A backup is saved first.`,
-      )) return
+      if (!window.confirm(`Delete ${product.name} and permanently remove its ${stock} on-hand units, batches and stock movement history? A backup is saved first. Products linked to sales, purchases, returns, orders or transfers are protected.`)) return
       try {
-        deleteProduct(product.id, { removeInventory })
+        deleteProduct(product.id, { removeInventory: true })
         setSelectedProductIds((current) => current.filter((id) => id !== product.id))
         if (editingProduct?.id === product.id) {
           setShowEdit(false)
