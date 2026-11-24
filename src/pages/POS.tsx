@@ -332,24 +332,24 @@ export default function POS() {
     product: Product,
     selectedPackage?: SelectedProductPackaging,
     requestedQuantity = 1,
-  ) {
+  ): boolean {
     if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
-      return
+      return false
     }
     if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
       setError("Enter a whole quantity greater than zero.")
-      return
+      return false
     }
     if (selectedPackage && !selectedPackage.salesEnabled) {
       setError(`${selectedPackage.name} is not enabled for sales.`)
-      return
+      return false
     }
 
     const factor = selectedPackage?.conversionFactor ?? 1
     if (!Number.isFinite(factor) || factor <= 0) {
       setError("This product has an invalid selling-unit conversion.")
-      return
+      return false
     }
 
     const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
@@ -361,7 +361,7 @@ export default function POS() {
 
     if (requestedBaseQuantity + otherCartBaseQuantity > saleableBaseStock + 1e-8) {
       setError(`${product.name} does not have enough non-expired stock for this quantity.`)
-      return
+      return false
     }
 
     const availableWholePackages = saleableLots.reduce(
@@ -373,7 +373,7 @@ export default function POS() {
       .reduce((sum, item) => sum + item.quantity, 0)
     if (requestedQuantity + otherSameUomQuantity > availableWholePackages) {
       setError(`Only ${availableWholePackages} complete ${selectedPackage?.unit ?? product.unit} unit(s) are available across the supplier batches.`)
-      return
+      return false
     }
 
     const packagePrice = selectedPackage?.sellingPrice ??
@@ -406,6 +406,7 @@ export default function POS() {
       ]
     })
     setError("")
+    return true
   }
 
   function confirmUnitSelection() {
@@ -458,8 +459,8 @@ export default function POS() {
       return
     }
 
-    addToCart(unitChooserProduct, selectedUnitChoice.packaging, quantity)
-    closeUnitChooser()
+    const added = addToCart(unitChooserProduct, selectedUnitChoice.packaging, quantity)
+    if (added) closeUnitChooser()
   }
 
   function updateQuantity(lineId: string, nextQuantity: number) {
