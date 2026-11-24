@@ -57,6 +57,7 @@ import {
   validateStockCountLines,
 } from "../lib/stockCounts"
 import { buildSalesReturn, isSaleFullyReturned, type CreateSalesReturnInput, type SalesReturn } from "../lib/salesReturns"
+import { buildPurchaseReturn, type CreatePurchaseReturnInput, type PurchaseReturn } from "../lib/purchaseReturns"
 import BackupRestorePanel from "../components/BackupRestorePanel"
 
 import { DEFAULT_CHART_OF_ACCOUNTS, buildChartOfAccount, validateChartOfAccountInput, validateChartAccountStatus, type ChartOfAccount, type ChartOfAccountInput, type ChartAccountStatus } from "../lib/chartOfAccounts"
@@ -125,7 +126,7 @@ export type InventoryLot = {
 
 export type InventoryMovement = {
   id: string
-  type: "OPENING" | "RECEIPT" | "SALE" | "RETURN" | "ADJUSTMENT" | "DAMAGE" | "LOSS" | "TRANSFER_OUT" | "TRANSFER_IN"
+  type: "OPENING" | "RECEIPT" | "SALE" | "RETURN" | "PURCHASE_RETURN" | "ADJUSTMENT" | "DAMAGE" | "LOSS" | "TRANSFER_OUT" | "TRANSFER_IN"
   productId: string
   lotId?: string | null
   // Positive = stock received; negative = stock issued.
@@ -256,6 +257,7 @@ export type PurchaseItem = {
   conversionFactor?: number
   baseQuantity?: number
   baseUnitPurchasePrice?: number
+  lotId?: string
 }
 
 export type Purchase = {
@@ -335,6 +337,8 @@ type ERPContextValue = {
   paymentReconciliations: PaymentReconciliation[]
   salesReturns: SalesReturn[]
   createSalesReturn: (input: CreateSalesReturnInput) => SalesReturn
+  purchaseReturns: PurchaseReturn[]
+  createPurchaseReturn: (input: CreatePurchaseReturnInput) => PurchaseReturn
   createPaymentReconciliation: (input: CreatePaymentReconciliationInput) => PaymentReconciliation
   purchases: Purchase[]
   suppliers: Supplier[]
@@ -540,6 +544,7 @@ type StoredData = {
   customerPayments: CustomerPayment[]
   paymentReconciliations: PaymentReconciliation[]
   salesReturns: SalesReturn[]
+  purchaseReturns: PurchaseReturn[]
   products: Product[]
   inventoryLots: InventoryLot[]
   inventoryMovements: InventoryMovement[]
@@ -575,6 +580,7 @@ function createEmptyStore(): StoredData {
     customerPayments: [],
     paymentReconciliations: [],
     salesReturns: [],
+    purchaseReturns: [],
     products: initialProducts,
     inventoryLots: initialInventoryLots,
     inventoryMovements: [],
@@ -605,6 +611,7 @@ function migrateWarehouseData(data: StoredData): StoredData {
     purchaseOrders?: PurchaseOrder[]
     customerPayments?: CustomerPayment[]
     salesReturns?: SalesReturn[]
+    purchaseReturns?: PurchaseReturn[]
     dailyRegisters?: DailyRegisterSession[]
     dailyCashMovements?: DailyRegisterCashMovement[]
   }
@@ -635,6 +642,7 @@ function migrateWarehouseData(data: StoredData): StoredData {
     customerPayments: Array.isArray(raw.customerPayments) ? raw.customerPayments : [],
     paymentReconciliations: Array.isArray(raw.paymentReconciliations) ? raw.paymentReconciliations : [],
     salesReturns: Array.isArray(raw.salesReturns) ? raw.salesReturns : [],
+    purchaseReturns: Array.isArray(raw.purchaseReturns) ? raw.purchaseReturns : [],
     warehouses,
     storageLocations: Array.isArray(raw.storageLocations)
       ? raw.storageLocations
@@ -2591,6 +2599,69 @@ export function ERPProvider({
     return salesReturn
   }
 
+  function createPurchaseReturn(input: CreatePurchaseReturnInput): PurchaseReturn {
+    const purchase = store.purchases.find((item) => item.id === input.purchaseId)
+    const purchaseReturn = buildPurchaseReturn(
+      input,
+      purchase,
+      store.purchaseReturns ?? [],
+      store.inventoryLots,
+    )
+    const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
+    const movements: InventoryMovement[] = []
+
+    purchaseReturn.items.forEach((returnItem, itemIndex) => {
+      returnItem.allocations.forEach((allocation, allocationIndex) => {
+        const lot = updatedLots.find((candidate) => candidate.id === allocation.lotId)
+        if (!lot || lot.productId !== returnItem.productId || lot.batch.trim().toUpperCase() !== allocation.batch.trim().toUpperCase() || lot.expiry !== allocation.expiry) {
+          throw new Error(`Original batch ${allocation.batch} for ${returnItem.productName} is no longer available. The purchase return was not posted.`)
+        }
+        if (lot.quantity + 1e-8 < allocation.quantity) {
+          throw new Error(`Insufficient stock in original batch ${allocation.batch} for ${returnItem.productName}. Available: ${lot.quantity}; requested: ${allocation.quantity}.`)
+        }
+        lot.quantity = Math.max(0, lot.quantity - allocation.quantity)
+        if (lot.totalPurchaseValue !== undefined) {
+          lot.totalPurchaseValue = Math.max(0, lot.totalPurchaseValue - allocation.quantity * lot.purchasePrice)
+        }
+        movements.push({
+          id: `MOV-${purchaseReturn.id}-${itemIndex}-${allocationIndex}`,
+          type: "PURCHASE_RETURN",
+          productId: returnItem.productId,
+          lotId: lot.id,
+          quantity: -allocation.quantity,
+          reason: `Purchase return ${purchaseReturn.returnNumber}`,
+          createdAt: purchaseReturn.createdAt,
+          metadata: {
+            referenceType: "PURCHASE_RETURN",
+            referenceId: purchaseReturn.id,
+            referenceNumber: purchaseReturn.returnNumber,
+            purchaseId: purchase!.id,
+            purchaseNumber: purchase!.purchaseNumber,
+            supplierId: purchaseReturn.supplierId ?? null,
+            supplierName: purchaseReturn.supplierName,
+            supplierInvoice: purchaseReturn.supplierInvoice,
+            creditNoteReference: purchaseReturn.creditNoteReference,
+            batch: lot.batch,
+            expiry: lot.expiry,
+            warehouseId: lot.warehouseId,
+            locationId: lot.locationId ?? null,
+            baseUnit: returnItem.baseUnit,
+            unitCost: allocation.unitCost,
+            totalCost: allocation.quantity * allocation.unitCost,
+          },
+        })
+      })
+    })
+
+    persistStore({
+      ...store,
+      purchaseReturns: [purchaseReturn, ...(store.purchaseReturns ?? [])],
+      inventoryLots: updatedLots,
+      inventoryMovements: [...movements, ...store.inventoryMovements],
+    })
+    return purchaseReturn
+  }
+
   function createPaymentReconciliation(input: CreatePaymentReconciliationInput): PaymentReconciliation {
     const reconciliation = buildPaymentReconciliation(
       input,
@@ -3059,6 +3130,7 @@ export function ERPProvider({
               lot.productId === item.product.id && lot.batch.trim().toUpperCase() === item.batch && lot.expiry === item.expiry && lot.warehouseId === receivingWarehouse.id && (lot.locationId ?? null) === (receivingLocation?.id ?? null),
           )
 
+        let receiptLot: InventoryLot
         if (existingLot) {
           const mergedCost = mergeLotReceiptCost(
             existingLot.quantity,
@@ -3071,23 +3143,24 @@ export function ERPProvider({
           if (existingLot.totalPurchaseValue !== undefined) {
             existingLot.totalPurchaseValue = mergedCost.totalValue
           }
+          receiptLot = existingLot
         } else {
-          updatedLots.push({
+          receiptLot = {
             id: `LOT-${Date.now()}-${index}`,
-            productId:
-              item.product.id,
+            productId: item.product.id,
             batch: item.batch,
             expiry: item.expiry,
-            quantity:
-              item.baseQuantity,
+            quantity: item.baseQuantity,
             purchasePrice: item.baseUnitPurchasePrice,
             warehouseId: receivingWarehouse.id,
             locationId: receivingLocation?.id ?? null,
-          })
+          }
+          updatedLots.push(receiptLot)
         }
 
         purchaseItems.push({
           id: `PITEM-${Date.now()}-${index}`,
+          lotId: receiptLot.id,
           productId:
             item.product.id,
           name:
@@ -3552,6 +3625,8 @@ export function ERPProvider({
         customerPayments: store.customerPayments ?? [],
         paymentReconciliations: store.paymentReconciliations ?? [],
         salesReturns: store.salesReturns ?? [],
+        purchaseReturns: store.purchaseReturns ?? [],
+        createPurchaseReturn,
         createPaymentReconciliation,
         createSalesReturn,
         purchases:
