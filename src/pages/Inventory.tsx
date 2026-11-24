@@ -969,7 +969,10 @@ export default function Inventory() {
           <select
             id="inventory-product-status"
             value={productStatusFilter}
-            onChange={(event) => setProductStatusFilter(event.target.value as typeof productStatusFilter)}
+            onChange={(event) => {
+              setProductStatusFilter(event.target.value as typeof productStatusFilter)
+              setSelectedProductIds([])
+            }}
             className="h-10 rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="ACTIVE">Active products</option>
@@ -1037,7 +1040,15 @@ export default function Inventory() {
             <tbody>
               {filteredProducts.map((product) => {
                 const stock = getProductStock(product.id)
-                const status = stock === 0 ? "Out of Stock" : stock <= product.minimumStock ? "Low Stock" : "In Stock"
+                const status = product.status === "INACTIVE"
+                  ? "Archived"
+                  : product.status === "DISCONTINUED"
+                    ? "Discontinued"
+                    : stock === 0
+                      ? "Out of Stock"
+                      : stock <= product.minimumStock
+                        ? "Low Stock"
+                        : "In Stock"
 
                 return (
                   <tr key={product.id} className="border-b last:border-b-0 dark:border-slate-800">
