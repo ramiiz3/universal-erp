@@ -11,6 +11,10 @@ import {
 const sample = {
   supplierId: "supplier-1",
   supplierInvoice: "INV-1",
+  purchaseDate: "2026-11-20",
+  grnNumber: "GRN-001",
+  bonusQuantity: "0",
+  mrp: "8",
   barcode: "",
   selectedProductId: "product-1",
   quantity: "2",
@@ -20,7 +24,7 @@ const sample = {
   expiry: "2027-12-31",
   lines: [{
     id: "line-1", productId: "product-1", name: "Medicine", barcode: "123",
-    quantity: 2, purchasePrice: 4, packageId: "strip", packageName: "Strip",
+    quantity: 2, bonusQuantity: 0, mrp: 8, purchasePrice: 4, packageId: "strip", packageName: "Strip",
     purchaseUnit: "strip", baseUnit: "tablet", conversionFactor: 10,
     baseQuantity: 20, batch: "B001", expiry: "2027-12-31",
   }],
