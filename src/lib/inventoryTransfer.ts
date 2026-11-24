@@ -110,7 +110,7 @@ export const INVENTORY_EXPORT_HEADERS = [
   "VAT Rate",
   "Batch",
   "Expiry Date",
-  "Stock Quantity (Including Bonus)",
+  "Stock Quantity",
   "Lot Purchase Price",
   "Lot Selling Price",
   "TOTAL (Purchase Value)",
