@@ -31,6 +31,8 @@ import {
   ERP_STORAGE_KEY,
 } from "../lib/erpBackup"
 import { readStoredData } from "../lib/erpStorage"
+import { ERP_UNITS_EVENT } from "../lib/erpUnits"
+import { PRODUCT_CATEGORIES_EVENT } from "../lib/productCategories"
 import { isBuiltInDemoProduct, removeBuiltInDemoData } from "../lib/demoDataCleanup"
 import { ERP_SUPPLIERS_STORAGE_KEY } from "../lib/erpStorageKeys"
 import { linkPurchasesToSuppliers, normalizeSupplierRecords, validateSupplierInput, type Supplier, type SupplierInput } from "../lib/supplierManagement"
@@ -1333,14 +1335,19 @@ export function ERPProvider({
         return
       }
       if ((ERP_BACKUP_STORAGE_KEYS as readonly string[]).includes(event.key)) {
-        scheduleCloudSaveRef.current()
+        refreshSharedERPRef.current()
       }
     }
+    const onIndependentERPSettingsChange = () => scheduleCloudSaveRef.current()
     window.addEventListener(ERP_CLOUD_SYNC_EVENT, onERPCloudSync)
     window.addEventListener("storage", onStorage)
+    window.addEventListener(ERP_UNITS_EVENT, onIndependentERPSettingsChange)
+    window.addEventListener(PRODUCT_CATEGORIES_EVENT, onIndependentERPSettingsChange)
     return () => {
       window.removeEventListener(ERP_CLOUD_SYNC_EVENT, onERPCloudSync)
       window.removeEventListener("storage", onStorage)
+      window.removeEventListener(ERP_UNITS_EVENT, onIndependentERPSettingsChange)
+      window.removeEventListener(PRODUCT_CATEGORIES_EVENT, onIndependentERPSettingsChange)
       if (cloudTimerRef.current) clearTimeout(cloudTimerRef.current)
     }
   }, [companyId])
