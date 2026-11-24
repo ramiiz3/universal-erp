@@ -159,6 +159,7 @@ function buildLegacyERPContext(
       customerPayments: legacyRecordSet(clean(data.customerPayments)),
       paymentReconciliations: legacyRecordSet(clean(data.paymentReconciliations)),
       salesReturns: legacyRecordSet(clean(data.salesReturns)),
+      purchaseReturns: legacyRecordSet(clean(data.purchaseReturns)),
       supplierInvoices: legacyRecordSet(clean(data.supplierInvoices)),
       purchaseRequisitions: legacyRecordSet(clean(data.purchaseRequisitions)),
       purchaseOrders: legacyRecordSet(clean(data.purchaseOrders)),
