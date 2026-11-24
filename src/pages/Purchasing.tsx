@@ -76,12 +76,12 @@ export default function Purchasing() {
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
 
   const [warehouseId, setWarehouseId] = useState(
-    () =>
-      warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
-      (initialPurchaseDraft?.warehouseId && warehouses.some((item) => item.id === initialPurchaseDraft.warehouseId && item.active)
+    () => (
+      initialPurchaseDraft?.warehouseId && warehouses.some((item) => item.id === initialPurchaseDraft.warehouseId && item.active)
         ? initialPurchaseDraft.warehouseId
-        : warehouses.find((item) => item.active)?.id) ?? "",
-
+        : warehouses.find((item) => item.active && item.type === "MAIN")?.id ??
+          warehouses.find((item) => item.active)?.id ?? ""
+    ),
   )
   const [locationId, setLocationId] = useState(initialPurchaseDraft?.locationId ?? "")
   const activeWarehouses = warehouses.filter((item) => item.active)
