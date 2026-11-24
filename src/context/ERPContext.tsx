@@ -87,6 +87,17 @@ export type ProductPackaging = {
   salesEnabled: boolean
 }
 
+export type ProductDeletionBlock = {
+  id: string
+  name: string
+  reason: string
+}
+
+export type ProductDeletionResult = {
+  deletedIds: string[]
+  blocked: ProductDeletionBlock[]
+}
+
 export type Product = {
   id: string
   name: string
@@ -415,6 +426,7 @@ type ERPContextValue = {
   ) => void
 
   deleteProduct: (id: string) => void
+  deleteProducts: (ids: string[]) => ProductDeletionResult
 
   receiveStock: (
     productId: string,
@@ -2539,52 +2551,103 @@ export function ERPProvider({
     })
   }
 
-  function deleteProduct(id: string) {
-    const product = store.products.find((item) => item.id === id)
-    if (!product) return
+  function deleteProducts(ids: string[]): ProductDeletionResult {
+    const requestedIds = [...new Set(ids)].filter((id) =>
+      store.products.some((product) => product.id === id),
+    )
+    if (!requestedIds.length) return { deletedIds: [], blocked: [] }
 
-    if (isBuiltInDemoProduct(product)) {
-      const cleanup = removeBuiltInDemoData(
-        store as unknown as Record<string, unknown>,
-        { onlyProductId: id },
+    const productReferenceFields = new Set(["productId", "product_id", "sourceProductId", "source_product_id"])
+    const containsProductReference = (value: unknown, productId: string): boolean => {
+      if (Array.isArray(value)) return value.some((item) => containsProductReference(item, productId))
+      if (!value || typeof value !== "object") return false
+      return Object.entries(value as Record<string, unknown>).some(([key, nested]) =>
+        (productReferenceFields.has(key) && nested === productId) ||
+        containsProductReference(nested, productId),
       )
-      if (cleanup.removedProducts === 0) {
-        throw new Error(
-          "This starter product is linked to business activity or has non-demo inventory. Review its sales, purchases, transfers and stock records before deleting it.",
+    }
+
+    let working = store
+    const deletedIds: string[] = []
+    const blocked: ProductDeletionBlock[] = []
+
+    for (const id of requestedIds) {
+      const product = working.products.find((item) => item.id === id)
+      if (!product) continue
+
+      if (isBuiltInDemoProduct(product)) {
+        const cleanup = removeBuiltInDemoData(
+          working as unknown as Record<string, unknown>,
+          { onlyProductId: id },
         )
+        if (cleanup.removedProducts > 0) {
+          working = cleanup.data as unknown as StoredData
+          deletedIds.push(id)
+          continue
+        }
       }
 
+      const stock = getProductStock(id)
+      if (stock > 0) {
+        blocked.push({ id, name: product.name, reason: `${stock} units are still in stock. Adjust or write off stock first.` })
+        continue
+      }
+
+      const movementExists = working.inventoryMovements.some((movement) => movement.productId === id)
+      if (movementExists) {
+        blocked.push({ id, name: product.name, reason: "This product has stock movement or receipt history. Keep the record and mark it inactive instead of deleting it." })
+        continue
+      }
+
+      const linkedCollections: Array<{ label: string; value: unknown }> = [
+        { label: "sales", value: working.sales },
+        { label: "purchases", value: working.purchases },
+        { label: "sales returns", value: working.salesReturns ?? [] },
+        { label: "purchase returns", value: working.purchaseReturns ?? [] },
+        { label: "purchase requisitions", value: working.purchaseRequisitions ?? [] },
+        { label: "purchase orders", value: working.purchaseOrders ?? [] },
+        { label: "stock transfers", value: working.stockTransfers ?? [] },
+        { label: "stock counts", value: working.stockCounts ?? [] },
+        { label: "supplier invoices", value: working.supplierInvoices ?? [] },
+      ]
+      const linkedTo = linkedCollections.find((collection) =>
+        containsProductReference(collection.value, id),
+      )
+      if (linkedTo) {
+        blocked.push({ id, name: product.name, reason: `This product is referenced in ${linkedTo.label}. Historical records must be retained; mark the product inactive instead.` })
+        continue
+      }
+
+      working = {
+        ...working,
+        products: working.products.filter((item) => item.id !== id),
+        inventoryLots: working.inventoryLots.filter((lot) => lot.productId !== id),
+      }
+      deletedIds.push(id)
+    }
+
+    if (deletedIds.length) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-      const backupRoot = `${ERP_STORAGE_KEY}-pre-demo-delete-${timestamp}`
+      const backupRoot = `${ERP_STORAGE_KEY}-pre-product-delete-${timestamp}`
       let backupKey = backupRoot
       let suffix = 1
-      while (localStorage.getItem(backupKey) !== null) {
-        backupKey = `${backupRoot}-${suffix++}`
-      }
+      while (localStorage.getItem(backupKey) !== null) backupKey = `${backupRoot}-${suffix++}`
       const rawStore = localStorage.getItem(ERP_STORAGE_KEY) ?? JSON.stringify(store)
       try {
         localStorage.setItem(backupKey, rawStore)
       } catch (error) {
-        throw new Error(
-          `The demo product was not deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`,
-        )
+        throw new Error(`No products were deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`)
       }
-
-      persistStore(cleanup.data as unknown as StoredData)
-      return
+      persistStore(working)
     }
 
-    const stock = getProductStock(id)
-    if (stock > 0) {
-      throw new Error(
-        `${product.name} still has ${stock} units in inventory. Adjust or write off the stock before deleting this product.`,
-      )
-    }
+    return { deletedIds, blocked }
+  }
 
-    persistStore({
-      ...store,
-      products: store.products.filter((item) => item.id !== id),
-    })
+  function deleteProduct(id: string) {
+    const result = deleteProducts([id])
+    const blocked = result.blocked[0]
+    if (blocked) throw new Error(`${blocked.name} was not deleted. ${blocked.reason}`)
   }
 
   function receiveStock(
@@ -3991,6 +4054,7 @@ export function ERPProvider({
         recordMovement,
         updateProduct,
         deleteProduct,
+        deleteProducts,
         receiveStock,
         importInventory,
         addCustomer,
