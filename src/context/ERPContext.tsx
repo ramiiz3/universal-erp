@@ -83,7 +83,12 @@ export type ProductPackaging = {
   id: string
   name: string
   unit: string
+  /** Stock-unit quantity represented by one selected package. */
   conversionFactor: number
+  /** The outer package that contains this selling unit; empty string means the product stock unit. */
+  parentPackagingId?: string
+  /** Count of this selling unit contained in one parent package. */
+  unitsPerParent?: number
   barcode?: string
   purchasePrice?: number
   sellingPrice?: number
