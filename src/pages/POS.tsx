@@ -759,10 +759,26 @@ export default function POS() {
                     const vatRate = item.product.vatApplicable === false ? 0 : item.product.vatRate
                     const lineVat = effectiveAmount * (1 - discountRatio) * vatRate / 100
                     const lineTotal = effectiveAmount * (1 - discountRatio) + lineVat
-                    const pQty = Math.max(0, getAvailableUomQuantity(item.productId, item.conversionFactor, item.lineId) - item.quantity)
+                    // Use the post-invoice stock balance for the row P_Qty.
+                    const remainingLotsAfterInvoice = getSaleableInventoryLots(
+                      saleAllocationPreview.updatedLots,
+                      item.productId,
+                      warehouseId,
+                    )
+                    const pQty = remainingLotsAfterInvoice.reduce(
+                      (sum, lot) => sum + wholePackagesInLot(lot.quantity, item.conversionFactor),
+                      0,
+                    )
                     const choices = getUnitChoices(item.product)
                     const selectedChoice = choices.find((choice) => choice.id === (item.packageId ?? "")) ?? choices[0]
                     const productLots = getAvailableLotsForLine(item.productId, item.lineId)
+                    const currentLineAllocatedByLot = new Map<string, number>()
+                    for (const allocation of itemLines) {
+                      currentLineAllocatedByLot.set(
+                        allocation.lotId,
+                        (currentLineAllocatedByLot.get(allocation.lotId) ?? 0) + allocation.quantity,
+                      )
+                    }
                     const eligibleLotForCurrentUnit = productLots.find((lot) =>
                       !isInventoryLotExpired(lot) &&
                       Boolean(lot.expiry) &&
@@ -853,14 +869,17 @@ export default function POS() {
                                   </div>
                                   <div className="divide-y divide-slate-100">
                                     {choices.map((choice) => {
-                                      const available = getAvailableUomQuantity(item.productId, choice.conversionFactor, item.lineId)
+                                      // Keep selection availability before this line so the cashier
+                                      // can change UOM, but display the remaining post-line P_Qty.
+                                      const availableBeforeCurrentLine = getAvailableUomQuantity(item.productId, choice.conversionFactor, item.lineId)
+                                      const available = Math.max(0, availableBeforeCurrentLine - item.quantity)
                                       const valid = Number.isFinite(choice.conversionFactor) && choice.conversionFactor > 0
                                       const selected = choice.id === (item.packageId ?? "")
                                       return (
                                         <button
                                           key={choice.id || "stock-unit"}
                                           type="button"
-                                          disabled={!valid || available < item.quantity}
+                                          disabled={!valid || availableBeforeCurrentLine < item.quantity}
                                           onClick={() => selectCartUom(item.lineId, choice)}
                                           className={`grid w-full grid-cols-[minmax(100px,1fr)_100px_90px] items-center gap-2 px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "bg-emerald-50" : "hover:bg-slate-50"}`}
                                         >
@@ -893,7 +912,9 @@ export default function POS() {
                                     <div className="max-h-52 divide-y divide-slate-100 overflow-y-auto">
                                       {productLots.map((lot) => {
                                         const expired = isInventoryLotExpired(lot)
-                                        const lotPackages = wholePackagesInLot(lot.quantity, selectedChoice?.conversionFactor ?? 1)
+                                        const allocatedFromThisLot = currentLineAllocatedByLot.get(lot.id) ?? 0
+                                        const lotQuantityAfterInvoice = Math.max(0, lot.quantity - allocatedFromThisLot)
+                                        const lotPackagesRemaining = wholePackagesInLot(lotQuantityAfterInvoice, selectedChoice?.conversionFactor ?? 1)
                                         const sellFirst = !expired && lot.expiry && lot.id === eligibleLotForCurrentUnit
                                         return (
                                           <div key={lot.id} className={`grid grid-cols-[minmax(110px,1fr)_90px_100px_74px_74px] gap-2 px-3 py-2 text-[10px] ${expired ? "bg-red-50/70" : sellFirst ? "bg-emerald-50/70" : "bg-white"}`}>
@@ -907,7 +928,7 @@ export default function POS() {
                                             </span>
                                             <span className={expired ? "font-semibold text-red-700" : "text-slate-600"}>{lot.expiry || "Not recorded"}</span>
                                             <span className="text-right font-medium text-slate-700">{formatQuantity(lot.quantity)}</span>
-                                            <span className={`text-right font-bold ${expired ? "text-red-600" : "text-emerald-700"}`}>{expired ? "BLOCKED" : lotPackages}</span>
+                                            <span className={`text-right font-bold ${expired ? "text-red-600" : "text-emerald-700"}`}>{expired ? "BLOCKED" : lotPackagesRemaining}</span>
                                             <span className="col-span-5 -mt-1 text-[9px] font-semibold">
                                               {expired ? <span className="text-red-700">Expired · Do not sell</span> : sellFirst ? <span className="text-emerald-700">Sell this batch first · FEFO</span> : !lot.expiry ? <span className="text-amber-700">Expiry date missing</span> : <span className="text-slate-400">Next by expiry</span>}
                                             </span>
