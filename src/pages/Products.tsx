@@ -308,6 +308,7 @@ export default function Products() {
       const companyProfile = getLegacyCompanyBarcodeProfile()
       setForm({
         ...emptyForm,
+        companyName: companyProfile.companyName,
         vatRate: companyProfile.vatRate || "5",
         vatApplicable: true,
         packagings: [],
