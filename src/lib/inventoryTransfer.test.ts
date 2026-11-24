@@ -288,8 +288,13 @@ describe("inventory import and export", () => {
     expect(result.products[0]?.sellingPrice).toBe(9.4567)
     expect(result.inventoryLots.map((item) => item.totalPurchaseValue)).toEqual([5.15425, 14.19725, 14.19725])
     expect(result.inventoryLots.map((item) => item.totalSellingValue)).toEqual([11.820875, 25.3085, 25.3085])
-    expect(exported.slice(1).map((exportedRow) => [exportedRow[14], exportedRow[15], exportedRow[16], exportedRow[17], exportedRow[18]]))
-      .toEqual([
+    expect(exported.slice(1).map((exportedRow) => [
+      exportedRow[headers.indexOf("Stock Quantity")],
+      exportedRow[headers.indexOf("Lot Purchase Price")],
+      exportedRow[headers.indexOf("Lot Selling Price")],
+      exportedRow[headers.indexOf("TOTAL (Purchase Value)")],
+      exportedRow[headers.indexOf("TOTAL (Selling Value)")],
+    ])).toEqual([
         [1.25, 4.1234, 9.4567, 5.15425, 11.820875],
         [2.5, 5.6789, 10.1234, 14.19725, 25.3085],
         [2.5, 5.6789, 10.1234, 14.19725, 25.3085],
