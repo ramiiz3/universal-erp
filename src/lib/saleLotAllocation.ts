@@ -3,6 +3,9 @@ import type { InventoryLot, Product } from "../context/ERPContext"
 export type LotSaleRequest = {
   product: Product
   quantity: number
+  requestId?: string
+  /** Base-stock quantity represented by one selected POS selling unit. */
+  saleUnitConversionFactor?: number
   unitPrice?: number
   unitPriceOverride?: boolean
 
@@ -11,11 +14,16 @@ export type LotSaleRequest = {
 
 export type LotSaleAllocation = {
   product: Product
+  requestId?: string
   quantity: number
   unitPrice: number
   lotId: string
   batch: string
   expiry: string
+  supplierId?: string
+  supplierName?: string
+  grnNumber?: string
+  purchaseDate?: string
   unitCost: number
   totalCost: number
 
@@ -92,6 +100,53 @@ function isExpiredAsOf(value: string, asOfDate: Date): boolean {
   return expiryDay < todayDay
 }
 
+/** Returns true only when the lot's recorded expiry is before the sale date. */
+export function isInventoryLotExpired(
+  lot: Pick<InventoryLot, "expiry">,
+  asOfDate: Date = new Date(),
+): boolean {
+  return isExpiredAsOf(lot.expiry, asOfDate)
+}
+
+/**
+ * Orders lots the way a pharmacy should review them: earliest valid expiry
+ * first, undated stock after dated stock, and already-expired stock last.
+ */
+export function sortInventoryLotsByFEFO<T extends Pick<InventoryLot, "expiry">>(
+  lots: T[],
+  asOfDate: Date = new Date(),
+): T[] {
+  return lots
+    .map((lot, index) => ({ lot, index, expiry: expiryEndDay(lot.expiry), expired: isExpiredAsOf(lot.expiry, asOfDate) }))
+    .sort((left, right) => {
+      if (left.expired !== right.expired) return left.expired ? 1 : -1
+      const leftValid = left.expiry !== null
+      const rightValid = right.expiry !== null
+      if (leftValid && rightValid && left.expiry !== right.expiry) return left.expiry! - right.expiry!
+      if (leftValid !== rightValid) return leftValid ? -1 : 1
+      return left.index - right.index
+    })
+    .map(({ lot }) => lot)
+}
+
+/** Positive, non-expired lots eligible for a new POS sale, in FEFO order. */
+export function getSaleableInventoryLots(
+  inventoryLots: InventoryLot[],
+  productId: string,
+  warehouseId?: string,
+  asOfDate: Date = new Date(),
+): InventoryLot[] {
+  return sortInventoryLotsByFEFO(
+    inventoryLots.filter((lot) =>
+      lot.productId === productId &&
+      lot.quantity > 0 &&
+      (!warehouseId || lot.warehouseId === warehouseId) &&
+      !isExpiredAsOf(lot.expiry, asOfDate),
+    ),
+    asOfDate,
+  )
+}
+
 export function calculateLotSaleTotals(
   lines: Pick<LotSaleAllocation, "quantity" | "unitPrice" | "product">[],
   discount = 0,
@@ -127,35 +182,55 @@ export function allocateSaleLots(
   const unallocated: LotSaleAllocationResult["unallocated"] = []
 
   for (const request of requests) {
-    let remaining = request.quantity
-    const lots = updatedLots
-      .map((lot, index) => ({ lot, index }))
-      .filter(({ lot }) =>
-        lot.productId === request.product.id &&
-        lot.quantity > 0 &&
-        (!request.warehouseId || lot.warehouseId === request.warehouseId) &&
-        !isExpiredAsOf(lot.expiry, asOfDate)
-      )
-      .sort((left, right) => {
-        const leftExpiry = expiryEndDay(left.lot.expiry)
-        const rightExpiry = expiryEndDay(right.lot.expiry)
-        const leftValid = leftExpiry !== null
-        const rightValid = rightExpiry !== null
-        if (leftValid && rightValid && leftExpiry !== rightExpiry) return leftExpiry! - rightExpiry!
-        if (leftValid !== rightValid) return leftValid ? -1 : 1
-        return left.index - right.index
+    const factor = request.saleUnitConversionFactor ?? 1
+    if (!Number.isFinite(factor) || factor <= 0) {
+      unallocated.push({
+        productId: request.product.id,
+        productName: request.product.name,
+        quantity: request.quantity,
       })
+      continue
+    }
 
-    for (const { lot } of lots) {
-      if (remaining <= 0) break
+    const requestedPackageCount = Math.round(request.quantity / factor)
+    const representedQuantity = requestedPackageCount * factor
+    if (
+      requestedPackageCount <= 0 ||
+      Math.abs(representedQuantity - request.quantity) > 1e-7
+    ) {
+      unallocated.push({
+        productId: request.product.id,
+        productName: request.product.name,
+        quantity: request.quantity,
+      })
+      continue
+    }
 
-      const quantity = Math.min(remaining, lot.quantity)
-      lot.quantity -= quantity
-      remaining -= quantity
+    let remainingPackages = requestedPackageCount
+    const lots = getSaleableInventoryLots(
+      updatedLots,
+      request.product.id,
+      request.warehouseId,
+      asOfDate,
+    )
+
+    for (const lot of lots) {
+      if (remainingPackages <= 0) break
+
+      // Never split a sealed selling unit across supplier batches. A strip,
+      // box or sachet must be fulfilled entirely from one lot.
+      const packagesInLot = Math.floor((lot.quantity + 1e-9) / factor)
+      const packagesToAllocate = Math.min(remainingPackages, packagesInLot)
+      if (packagesToAllocate <= 0) continue
+
+      const quantity = Math.min(lot.quantity, packagesToAllocate * factor)
+      lot.quantity = Math.max(0, lot.quantity - quantity)
+      remainingPackages -= packagesToAllocate
 
       const unitCost = lot.purchasePrice
       lines.push({
         product: request.product,
+        requestId: request.requestId,
         quantity,
         unitPrice: request.unitPriceOverride
           ? request.unitPrice ?? lot.sellingPrice ?? request.product.sellingPrice
@@ -165,16 +240,20 @@ export function allocateSaleLots(
         locationId: lot.locationId ?? null,
         batch: lot.batch,
         expiry: lot.expiry,
+        supplierId: lot.supplierId,
+        supplierName: lot.supplierName,
+        grnNumber: lot.grnNumber,
+        purchaseDate: lot.purchaseDate,
         unitCost,
         totalCost: quantity * unitCost,
       })
     }
 
-    if (remaining > 0) {
+    if (remainingPackages > 0) {
       unallocated.push({
         productId: request.product.id,
         productName: request.product.name,
-        quantity: remaining,
+        quantity: remainingPackages * factor,
       })
     }
   }

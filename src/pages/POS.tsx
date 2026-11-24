@@ -22,9 +22,13 @@ import { getERPSettings } from "../lib/erpSettings"
 import {
   allocateSaleLots,
   calculateLotSaleTotals,
+  getSaleableInventoryLots,
+  isInventoryLotExpired,
+  sortInventoryLotsByFEFO,
 } from "../lib/saleLotAllocation"
 
 type CartItem = {
+  lineId: string
   productId: string
   product: Product
   quantity: number
@@ -37,9 +41,29 @@ type CartItem = {
 type SelectedProductPackaging =
   NonNullable<Product["packagings"]>[number]
 
+type UnitChoice = {
+  id: string
+  name: string
+  unit: string
+  conversionFactor: number
+  sellingPrice: number
+  packaging?: SelectedProductPackaging
+}
+
+function formatQuantity(value: number) {
+  return Number(value.toFixed(3)).toLocaleString(undefined, {
+    maximumFractionDigits: 3,
+  })
+}
+
+function wholePackagesInLot(quantity: number, conversionFactor: number) {
+  if (!Number.isFinite(conversionFactor) || conversionFactor <= 0) return 0
+  return Math.floor((quantity + 1e-9) / conversionFactor)
+}
+
 export default function POS() {
   const navigate = useNavigate()
-  const { products, inventoryLots, customers, warehouses, getProductStock, completeSale } = useERP()
+  const { products, inventoryLots, customers, warehouses, completeSale } = useERP()
 
   const erpSettings = getERPSettings()
   const activeWarehouses = warehouses.filter((item) => item.active)
@@ -109,6 +133,10 @@ export default function POS() {
   const [error, setError] = useState("")
   const [successInvoice, setSuccessInvoice] = useState("")
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [unitChooserProduct, setUnitChooserProduct] = useState<Product | null>(null)
+  const [unitChooserPackageId, setUnitChooserPackageId] = useState("")
+  const [unitChooserQuantity, setUnitChooserQuantity] = useState("1")
+  const [unitChooserCartLineId, setUnitChooserCartLineId] = useState<string | null>(null)
 
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -178,15 +206,58 @@ export default function POS() {
     })
   }, [products, search])
 
+  const unitChooserLots = useMemo(() => {
+    if (!unitChooserProduct) return []
+    return sortInventoryLotsByFEFO(
+      inventoryLots.filter((lot) =>
+        lot.productId === unitChooserProduct.id &&
+        lot.warehouseId === warehouseId &&
+        lot.quantity > 0,
+      ),
+    )
+  }, [inventoryLots, unitChooserProduct, warehouseId])
+
+  const unitChoices = useMemo<UnitChoice[]>(() => {
+    if (!unitChooserProduct) return []
+    return [
+      {
+        id: "",
+        name: unitChooserProduct.unit,
+        unit: unitChooserProduct.unit,
+        conversionFactor: 1,
+        sellingPrice: unitChooserProduct.sellingPrice,
+      },
+      ...(unitChooserProduct.packagings ?? [])
+        .filter((packaging) => packaging.salesEnabled)
+        .map((packaging) => ({
+          id: packaging.id,
+          name: packaging.name || packaging.unit,
+          unit: packaging.unit || packaging.name,
+          conversionFactor: packaging.conversionFactor,
+          sellingPrice: packaging.sellingPrice ?? unitChooserProduct.sellingPrice * packaging.conversionFactor,
+          packaging,
+        })),
+    ]
+  }, [unitChooserProduct])
+
+  const selectedUnitChoice = unitChoices.find((choice) => choice.id === unitChooserPackageId) ?? unitChoices[0]
+  const selectedUnitAvailable = selectedUnitChoice
+    ? unitChooserLots.reduce((sum, lot) =>
+        sum + (isInventoryLotExpired(lot) ? 0 : wholePackagesInLot(lot.quantity, selectedUnitChoice.conversionFactor)),
+      0)
+    : 0
+
   const saleAllocationPreview = useMemo(
     () =>
       allocateSaleLots(
         cart.map((item) => ({
           product: item.product,
+          requestId: item.lineId,
           warehouseId,
           quantity: item.quantity * item.conversionFactor,
+          saleUnitConversionFactor: item.conversionFactor,
           unitPrice: item.unitPrice / item.conversionFactor,
-          unitPriceOverride: Boolean(item.packageId),
+          unitPriceOverride: true,
         })),
         inventoryLots,
       ),
@@ -201,22 +272,37 @@ export default function POS() {
   const { subtotal, discount: discountAmount, vat: vatAmount } = saleTotals
   const total = Math.max(0, Number(saleTotals.total.toFixed(2)))
 
+  function closeUnitChooser() {
+    setUnitChooserProduct(null)
+    setUnitChooserPackageId("")
+    setUnitChooserQuantity("1")
+    setUnitChooserCartLineId(null)
+  }
+
+  function openUnitChooser(product: Product, cartLineId: string | null = null) {
+    if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
+      setError(`${product.name} is archived or discontinued and cannot be sold.`)
+      return
+    }
+    setError("")
+    setUnitChooserProduct(product)
+    setUnitChooserCartLineId(cartLineId)
+    const existingLine = cartLineId ? cart.find((item) => item.lineId === cartLineId) : undefined
+    setUnitChooserPackageId(existingLine?.packageId ?? "")
+    setUnitChooserQuantity(String(existingLine?.quantity ?? 1))
+  }
+
   function handleBarcode(code: string) {
     const cleanCode = code.trim()
     if (!cleanCode) return
 
     setError("")
-
     const normalizedCode = cleanCode.toLowerCase()
-
     const product = products.find((item) =>
       item.barcode.trim().toLowerCase() === normalizedCode ||
-      (item.alternateBarcodes || []).some(
-        (value) => value.trim().toLowerCase() === normalizedCode,
-      ) ||
-      (item.packagings || []).some(
-        (packaging) =>
-          packaging.barcode?.trim().toLowerCase() === normalizedCode,
+      (item.alternateBarcodes || []).some((value) => value.trim().toLowerCase() === normalizedCode) ||
+      (item.packagings || []).some((packaging) =>
+        packaging.barcode?.trim().toLowerCase() === normalizedCode,
       ),
     )
 
@@ -229,12 +315,15 @@ export default function POS() {
       return
     }
 
-    const matchedPackage = product.packagings?.find(
-      (packaging) =>
-        packaging.barcode?.trim().toLowerCase() === normalizedCode,
+    const matchedPackage = product.packagings?.find((packaging) =>
+      packaging.barcode?.trim().toLowerCase() === normalizedCode,
     )
 
-    addToCart(product, matchedPackage)
+    // A pack barcode identifies the exact UOM. A product/base barcode opens
+    // the UOM selector so the cashier chooses the unit before adding it.
+    if (matchedPackage) addToCart(product, matchedPackage, 1)
+    else openUnitChooser(product)
+
     setBarcode("")
     requestAnimationFrame(() => barcodeInputRef.current?.focus())
   }
@@ -242,176 +331,181 @@ export default function POS() {
   function addToCart(
     product: Product,
     selectedPackage?: SelectedProductPackaging,
-  ) {
-    setError("")
-
+    requestedQuantity = 1,
+  ): boolean {
     if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
       setError(`${product.name} is archived or discontinued and cannot be sold.`)
-      return
+      return false
     }
-
+    if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
+      setError("Enter a whole quantity greater than zero.")
+      return false
+    }
     if (selectedPackage && !selectedPackage.salesEnabled) {
       setError(`${selectedPackage.name} is not enabled for sales.`)
-      return
+      return false
     }
 
-    const stock = getProductStock(product.id, warehouseId)
     const factor = selectedPackage?.conversionFactor ?? 1
-    const packageId = selectedPackage?.id
-
     if (!Number.isFinite(factor) || factor <= 0) {
-      setError("Invalid product package conversion.")
-      return
+      setError("This product has an invalid selling-unit conversion.")
+      return false
     }
 
-    if (stock <= 0 || factor > stock) {
-      setError(`${product.name} does not have enough stock for this package.`)
-      return
+    const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+    const saleableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
+    const otherCartBaseQuantity = cart
+      .filter((item) => item.productId === product.id)
+      .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
+    const requestedBaseQuantity = requestedQuantity * factor
+
+    if (requestedBaseQuantity + otherCartBaseQuantity > saleableBaseStock + 1e-8) {
+      setError(`${product.name} does not have enough non-expired stock for this quantity.`)
+      return false
     }
 
-    const packagePrice =
-      selectedPackage?.sellingPrice ??
+    const availableWholePackages = saleableLots.reduce(
+      (sum, lot) => sum + wholePackagesInLot(lot.quantity, factor),
+      0,
+    )
+    const otherSameUomQuantity = cart
+      .filter((item) => item.productId === product.id && (item.packageId ?? "") === (selectedPackage?.id ?? ""))
+      .reduce((sum, item) => sum + item.quantity, 0)
+    if (requestedQuantity + otherSameUomQuantity > availableWholePackages) {
+      setError(`Only ${availableWholePackages} complete ${selectedPackage?.unit ?? product.unit} unit(s) are available across the supplier batches.`)
+      return false
+    }
+
+    const packagePrice = selectedPackage?.sellingPrice ??
       product.sellingPrice * factor
 
     setCart((current) => {
-      const existing = current.find(
-        (item) => item.productId === product.id,
+      const existing = current.find((item) =>
+        item.productId === product.id &&
+        (item.packageId ?? "") === (selectedPackage?.id ?? ""),
       )
-
-      if (existing && existing.packageId !== packageId) {
-        setError(
-          `${product.name} is already in the cart with another unit. Change its package using the cart selector.`,
-        )
-        return current
-      }
-
       if (existing) {
-        if ((existing.quantity + 1) * factor > stock) {
-          setError(
-            `${product.name} has insufficient base-unit stock for another ${selectedPackage?.name ?? product.unit}.`,
-          )
-          return current
-        }
-
         return current.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+          item.lineId === existing.lineId
+            ? { ...item, quantity: item.quantity + requestedQuantity }
             : item,
         )
       }
-
       return [
         ...current,
         {
+          lineId: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           productId: product.id,
           product,
-          quantity: 1,
+          quantity: requestedQuantity,
           unitPrice: packagePrice,
-          packageId,
+          packageId: selectedPackage?.id,
           sellingUnit: selectedPackage?.unit ?? product.unit,
           conversionFactor: factor,
         },
       ]
     })
-  }
-
-  function changeCartPackage(productId: string, packageId: string) {
-    const item = cart.find((line) => line.productId === productId)
-    const product = products.find((line) => line.id === productId)
-
-    if (!item || !product) return
-
-    const selectedPackage = packageId
-      ? product.packagings?.find((packaging) => packaging.id === packageId)
-      : undefined
-
-    if (packageId && !selectedPackage) {
-      setError("The selected package is no longer available.")
-      return
-    }
-
-    if (selectedPackage && !selectedPackage.salesEnabled) {
-      setError("This package is not enabled for sales.")
-      return
-    }
-
-    const factor = selectedPackage?.conversionFactor ?? 1
-    const stock = getProductStock(productId, warehouseId)
-
-    if (!Number.isFinite(factor) || factor <= 0) {
-      setError("Invalid product package conversion.")
-      return
-    }
-
-    if (item.quantity * factor > stock) {
-      setError(
-        `This cart quantity requires ${item.quantity * factor} ${product.unit}, but only ${stock} are available.`,
-      )
-      return
-    }
-
-    const packagePrice =
-      selectedPackage?.sellingPrice ??
-      product.sellingPrice * factor
-
     setError("")
-    setCart((current) =>
-      current.map((line) =>
-        line.productId === productId
-          ? {
-              ...line,
-              packageId: selectedPackage?.id,
-              sellingUnit: selectedPackage?.unit ?? product.unit,
-              conversionFactor: factor,
-              unitPrice: packagePrice,
-            }
-          : line,
-      ),
-    )
+    return true
   }
 
-  function updateQuantity(productId: string, nextQuantity: number) {
-    const product = products.find((item) => item.id === productId)
-    if (!product) return
+  function confirmUnitSelection() {
+    if (!unitChooserProduct || !selectedUnitChoice) return
+    const quantity = Number(unitChooserQuantity)
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setError("Quantity must be a whole number greater than zero.")
+      return
+    }
+    const factor = selectedUnitChoice.conversionFactor
+    if (!Number.isFinite(factor) || factor <= 0) {
+      setError("The selected selling unit has an invalid stock conversion.")
+      return
+    }
 
-    const stock = getProductStock(productId, warehouseId)
+    if (unitChooserCartLineId) {
+      const line = cart.find((item) => item.lineId === unitChooserCartLineId)
+      if (!line) {
+        setError("This cart line no longer exists. Select the product again.")
+        closeUnitChooser()
+        return
+      }
+      const saleableLots = getSaleableInventoryLots(inventoryLots, line.productId, warehouseId)
+      const otherCartBaseQuantity = cart
+        .filter((item) => item.productId === line.productId && item.lineId !== line.lineId)
+        .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
+      const availableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
+      const availableInSelectedUnit = saleableLots.reduce(
+        (sum, lot) => sum + wholePackagesInLot(lot.quantity, factor),
+        0,
+      )
+      if (quantity > availableInSelectedUnit || otherCartBaseQuantity + quantity * factor > availableBaseStock + 1e-8) {
+        setError(`Only ${availableInSelectedUnit} complete ${selectedUnitChoice.unit} unit(s) are available for this product.`)
+        return
+      }
+      setCart((current) => current.map((item) =>
+        item.lineId === line.lineId
+          ? {
+              ...item,
+              quantity,
+              unitPrice: selectedUnitChoice.sellingPrice,
+              packageId: selectedUnitChoice.packaging?.id,
+              sellingUnit: selectedUnitChoice.unit,
+              conversionFactor: factor,
+            }
+          : item,
+      ))
+      setError("")
+      closeUnitChooser()
+      return
+    }
+
+    const added = addToCart(unitChooserProduct, selectedUnitChoice.packaging, quantity)
+    if (added) closeUnitChooser()
+  }
+
+  function updateQuantity(lineId: string, nextQuantity: number) {
+    const cartItem = cart.find((item) => item.lineId === lineId)
+    if (!cartItem) return
 
     if (nextQuantity <= 0) {
-      setCart((current) =>
-        current.filter((item) => item.productId !== productId),
-      )
+      setCart((current) => current.filter((item) => item.lineId !== lineId))
+      return
+    }
+    if (!Number.isInteger(nextQuantity)) {
+      setError("Quantity must be a whole number.")
       return
     }
 
-    const cartItem = cart.find((item) => item.productId === productId)
-    const factor = cartItem?.conversionFactor ?? 1
-
-    if (nextQuantity * factor > stock) {
-      setError(
-        `${product.name} only has ${stock} ${product.unit} available.`,
-      )
+    const saleableLots = getSaleableInventoryLots(inventoryLots, cartItem.productId, warehouseId)
+    const saleableBaseStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
+    const otherCartBaseQuantity = cart
+      .filter((item) => item.productId === cartItem.productId && item.lineId !== lineId)
+      .reduce((sum, item) => sum + item.quantity * item.conversionFactor, 0)
+    const packageCapacity = saleableLots.reduce(
+      (sum, lot) => sum + wholePackagesInLot(lot.quantity, cartItem.conversionFactor),
+      0,
+    )
+    if (
+      nextQuantity > packageCapacity ||
+      otherCartBaseQuantity + nextQuantity * cartItem.conversionFactor > saleableBaseStock + 1e-8
+    ) {
+      setError(`Not enough complete ${cartItem.sellingUnit} units are available in non-expired batches.`)
       return
     }
 
     setError("")
-
-    setCart((current) =>
-      current.map((item) =>
-        item.productId === productId
-          ? { ...item, quantity: nextQuantity }
-          : item,
-      ),
-    )
+    setCart((current) => current.map((item) =>
+      item.lineId === lineId ? { ...item, quantity: nextQuantity } : item,
+    ))
   }
 
-  function removeItem(productId: string) {
-    setCart((current) =>
-      current.filter((item) => item.productId !== productId),
-    )
+  function removeItem(lineId: string) {
+    setCart((current) => current.filter((item) => item.lineId !== lineId))
   }
 
   function clearSale() {
     setCart([])
+    closeUnitChooser()
     setCustomerId("")
     setPaymentMethod("Cash")
     setDiscount("")
@@ -467,6 +561,7 @@ export default function POS() {
         warehouseId,
         items: cart.map((item) => ({
           productId: item.productId,
+          requestId: item.lineId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           packageId: item.packageId,
@@ -599,29 +694,30 @@ export default function POS() {
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map((product) => {
-                const stock = getProductStock(product.id, warehouseId)
-                const inCart =
-                  cart.find((item) => item.productId === product.id)
-                    ?.quantity ?? 0
+                const saleableLots = getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
+                const saleableStock = saleableLots.reduce((sum, lot) => sum + lot.quantity, 0)
+                const supplierCount = new Set(saleableLots.map((lot) => lot.supplierId || lot.supplierName).filter(Boolean)).size
+                const inCart = cart
+                  .filter((item) => item.productId === product.id)
+                  .reduce((sum, item) => sum + item.quantity, 0)
+                const uomCount = 1 + (product.packagings || []).filter((item) => item.salesEnabled).length
 
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    disabled={stock <= 0}
-                    onClick={() => addToCart(product)}
-                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={saleableStock <= 0}
+                    onClick={() => openUnitChooser(product)}
+                    className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="line-clamp-2 font-medium text-slate-900">
                           {product.name}
                         </h3>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {product.category}
-                        </p>
+                        <p className="mt-1 text-xs text-slate-500">{product.category}</p>
+                        <p className="mt-1 text-xs text-slate-400">{product.barcode || product.sku}</p>
                       </div>
-
                       <div className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                         {product.unit}
                       </div>
@@ -629,17 +725,20 @@ export default function POS() {
 
                     <div className="mt-4 flex items-end justify-between gap-3">
                       <div>
-                        <p className="text-xl font-semibold text-slate-900">
-                          AED {product.sellingPrice.toFixed(2)}
+                        <p className="text-lg font-semibold text-slate-900">
+                          AED {product.sellingPrice.toFixed(2)} <span className="text-xs font-normal text-slate-500">/ {product.unit}</span>
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          Stock: {stock}
-                          {inCart > 0 ? ` • In cart: ${inCart}` : ""}
+                          Saleable stock: {formatQuantity(saleableStock)} {product.unit}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {uomCount} selling unit(s) · {saleableLots.length} batch(es){supplierCount ? ` · ${supplierCount} supplier(s)` : ""}
+                          {inCart > 0 ? ` · ${inCart} in cart` : ""}
                         </p>
                       </div>
 
-                      <span className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                        Add
+                      <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition group-hover:bg-emerald-700 group-hover:text-white">
+                        Choose UOM
                       </span>
                     </div>
                   </button>
@@ -699,7 +798,7 @@ export default function POS() {
                 <div className="space-y-3">
                   {cart.map((item) => {
                     const itemLines = lotPricedLines.filter(
-                      (line) => line.product.id === item.productId,
+                      (line) => line.requestId === item.lineId,
                     )
                     const itemTotal = itemLines.reduce(
                       (sum, line) => sum + line.quantity * line.unitPrice,
@@ -708,61 +807,54 @@ export default function POS() {
 
                     return (
                       <div
-                        key={item.productId}
+                        key={item.lineId}
                         className="rounded-xl border border-slate-200 p-3"
                       >
                         <div className="flex items-start gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-slate-900">
-                              {item.product.name}
+                            <p className="font-medium text-slate-900">{item.product.name}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                {item.sellingUnit}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                1 {item.sellingUnit} = {formatQuantity(item.conversionFactor)} {item.product.unit}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openUnitChooser(item.product, item.lineId)}
+                                className="text-xs font-semibold text-emerald-700 hover:underline"
+                              >
+                                Change unit
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Price: AED {item.unitPrice.toFixed(2)} per {item.sellingUnit}
                             </p>
 
-                            <select
-                              aria-label={`Selling unit for ${item.product.name}`}
-                              value={item.packageId || ""}
-                              onChange={(event) =>
-                                changeCartPackage(item.productId, event.target.value)
-                              }
-                              className="mt-2 h-9 max-w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-emerald-500"
-                            >
-                              <option value="">Base unit ({item.product.unit})</option>
-                              {(item.product.packagings || [])
-                                .filter((packaging) => packaging.salesEnabled)
-                                .map((packaging) => (
-                                  <option key={packaging.id} value={packaging.id}>
-                                    {packaging.name} · 1 {packaging.unit} = {packaging.conversionFactor} {item.product.unit}
-                                  </option>
-                                ))}
-                            </select>
-
-                            {!(item.product.packagings || []).some((packaging) => packaging.salesEnabled) && (
-                              <p className="mt-1 text-[11px] text-amber-700">
-                                Only the base unit is configured. Add Strip / Piece in Product Master to sell smaller units.
-                              </p>
-                            )}
-                            {item.packageId && (
-                              <p className="mt-1 text-[11px] text-emerald-700">
-                                1 {item.sellingUnit} = {item.conversionFactor} {item.product.unit}
-                              </p>
-                            )}
-
-                            <div className="mt-1 space-y-0.5 text-xs text-slate-500">
-                              {itemLines.map((line, index) => (
-                                <p key={`${item.productId}-${line.lotId}-${index}`}>
-                                  {itemLines.length > 1
-                                    ? `Lot ${line.batch || "—"} · `
-                                    : ""}
-                                  {line.quantity} × AED {line.unitPrice.toFixed(2)}
-                                </p>
-                              ))}
+                            <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs text-slate-600">
+                              {itemLines.map((line, index) => {
+                                const packageQuantity = line.quantity / item.conversionFactor
+                                return (
+                                  <p key={`${item.lineId}-${line.lotId}-${index}`}>
+                                    <span className="font-medium text-slate-700">{line.supplierName || "Supplier not recorded"}</span>
+                                    {" · "}Batch {line.batch || "—"}
+                                    {" · "}Expiry {line.expiry || "Not recorded"}
+                                    {" · "}{formatQuantity(packageQuantity)} {item.sellingUnit}
+                                  </p>
+                                )
+                              })}
+                              {itemLines.length === 0 && (
+                                <p className="text-amber-700">Batch allocation will be confirmed before completing this sale.</p>
+                              )}
                             </div>
                           </div>
 
                           <button
                             type="button"
-                            onClick={() => removeItem(item.productId)}
+                            onClick={() => removeItem(item.lineId)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            aria-label={`Remove ${item.product.name}`}
+                            aria-label={`Remove ${item.product.name} ${item.sellingUnit}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -772,30 +864,22 @@ export default function POS() {
                           <div className="inline-flex items-center rounded-lg border border-slate-200">
                             <button
                               type="button"
-                              onClick={() =>
-                                updateQuantity(
-                                  item.productId,
-                                  item.quantity - 1,
-                                )
-                              }
+                              onClick={() => updateQuantity(item.lineId, item.quantity - 1)}
                               className="p-2 text-slate-500 hover:bg-slate-50"
+                              aria-label={`Decrease ${item.sellingUnit} quantity`}
                             >
                               <Minus className="h-4 w-4" />
                             </button>
 
-                            <span className="min-w-16 px-1 text-center text-sm font-medium text-slate-800">
+                            <span className="min-w-20 px-1 text-center text-sm font-medium text-slate-800">
                               {item.quantity} {item.sellingUnit}
                             </span>
 
                             <button
                               type="button"
-                              onClick={() =>
-                                updateQuantity(
-                                  item.productId,
-                                  item.quantity + 1,
-                                )
-                              }
+                              onClick={() => updateQuantity(item.lineId, item.quantity + 1)}
                               className="p-2 text-slate-500 hover:bg-slate-50"
+                              aria-label={`Increase ${item.sellingUnit} quantity`}
                             >
                               <Plus className="h-4 w-4" />
                             </button>
@@ -964,6 +1048,240 @@ export default function POS() {
           </aside>
         </div>
       </div>
+
+      {unitChooserProduct && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-uom-title"
+            className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  {unitChooserCartLineId ? "Change selling unit" : "Select selling unit"}
+                </p>
+                <h2 id="pos-uom-title" className="mt-1 text-lg font-semibold text-slate-900">
+                  {unitChooserProduct.name}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {unitChooserProduct.barcode || unitChooserProduct.sku} · Stock tracked in {unitChooserProduct.unit} · Warehouse: {activeWarehouses.find((item) => item.id === warehouseId)?.name || "—"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeUnitChooser}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                aria-label="Close selling unit selection"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+
+            <div className="max-h-[calc(94vh-76px)] space-y-5 overflow-y-auto p-5">
+              <section>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Choose UOM</h3>
+                    <p className="mt-1 text-xs text-slate-500">Choose the exact unit the customer is buying. The price and available quantity update for each unit.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {unitChoices.length} selling unit(s)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[620px] text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">UOM</th>
+                        <th className="px-4 py-3">Conversion</th>
+                        <th className="px-4 py-3 text-right">Selling price</th>
+                        <th className="px-4 py-3 text-right">Available</th>
+                        <th className="px-4 py-3 text-right">Select</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {unitChoices.map((choice) => {
+                        const available = unitChooserLots.reduce((sum, lot) =>
+                          sum + (isInventoryLotExpired(lot) ? 0 : wholePackagesInLot(lot.quantity, choice.conversionFactor)),
+                        0)
+                        const selected = choice.id === unitChooserPackageId
+                        const validFactor = Number.isFinite(choice.conversionFactor) && choice.conversionFactor > 0
+                        return (
+                          <tr key={choice.id || "base-unit"} className={selected ? "bg-emerald-50/70" : "bg-white"}>
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-900">{choice.name}</p>
+                              {choice.id === "" && <p className="mt-0.5 text-[11px] text-slate-500">Stock unit</p>}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              1 {choice.unit} = {formatQuantity(choice.conversionFactor)} {unitChooserProduct.unit}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                              AED {choice.sellingPrice.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={available > 0 && validFactor ? "font-semibold text-emerald-700" : "font-medium text-red-600"}>
+                                {validFactor ? available : 0} {choice.unit}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={!validFactor || available <= 0}
+                                onClick={() => {
+                                  setUnitChooserPackageId(choice.id)
+                                  setUnitChooserQuantity("1")
+                                  setError("")
+                                }}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${selected ? "bg-emerald-700 text-white" : "border border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-800"}`}
+                              >
+                                {selected ? "Selected" : "Select"}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Supplier batches and expiry</h3>
+                    <p className="mt-1 text-xs text-slate-500">All positive stock lots for this medicine are listed separately by supplier. Valid batches are ordered by earliest expiry (FEFO).</p>
+                  </div>
+                  <span className="text-xs font-medium text-slate-500">
+                    Showing {unitChooserLots.length} batch(es)
+                  </span>
+                </div>
+
+                {unitChooserLots.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[760px] text-sm">
+                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Supplier</th>
+                          <th className="px-4 py-3">Batch / GRN</th>
+                          <th className="px-4 py-3">Expiry</th>
+                          <th className="px-4 py-3 text-right">Stock ({unitChooserProduct.unit})</th>
+                          <th className="px-4 py-3 text-right">Complete {selectedUnitChoice?.unit || "unit"}s</th>
+                          <th className="px-4 py-3">Priority</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {unitChooserLots.map((lot) => {
+                          const expired = isInventoryLotExpired(lot)
+                          const packageQty = selectedUnitChoice
+                            ? wholePackagesInLot(lot.quantity, selectedUnitChoice.conversionFactor)
+                            : 0
+                          const firstEligibleLotId = selectedUnitChoice
+                            ? unitChooserLots.find((candidate) =>
+                                !isInventoryLotExpired(candidate) &&
+                                Boolean(candidate.expiry) &&
+                                wholePackagesInLot(candidate.quantity, selectedUnitChoice.conversionFactor) > 0,
+                              )?.id
+                            : undefined
+                          const sellFirst = !expired && Boolean(lot.expiry) && lot.id === firstEligibleLotId
+                          return (
+                            <tr key={lot.id} className={expired ? "bg-red-50/50" : sellFirst ? "bg-emerald-50/60" : "bg-white"}>
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-slate-800">{lot.supplierName || "Supplier not recorded"}</p>
+                                {lot.supplierId && <p className="mt-0.5 text-[11px] text-slate-400">{lot.supplierId}</p>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-slate-700">{lot.batch || "—"}</p>
+                                <p className="mt-0.5 text-[11px] text-slate-400">GRN: {lot.grnNumber || "—"}</p>
+                              </td>
+                              <td className="px-4 py-3 font-medium text-slate-700">
+                                {lot.expiry || "Not recorded"}
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-700">
+                                {formatQuantity(lot.quantity)}
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold">
+                                <span className={expired ? "text-red-600" : packageQty > 0 ? "text-slate-800" : "text-slate-400"}>
+                                  {expired ? "Blocked" : packageQty}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {expired ? (
+                                  <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">Expired · Do not sell</span>
+                                ) : sellFirst ? (
+                                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">Sell first · FEFO</span>
+                                ) : !lot.expiry ? (
+                                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Expiry missing</span>
+                                ) : (
+                                  <span className="text-xs text-slate-500">Next by expiry</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
+                    No stock lots are recorded for this product in the selected warehouse.
+                  </p>
+                )}
+              </section>
+
+              <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <div className="grid gap-4 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Selected unit</p>
+                    <p className="mt-1 text-lg font-bold text-slate-900">
+                      {selectedUnitChoice?.name || "Choose a unit"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      AED {selectedUnitChoice?.sellingPrice.toFixed(2) || "0.00"} per {selectedUnitChoice?.unit || "unit"} · {selectedUnitAvailable} available
+                    </p>
+                  </div>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Quantity ({selectedUnitChoice?.unit || "unit"})
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedUnitAvailable}
+                      step="1"
+                      value={unitChooserQuantity}
+                      onChange={(event) => setUnitChooserQuantity(event.target.value)}
+                      className="mt-1 h-11 w-full rounded-lg border border-emerald-200 bg-white px-3 text-base font-semibold text-slate-900 outline-none focus:border-emerald-600"
+                    />
+                  </label>
+                  <div className="flex gap-2 sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={closeUnitChooser}
+                      className="h-11 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmUnitSelection}
+                      disabled={!selectedUnitChoice || selectedUnitAvailable <= 0 || Number(unitChooserQuantity) < 1 || Number(unitChooserQuantity) > selectedUnitAvailable || !Number.isInteger(Number(unitChooserQuantity))}
+                      className="h-11 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {unitChooserCartLineId ? "Save unit" : "Add to sale"}
+                    </button>
+                  </div>
+                </div>
+                {error && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{error}</p>}
+              </section>
+
+              <p className="text-xs text-slate-500">
+                FEFO means First Expiry, First Out. The POS will deduct complete units from the earliest-expiring valid supplier batch first and will never use an expired batch. A sealed strip, box or sachet is not split across two suppliers' batches.
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
 
       {cameraOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
