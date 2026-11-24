@@ -11,8 +11,11 @@ export type PackagingConversionInput = {
  * Resolve pack sizes entered as a hierarchy.
  *
  * Example with Box as the inventory unit:
- *  - Strip, parent = base Box, unitsPerParent = 10  -> 0.1 Box per Strip
- *  - Tablet, parent = Strip, unitsPerParent = 10    -> 0.01 Box per Tablet
+ *  - Strip, parent = base Box, unitsPerParent = 10 -> 0.1 Box per Strip
+ *  - Tablet, parent = Strip, unitsPerParent = 10   -> 0.01 Box per Tablet
+ *
+ * Stock stays recorded in the outer Box unit. A sale of 5 tablets therefore
+ * consumes 0.05 Box from the selected batch.
  *
  * Old packaging records without parentPackagingId retain their stored
  * conversionFactor unchanged.
