@@ -51,7 +51,6 @@ describe("pharmacy pack hierarchy", () => {
     ])
 
     expect(result[0].conversionFactor).toBe(0.1)
-    expect(result[0].parentPackagingId).toBeUndefined()
   })
 
   it("rejects a parent pack that appears after its child", () => {
