@@ -1150,6 +1150,11 @@ export default function POS() {
                     </tbody>
                   </table>
                 </div>
+                {unitChoices.length === 1 && (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                    Only the stock unit is configured for this medicine. To sell a strip, sachet or individual tablet, open Product Master → Edit Product → Pharmacy pack hierarchy & POS units. Set the stock unit (for example Box), add Strip inside Box and enter the number of strips per box, then add Tablet inside Strip and enter the number of tablets per strip. Save once; POS will calculate the smaller units and their available quantities automatically.
+                  </p>
+                )}
               </section>
 
               <section>
