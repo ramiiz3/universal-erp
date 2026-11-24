@@ -58,7 +58,7 @@ function row(overrides: Partial<Record<string, string | number>> = {}) {
     "VAT Rate": 5,
     "Batch": "B-1",
     "Expiry Date": "2027-06",
-    "Stock Quantity (Including Bonus)": 5,
+    "Stock Quantity": 5,
     "Lot Purchase Price": 8,
     "Lot Selling Price": 12,
     "TOTAL (Purchase Value)": 40,
@@ -170,7 +170,7 @@ describe("inventory import and export", () => {
     expect(csv).toContain('"Medicine, ""A"""')
     expect(csv).toContain('"Cold\nCare"')
     expect(rows[0]).toEqual(INVENTORY_EXPORT_HEADERS)
-    expect(rows[1]?.[14]).toBe(0)
+    expect(rows[1]?.[headers.indexOf("Stock Quantity")]).toBe(0)
   })
 
   it("imports legacy pharmacy GRN columns with date, supplier, MRP, bonus, ACT and QTY", () => {
