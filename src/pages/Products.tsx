@@ -1067,6 +1067,12 @@ export default function Products() {
                 </select>
               </label>
 
+              <Field
+                label="Product Group"
+                value={form.productGroup}
+                onChange={(value) => setForm({ ...form, productGroup: value })}
+              />
+
               <label className="space-y-2">
                 <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Subcategory
@@ -1094,7 +1100,33 @@ export default function Products() {
               </label>
 
               <Field
-                label="SKU"
+                label="Company"
+                value={form.companyName}
+                onChange={(value) => setForm({ ...form, companyName: value })}
+              />
+
+              <Field
+                label="Generic Name"
+                value={form.genericName}
+                onChange={(value) => setForm({ ...form, genericName: value })}
+              />
+
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Preferred Supplier</span>
+                <select
+                  value={form.preferredSupplierId}
+                  onChange={(event) => setForm({ ...form, preferredSupplierId: event.target.value })}
+                  className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+                >
+                  <option value="">Select supplier (optional)</option>
+                  {suppliers.filter((supplier) => supplier.status === "Active" || supplier.id === form.preferredSupplierId).map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <Field
+                label="Product Code / SKU"
                 value={form.sku}
                 onChange={(value) =>
                   setForm({
@@ -1106,7 +1138,7 @@ export default function Products() {
 
               <div className="space-y-2">
                 <Field
-                  label="Barcode"
+                  label="Barcode / GTIN"
                   value={form.barcode}
                   onChange={(value) => setForm({ ...form, barcode: value })}
                 />
@@ -1134,7 +1166,14 @@ export default function Products() {
               </div>
 
               <Field
-                label="Purchase Price (base unit)"
+                label="MRP"
+                value={form.mrp}
+                onChange={(value) => setForm({ ...form, mrp: value })}
+                type="number"
+              />
+
+              <Field
+                label="Purchase Price / Buying Rate (base unit)"
                 value={form.purchasePrice}
                 onChange={updatePurchasePrice}
                 type="number"
