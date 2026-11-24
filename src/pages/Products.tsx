@@ -536,13 +536,10 @@ export default function Products() {
 
   function handleDelete(product: Product) {
     const stock = getProductStock(product.id)
-    const hasStockHistory = stock > 0 || isBuiltInDemoProduct(product)
-    const confirmation = hasStockHistory
-      ? `Delete "${product.name}" and remove its ${stock} on-hand units, batches and stock movement history? A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers cannot be deleted.`
-      : `Delete "${product.name}" from the product master? A recovery backup will be created first.`
+    const confirmation = `Delete "${product.name}" from the product master? This also removes its ${stock} on-hand units, batches and stock movement history. A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers are protected.`
     if (!window.confirm(confirmation)) return
     try {
-      deleteProduct(product.id, { removeInventory: hasStockHistory })
+      deleteProduct(product.id, { removeInventory: true })
       if (selectedProduct?.id === product.id) setSelectedProduct(null)
       setSelectedProductIds((current) => current.filter((id) => id !== product.id))
     } catch (error) {
