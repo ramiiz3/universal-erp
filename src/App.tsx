@@ -9,6 +9,7 @@ import Invoices from "./pages/Invoices"
 import CustomerPayments from "./pages/CustomerPayments"
 import PaymentReconciliation from "./pages/PaymentReconciliation"
 import SalesReturns from "./pages/SalesReturns"
+import PurchaseReturns from "./pages/PurchaseReturns"
 import Customers from "./pages/Customers"
 import Products from "./pages/Products"
 import Categories from "./pages/Categories"
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/stock-counts" element={<StockCounts />} />
             <Route path="/stock-valuation" element={<StockValuation />} />
             <Route path="/purchasing" element={<Purchasing />} />
+            <Route path="/purchase-returns" element={<PurchaseReturns />} />
             <Route path="/procurement-workflow" element={<ProcurementWorkflow />} />
             <Route path="/supplier-invoices" element={<SupplierInvoices />} />
             <Route path="/suppliers" element={<Suppliers />} />
