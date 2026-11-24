@@ -319,6 +319,7 @@ type CreatePurchaseInput = {
   supplierInvoice: string
   purchaseOrderId?: string
   grnNumber?: string
+  purchaseDate?: string
   items: {
     productId: string
     quantity: number
@@ -3110,6 +3111,15 @@ export function ERPProvider({
     if (!resolvedSupplierName) {
       throw new Error("Supplier name is required.")
     }
+    const receiptDate = (input.purchaseDate ?? "").trim() || new Date().toISOString().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
+      throw new Error("Enter a valid purchase date for this goods receipt.")
+    }
+    const receivedAtDate = new Date(`${receiptDate}T12:00:00.000Z`)
+    if (Number.isNaN(receivedAtDate.getTime()) || receivedAtDate.toISOString().slice(0, 10) !== receiptDate) {
+      throw new Error("Enter a valid purchase date for this goods receipt.")
+    }
+    const receivedAt = receivedAtDate.toISOString()
 
     if (!input.items.length) {
       throw new Error(
@@ -3255,7 +3265,7 @@ export function ERPProvider({
           totalPurchaseValue: item.quantity * item.purchasePrice,
           warehouseId: receivingWarehouse.id,
           locationId: receivingLocation?.id ?? null,
-          purchaseDate: new Date().toISOString().slice(0, 10),
+          purchaseDate: receiptDate,
           grnNumber: input.grnNumber?.trim() || undefined,
           supplierId: selectedSupplier?.id,
           supplierName: resolvedSupplierName,
@@ -3321,8 +3331,7 @@ export function ERPProvider({
       warehouseName: receivingWarehouse.name,
       locationId: receivingLocation?.id ?? null,
       locationName: receivingLocation?.name ?? "",
-      createdAt:
-        new Date().toISOString(),
+      createdAt: receivedAt,
       subtotal,
       total: subtotal,
       status: "Received",
