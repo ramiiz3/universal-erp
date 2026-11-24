@@ -79,9 +79,11 @@ export function getERPUnits(existingUnits: string[] = []) {
 
   let changed = false
 
-  if (units.length === 0) {
-    units = [...DEFAULT_UNITS]
-    changed = true
+  for (const defaultUnit of DEFAULT_UNITS) {
+    if (!units.some((unit) => normalise(unit.name) === normalise(defaultUnit.name))) {
+      units.push({ ...defaultUnit })
+      changed = true
+    }
   }
 
   for (const name of existingUnits) {
