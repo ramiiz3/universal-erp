@@ -1099,6 +1099,9 @@ export function ERPProvider({
 
     const expectedRevision = cloudRevisionRef.current
     if (expectedRevision === null || cloudCompanyRef.current !== companyId) return
+    // Capture the common base before the network request. Another tab can
+    // advance the shared checkpoint while this save is still in flight.
+    const baseAtSaveStart = readCloudSyncBase()
 
     cloudSavingRef.current = true
     setCloudSyncStatus("saving")
@@ -1115,7 +1118,7 @@ export function ERPProvider({
       let acknowledgedState = snapshot
       let nextRevision = Number(data)
       if (error?.code === "40001") {
-        const base = readCloudSyncBase()
+        const base = baseAtSaveStart
         const { data: remoteRow, error: readError } = await client
           .from("legacy_erp_state")
           .select("revision, state")
