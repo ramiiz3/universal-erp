@@ -499,23 +499,26 @@ export default function Products() {
     closeForm()
   }
 
-  function handleBulkDelete(ids: string[]) {
+  function handleBulkDelete(ids: string[], removeInventory = false) {
     const uniqueIds = [...new Set(ids)].filter((id) => products.some((product) => product.id === id))
     if (!uniqueIds.length) return
 
-    const confirmation = uniqueIds.length === products.length
-      ? `Delete all ${uniqueIds.length} products that have no stock or linked business history? Products with stock, sales, purchases or stock movements will be retained.`
-      : `Delete ${uniqueIds.length} selected product(s) where safe? Products with stock or linked history will be retained.`
+    const confirmation = removeInventory
+      ? `PERMANENTLY remove ${uniqueIds.length} selected product(s), their inventory lots and stock movement history? A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers will still be retained.`
+      : `Delete ${uniqueIds.length} selected product(s) only where there is no stock or stock history? Products with stock or commercial documents will be retained.`
     if (!window.confirm(confirmation)) return
 
     try {
-      const result = deleteProducts(uniqueIds)
+      const result = deleteProducts(uniqueIds, { removeInventory })
       setSelectedProductIds([])
       if (selectedProduct && result.deletedIds.includes(selectedProduct.id)) setSelectedProduct(null)
       const blockedSummary = result.blocked.length
-        ? "\n\nKept because stock or business history exists:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
+        ? "\n\nProducts retained because of business history:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
         : ""
-      window.alert(`${result.deletedIds.length} product(s) deleted.${blockedSummary}`)
+      const inventorySummary = removeInventory
+        ? `\nInventory lots removed: ${result.removedLots}. Stock movements removed: ${result.removedMovements}.`
+        : ""
+      window.alert(`${result.deletedIds.length} product(s) deleted.${inventorySummary}${blockedSummary}`)
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error))
     }
@@ -533,24 +536,15 @@ export default function Products() {
 
   function handleDelete(product: Product) {
     const stock = getProductStock(product.id)
-    const isDemoProduct = isBuiltInDemoProduct(product)
-
-    if (stock > 0 && !isDemoProduct) {
-      window.alert(
-        `${product.name} still has ${stock} units in inventory. Adjust or write off the stock before deleting this product.`,
-      )
-      return
-    }
-
-    const confirmation = isDemoProduct && stock > 0
-      ? `Delete the unused demo product "${product.name}" and its ${stock} units of bundled demo stock? This is allowed only when no sales, purchases or transfers reference it.`
-      : `Delete ${product.name}?`
-
+    const hasStockHistory = stock > 0 || isBuiltInDemoProduct(product)
+    const confirmation = hasStockHistory
+      ? `Delete "${product.name}" and remove its ${stock} on-hand units, batches and stock movement history? A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers cannot be deleted.`
+      : `Delete "${product.name}" from the product master? A recovery backup will be created first.`
     if (!window.confirm(confirmation)) return
-
     try {
-      deleteProduct(product.id)
+      deleteProduct(product.id, { removeInventory: hasStockHistory })
       if (selectedProduct?.id === product.id) setSelectedProduct(null)
+      setSelectedProductIds((current) => current.filter((id) => id !== product.id))
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error))
     }
@@ -612,12 +606,12 @@ export default function Products() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => handleBulkDelete(products.map((product) => product.id))}
+            onClick={() => handleBulkDelete(products.map((product) => product.id), true)}
             disabled={products.length === 0}
             className="flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
           >
             <Trash2 size={16} />
-            Delete All Products
+            Delete All + Stock
           </button>
           <button
             type="button"
@@ -699,7 +693,8 @@ export default function Products() {
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedProductIds.length} product(s) selected</span>
             <div className="flex gap-2">
               <button type="button" onClick={() => setSelectedProductIds([])} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Cancel selection</button>
-              <button type="button" onClick={() => handleBulkDelete(selectedProductIds)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"><Trash2 size={14}/> Delete Selected</button>
+              <button type="button" onClick={() => handleBulkDelete(selectedProductIds)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={14}/> Delete Selected</button>
+              <button type="button" onClick={() => handleBulkDelete(selectedProductIds, true)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"><Trash2 size={14}/> Delete Selected + Stock</button>
             </div>
           </div>
         )}
@@ -825,12 +820,13 @@ export default function Products() {
                               : "font-semibold"
                           }
                         >
-                          {stock}
+                          On hand: {stock}
                         </div>
 
                         <div className="text-xs text-slate-500">
-                          {product.unit}
+                          {product.unit} · Reorder at {product.minimumStock}
                         </div>
+                        {stock > 0 && stock <= product.minimumStock && <div className="mt-1 text-[11px] font-semibold text-amber-700">Below minimum</div>}
                       </td>
 
                       <td className="px-5 py-4">
