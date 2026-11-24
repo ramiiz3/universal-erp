@@ -918,7 +918,7 @@ export default function Purchasing() {
                         Select product
                       </option>
 
-                      {products.map((product) => (
+                      {products.filter((product) => product.status !== "INACTIVE" && product.status !== "DISCONTINUED").map((product) => (
                         <option
                           key={product.id}
                           value={product.id}

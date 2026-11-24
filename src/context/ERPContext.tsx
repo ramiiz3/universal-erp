@@ -98,6 +98,8 @@ export type ProductDeletionBlock = {
 export type ProductDeletionOptions = {
   /** Remove stock lots and stock movement rows with the product. Commercial documents are always protected. */
   removeInventory?: boolean
+  /** Mark products blocked by protected records or remaining stock as inactive in the same persisted operation. */
+  archiveBlocked?: boolean
 }
 
 export type ProductDeletionResult = {
@@ -433,6 +435,7 @@ type ERPContextValue = {
     id: string,
     product: Omit<Product, "id">,
   ) => void
+  archiveProducts: (ids: string[]) => number
 
   deleteProduct: (id: string, options?: ProductDeletionOptions) => void
   deleteProducts: (ids: string[], options?: ProductDeletionOptions) => ProductDeletionResult
@@ -1197,8 +1200,15 @@ export function ERPProvider({
     if (!companyId || !user?.id || !client) {
       throw new Error("Sign in to the pharmacy owner account before resolving cloud sync.")
     }
-    if (!cloudSyncError.toLowerCase().includes("conflicting erp changes")) {
-      throw new Error("There is no confirmed cloud revision conflict to resolve. Refresh the ERP and check the sync status first.")
+    const conflictMessage = cloudSyncError.toLowerCase()
+    const isConflict = [
+      "conflicting erp changes",
+      "edited differently on two workstations",
+      "common base revision is unavailable",
+      "several workstations saved at the same time",
+    ].some((phrase) => conflictMessage.includes(phrase))
+    if (!isConflict) {
+      throw new Error("There is no confirmed cloud revision conflict to resolve. Retry the cloud save or reload the latest ERP data.")
     }
 
     if (cloudTimerRef.current) {
@@ -2568,6 +2578,26 @@ export function ERPProvider({
     })
   }
 
+  function archiveProducts(ids: string[]): number {
+    const requestedIds = new Set(ids)
+    const archivedIds = new Set(
+      store.products
+        .filter((product) => requestedIds.has(product.id) && product.status !== "INACTIVE")
+        .map((product) => product.id),
+    )
+    if (!archivedIds.size) return 0
+
+    persistStore({
+      ...store,
+      products: store.products.map((product) =>
+        archivedIds.has(product.id)
+          ? { ...product, status: "INACTIVE" }
+          : product,
+      ),
+    })
+    return archivedIds.size
+  }
+
   function deleteProducts(
     ids: string[],
     options: ProductDeletionOptions = {},
@@ -2613,12 +2643,19 @@ export function ERPProvider({
       const linkedTo = linkedCollections.find((collection) =>
         containsProductReference(collection.value, id),
       )
+      const addBlocked = (reason: string) => {
+        blocked.push({ id, name: product.name, reason })
+        if (options.archiveBlocked) {
+          working = {
+            ...working,
+            products: working.products.map((item) =>
+              item.id === id ? { ...item, status: "INACTIVE" } : item,
+            ),
+          }
+        }
+      }
       if (linkedTo) {
-        blocked.push({
-          id,
-          name: product.name,
-          reason: `This product is referenced in ${linkedTo.label}. Its business history is protected; mark the product inactive instead.`,
-        })
+        addBlocked(`This product is referenced in ${linkedTo.label}. Its business history is protected; the product was archived instead.`)
         continue
       }
 
@@ -2640,11 +2677,11 @@ export function ERPProvider({
       const movementExists = working.inventoryMovements.some((movement) => movement.productId === id)
 
       if (!options.removeInventory && stock > 0) {
-        blocked.push({ id, name: product.name, reason: `${stock} units are still in stock. Use Delete Selected + Stock to remove this unlinked product and its lots, or adjust the quantity first.` })
+        addBlocked(`${stock} units are still in stock. The product was archived; use Delete Selected + Stock to permanently remove an unlinked product and its stock records.`)
         continue
       }
       if (!options.removeInventory && movementExists) {
-        blocked.push({ id, name: product.name, reason: "This product has stock movement history. Use Delete Selected + Stock to remove unlinked stock records, or mark the product inactive." })
+        addBlocked("This product has stock movement history. The product was archived to preserve its audit trail.")
         continue
       }
 
@@ -2676,6 +2713,8 @@ export function ERPProvider({
       } catch (error) {
         throw new Error(`No products were deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`)
       }
+    }
+    if (deletedIds.length || (options.archiveBlocked && blocked.length)) {
       persistStore(working)
     }
 
@@ -4015,6 +4054,48 @@ export function ERPProvider({
     )
   }
 
+  if (!cloudReady) {
+    const failed = cloudSyncStatus === "error"
+    const conflictMessage = cloudSyncError.toLowerCase()
+    const hasConflict = [
+      "conflicting erp changes",
+      "edited differently on two workstations",
+      "common base revision is unavailable",
+      "several workstations saved at the same time",
+    ].some((phrase) => conflictMessage.includes(phrase))
+
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 dark:bg-[#0b120e] dark:text-slate-100">
+        <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-3">
+            <span className={`h-3 w-3 shrink-0 rounded-full ${failed ? "bg-red-500" : "animate-pulse bg-emerald-500"}`} />
+            <h1 className="text-lg font-semibold">
+              {failed ? "Cloud data could not be confirmed" : "Loading the latest saved ERP data"}
+            </h1>
+          </div>
+          <p role={failed ? "alert" : undefined} className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {failed ? (cloudSyncError || "The latest company data could not be loaded.") : "Connecting to the pharmacy's saved company records…"}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+            Editing is paused until the saved data is confirmed. This prevents an older workstation copy from overwriting newer product, stock or transaction changes.
+          </p>
+          {failed && (
+            <button
+              type="button"
+              onClick={() => {
+                if (hasConflict) void resolveCloudSyncConflict().catch(() => undefined)
+                else window.location.reload()
+              }}
+              className="mt-5 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800"
+            >
+              {hasConflict ? "Resolve saved-data conflict" : "Reload and try again"}
+            </button>
+          )}
+        </section>
+      </main>
+    )
+  }
+
   return (
     <ERPContext.Provider
       value={{
@@ -4091,6 +4172,7 @@ export function ERPProvider({
         adjustStock,
         recordMovement,
         updateProduct,
+        archiveProducts,
         deleteProduct,
         deleteProducts,
         receiveStock,

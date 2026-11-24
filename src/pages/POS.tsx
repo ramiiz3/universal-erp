@@ -166,6 +166,7 @@ export default function POS() {
     const query = search.trim().toLowerCase()
 
     return products.filter((product) => {
+      if (product.status === "INACTIVE" || product.status === "DISCONTINUED") return false
       if (!query) return true
 
       return (
@@ -223,6 +224,10 @@ export default function POS() {
       setError(`No product found for barcode ${cleanCode}`)
       return
     }
+    if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
+      setError(`${product.name} is archived or discontinued and cannot be sold.`)
+      return
+    }
 
     const matchedPackage = product.packagings?.find(
       (packaging) =>
@@ -239,6 +244,11 @@ export default function POS() {
     selectedPackage?: SelectedProductPackaging,
   ) {
     setError("")
+
+    if (product.status === "INACTIVE" || product.status === "DISCONTINUED") {
+      setError(`${product.name} is archived or discontinued and cannot be sold.`)
+      return
+    }
 
     if (selectedPackage && !selectedPackage.salesEnabled) {
       setError(`${selectedPackage.name} is not enabled for sales.`)

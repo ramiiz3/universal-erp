@@ -1,4 +1,5 @@
 import {
+  Archive,
   Barcode as BarcodeIcon,
   Edit3,
   Eye,
@@ -84,13 +85,14 @@ export default function Products() {
     suppliers,
     addProduct,
     updateProduct,
-    deleteProduct,
     deleteProducts,
+    archiveProducts,
     getProductStock,
   } = useERP()
 
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("All")
+  const [productStatusFilter, setProductStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "DISCONTINUED" | "ALL">("ACTIVE")
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   const [showForm, setShowForm] = useState(false)
@@ -178,10 +180,12 @@ export default function Products() {
       const matchesCategory =
         category === "All" ||
         product.category === category
+      const status = product.status || "ACTIVE"
+      const matchesStatus = productStatusFilter === "ALL" || status === productStatusFilter
 
-      return matchesSearch && matchesCategory
+      return matchesSearch && matchesCategory && matchesStatus
     })
-  }, [products, search, category])
+  }, [products, search, category, productStatusFilter])
 
   const totalStockUnits = products.reduce(
     (sum, product) =>
@@ -511,21 +515,22 @@ export default function Products() {
     if (!uniqueIds.length) return
 
     const confirmation = removeInventory
-      ? `PERMANENTLY remove ${uniqueIds.length} selected product(s), their inventory lots and stock movement history? A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers will still be retained.`
-      : `Delete ${uniqueIds.length} selected product(s) only where there is no stock or stock history? Products with stock or commercial documents will be retained.`
+      ? `PERMANENTLY remove ${uniqueIds.length} selected product(s) and their stock lots and movement history? A recovery backup will be created first. Products referenced by sales, purchases, returns, orders or transfers will be archived instead so historical documents remain valid.`
+      : `Delete ${uniqueIds.length} selected product(s) only where there is no stock or movement history? Products that cannot be erased safely will be archived instead.`
     if (!window.confirm(confirmation)) return
 
     try {
-      const result = deleteProducts(uniqueIds, { removeInventory })
+      const result = deleteProducts(uniqueIds, { removeInventory, archiveBlocked: true })
+      const archived = result.blocked.length
       setSelectedProductIds([])
-      if (selectedProduct && result.deletedIds.includes(selectedProduct.id)) setSelectedProduct(null)
+      if (selectedProduct && (result.deletedIds.includes(selectedProduct.id) || result.blocked.some((item) => item.id === selectedProduct.id))) setSelectedProduct(null)
       const blockedSummary = result.blocked.length
-        ? "\n\nProducts retained because of business history:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
+        ? "\n\nProducts with transaction history were archived (not erased):\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
         : ""
       const inventorySummary = removeInventory
         ? `\nInventory lots removed: ${result.removedLots}. Stock movements removed: ${result.removedMovements}.`
         : ""
-      window.alert(`${result.deletedIds.length} product(s) deleted.${inventorySummary}${blockedSummary}`)
+      window.alert(`${result.deletedIds.length} product(s) permanently deleted. ${archived} product(s) archived to preserve transaction history.${inventorySummary}${blockedSummary}`)
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error))
     }
@@ -543,12 +548,31 @@ export default function Products() {
 
   function handleDelete(product: Product) {
     const stock = getProductStock(product.id)
-    const confirmation = `Delete "${product.name}" from the product master? This also removes its ${stock} on-hand units, batches and stock movement history. A recovery backup will be created first. Products linked to sales, purchases, returns, orders or transfers are protected.`
+    const confirmation = `Permanently delete "${product.name}" and its ${stock} on-hand units, batches and stock movement history? A recovery backup is created first. Products referenced by sales or purchasing records cannot be erased.`
     if (!window.confirm(confirmation)) return
     try {
-      deleteProduct(product.id, { removeInventory: true })
+      const result = deleteProducts([product.id], { removeInventory: true })
+      if (result.blocked.length) {
+        const blocked = result.blocked[0]
+        if (window.confirm(`${blocked.name} is linked to transaction history and cannot be permanently erased. Archive it instead? Old invoices and purchases will remain intact.`)) {
+          archiveProducts([product.id])
+        }
+      }
       if (selectedProduct?.id === product.id) setSelectedProduct(null)
       setSelectedProductIds((current) => current.filter((id) => id !== product.id))
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function handleArchive(ids: string[]) {
+    const uniqueIds = [...new Set(ids)].filter((id) => products.some((product) => product.id === id))
+    if (!uniqueIds.length) return
+    if (!window.confirm(`Archive ${uniqueIds.length} selected product(s)? They will be removed from active product selection while existing invoices, purchases and stock history are preserved. You can restore them later from the Inactive filter.`)) return
+    try {
+      const archived = archiveProducts(uniqueIds)
+      setSelectedProductIds([])
+      window.alert(`${archived} product(s) archived. Historical transactions and stock records were preserved.`)
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error))
     }
@@ -671,6 +695,21 @@ export default function Products() {
           </div>
 
           <select
+            aria-label="Filter products by status"
+            value={productStatusFilter}
+            onChange={(event) => {
+              setProductStatusFilter(event.target.value as typeof productStatusFilter)
+              setSelectedProductIds([])
+            }}
+            className="h-11 rounded-xl border bg-white px-4 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="ACTIVE">Active products</option>
+            <option value="INACTIVE">Archived products</option>
+            <option value="DISCONTINUED">Discontinued products</option>
+            <option value="ALL">All statuses</option>
+          </select>
+
+          <select
             value={category}
             onChange={(event) =>
               setCategory(event.target.value)
@@ -697,6 +736,7 @@ export default function Products() {
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedProductIds.length} product(s) selected</span>
             <div className="flex gap-2">
               <button type="button" onClick={() => setSelectedProductIds([])} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Cancel selection</button>
+              <button type="button" onClick={() => handleArchive(selectedProductIds)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"><Archive size={14}/> Archive Selected</button>
               <button type="button" onClick={() => handleBulkDelete(selectedProductIds)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"><Trash2 size={14}/> Delete Selected</button>
               <button type="button" onClick={() => handleBulkDelete(selectedProductIds, true)} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"><Trash2 size={14}/> Delete Selected + Stock</button>
             </div>
@@ -1287,6 +1327,9 @@ export default function Products() {
                 }
                 type="number"
               />
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                Reorder alert threshold only. This does not change On Hand quantity. Use Inventory → Receive Stock or Manage Stock to change physical quantity.
+              </p>
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
