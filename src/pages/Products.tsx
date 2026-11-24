@@ -26,6 +26,7 @@ import {
   PRODUCT_CATEGORIES_EVENT,
   type ProductCategory,
 } from "../lib/productCategories"
+import { resolvePackagingConversions } from "../lib/productPackaging"
 
 const emptyForm = {
   name: "",
@@ -109,6 +110,13 @@ export default function Products() {
   const [barcodeError, setBarcodeError] = useState("")
 
   const [form, setForm] = useState(emptyForm)
+  const packagingPreview = useMemo(() => {
+    try {
+      return resolvePackagingConversions(form.packagings)
+    } catch {
+      return form.packagings
+    }
+  }, [form.packagings])
 
   const [availableUnits, setAvailableUnits] =
     useState<ERPUnitDefinition[]>([])
@@ -239,7 +247,9 @@ export default function Products() {
           id: `PACK-${Date.now()}-${current.packagings.length}`,
           name: "",
           unit: "",
-          conversionFactor: 1,
+          conversionFactor: 0.1,
+          parentPackagingId: current.packagings[current.packagings.length - 1]?.id ?? "",
+          unitsPerParent: 10,
           purchaseEnabled: true,
           salesEnabled: true,
         },
@@ -248,6 +258,13 @@ export default function Products() {
   }
 
   function removePackaging(index: number) {
+    const removed = form.packagings[index]
+    if (!removed) return
+    const child = form.packagings.find((item) => item.parentPackagingId === removed.id)
+    if (child) {
+      window.alert(`${child.unit || child.name} is configured inside ${removed.unit || removed.name}. Remove or reassign that smaller unit first.`)
+      return
+    }
     setForm((current) => ({
       ...current,
       packagings: current.packagings.filter((_, itemIndex) => itemIndex !== index),
@@ -376,6 +393,10 @@ export default function Products() {
       )
       return
     }
+    if (form.productType !== "SERVICE" && !form.unit.trim()) {
+      window.alert("Select the inventory stock unit for this product. For pharmacy pack splitting, this is normally the outer pack received (for example, Box).")
+      return
+    }
 
     if (editingProduct && form.unit !== editingProduct.unit && getProductStock(editingProduct.id) > 0) {
       window.alert("This product has existing stock. Its base unit cannot be changed until the stock is cleared or formally converted.")
@@ -403,8 +424,19 @@ export default function Products() {
       window.alert("Package names must be unique for this product.")
       return
     }
-    if (form.packagings.some((item) => !Number.isFinite(Number(item.conversionFactor)) || Number(item.conversionFactor) <= 0)) {
-      window.alert("Every package conversion must be greater than zero.")
+    let resolvedPackagings: ProductPackaging[]
+    try {
+      const packagingInputs = form.packagings.map((item) => ({
+        ...item,
+        id: item.id || `PACK-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: item.name.trim(),
+        unit: item.unit.trim(),
+        conversionFactor: Number(item.conversionFactor),
+        unitsPerParent: item.parentPackagingId === undefined ? undefined : Number(item.unitsPerParent),
+      }))
+      resolvedPackagings = resolvePackagingConversions(packagingInputs)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Check the product pack hierarchy.")
       return
     }
     if (form.packagings.some((item) =>
@@ -448,12 +480,8 @@ export default function Products() {
           .filter(Boolean),
         description: form.description.trim() || undefined,
         returnEligible: form.productType !== "SERVICE" && form.returnEligible === "true",
-        packagings: form.packagings.map((item) => ({
+        packagings: resolvedPackagings.map((item) => ({
           ...item,
-          id: item.id || `PACK-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: item.name.trim(),
-          unit: item.unit.trim(),
-          conversionFactor: Number(item.conversionFactor),
           barcode: item.barcode?.trim() || undefined,
           purchasePrice: item.purchasePrice === undefined || item.purchasePrice === null ? undefined : Number(item.purchasePrice),
           sellingPrice: item.sellingPrice === undefined || item.sellingPrice === null ? undefined : Number(item.sellingPrice),
@@ -1357,67 +1385,116 @@ export default function Products() {
               </div>
 
               <label className="space-y-2">
-                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Base Unit of Measure</span>
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">Inventory / outer stock unit</span>
                 <select
                   value={form.unit}
                   onChange={(event) => setForm({ ...form, unit: event.target.value })}
                   className="h-11 w-full rounded-xl border px-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
                 >
+                  <option value="">Select stock unit</option>
                   {availableUnits.filter((unit) => unit.active || unit.name === form.unit).map((unit) => (
                     <option key={unit.id} value={unit.name}>{unit.name} ({unit.symbol})</option>
                   ))}
-                  {!availableUnits.some((unit) => unit.name === form.unit) && (
+                  {!availableUnits.some((unit) => unit.name === form.unit) && form.unit && (
                     <option value={form.unit}>{form.unit}</option>
                   )}
                 </select>
+                <span className="block text-xs text-slate-500">This is the unit in which stock lots are stored. For example, choose Box if you receive and count full boxes.</span>
               </label>
 
               <div className="flex items-end">
                 <div className="w-full rounded-xl bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-950">
-                  Opening stock is not entered here. Use Inventory → Receive Stock.
+                  Opening stock is not entered here. Use Inventory → Receive Stock. Smaller packs are converted into this stock unit automatically when purchased or sold.
                 </div>
               </div>
 
               <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700 sm:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Sub-units & packaging</h4>
-                    <p className="mt-1 text-xs text-slate-500">Add every real selling form for this medicine (for example Tablet, Strip, Box, Sachet or Pack). Units with “Allow sales / POS” checked will appear automatically when the cashier clicks or scans this product. Set the exact conversion for this product: 1 Strip = 0.1 Box only when 10 strips make 1 box; 1 Tablet = 0.01 Box only when 100 tablets make 1 box. If the stock unit is Tablet and 1 strip contains 10 tablets, enter 10 instead. Pack sizes differ by medicine, so verify the printed pack before saving.</p>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Pharmacy pack hierarchy & POS units</h4>
+                    <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">Define the smaller units contained inside each pack. Example: stock unit = Box; Strip is contained in Box (10 strips per box); Tablet is contained in Strip (10 tablets per strip). The ERP calculates 1 Strip = 0.1 Box and 1 Tablet = 0.01 Box automatically. POS will then offer Box, Strip and Tablet, so the cashier can bill 1 strip, 2 strips or 5 tablets from the same box stock. Enter the actual printed pack count for each medicine; it is not guessed globally.</p>
                   </div>
-                  <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add sub-unit</button>
+                  <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add smaller unit</button>
                 </div>
 
-                {form.packagings.length === 0 && <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-950">No sub-units configured. The base unit will be used for purchasing and sales.</p>}
+                {form.packagings.length === 0 && (
+                  <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-950">
+                    No smaller units configured yet. Add Strip and Tablet (or Sachet) below. They will appear automatically in POS after saving this product.
+                  </p>
+                )}
 
-                {form.packagings.map((packaging, index) => (
-                  <div key={packaging.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950 sm:grid-cols-2 lg:grid-cols-4">
-                    <label className="space-y-1 text-xs font-medium">Package name
-                      <input value={packaging.name} onChange={(event) => updatePackaging(index, { name: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </label>
-                    <label className="space-y-1 text-xs font-medium">Purchase / sales unit
-                      <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </label>
-                    <label className="space-y-1 text-xs font-medium">Stock-unit quantity per sub-unit
-                      <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                      <span className="block font-normal text-slate-500">For base unit Box: enter 0.1 for one strip when 10 strips make a box.</span>
-                    </label>
-                    <label className="space-y-1 text-xs font-medium">Package barcode (optional)
-                      <input value={packaging.barcode ?? ""} onChange={(event) => updatePackaging(index, { barcode: event.target.value })} placeholder="Scan or enter barcode" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </label>
-                    <label className="space-y-1 text-xs font-medium">Purchase price per package (optional)
-                      <input type="number" min="0" step="any" value={packaging.purchasePrice ?? ""} onChange={(event) => updatePackaging(index, { purchasePrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base cost × ${packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </label>
-                    <label className="space-y-1 text-xs font-medium">Selling price per package (optional)
-                      <input type="number" min="0" step="any" value={packaging.sellingPrice ?? ""} onChange={(event) => updatePackaging(index, { sellingPrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base price × ${packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                    </label>
-                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.purchaseEnabled} onChange={(event) => updatePackaging(index, { purchaseEnabled: event.target.checked })} /> Allow purchasing</label>
-                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Allow sales / POS</label>
-                    <div className="flex items-center justify-between gap-2 text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
-                      <span>1 {packaging.unit || packaging.name || "sub-unit"} = {packaging.conversionFactor || 0} {form.unit || "stock units"}</span>
-                      <button type="button" onClick={() => removePackaging(index)} className="font-semibold text-red-600 hover:text-red-700">Remove sub-unit</button>
+                {form.packagings.map((packaging, index) => {
+                  const preview = packagingPreview.find((item) => item.id === packaging.id)
+                  const parentName = packaging.parentPackagingId === undefined
+                    ? "Direct stock conversion"
+                    : packaging.parentPackagingId
+                      ? form.packagings.find((item) => item.id === packaging.parentPackagingId)?.unit || form.packagings.find((item) => item.id === packaging.parentPackagingId)?.name || "Parent unit"
+                      : form.unit || "stock unit"
+                  return (
+                    <div key={packaging.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950 sm:grid-cols-2 lg:grid-cols-4">
+                      <label className="space-y-1 text-xs font-medium">Selling unit name
+                        <input value={packaging.name} onChange={(event) => updatePackaging(index, { name: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium">UOM label
+                        <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium">Contained inside
+                        <select
+                          value={packaging.parentPackagingId === undefined ? "legacy" : packaging.parentPackagingId}
+                          onChange={(event) => {
+                            const value = event.target.value
+                            if (value === "legacy") {
+                              updatePackaging(index, { parentPackagingId: undefined, unitsPerParent: undefined })
+                            } else {
+                              updatePackaging(index, {
+                                parentPackagingId: value,
+                                unitsPerParent: packaging.unitsPerParent ?? 10,
+                              })
+                            }
+                          }}
+                          className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                        >
+                          {packaging.parentPackagingId === undefined && <option value="legacy">Existing direct conversion</option>}
+                          <option value="">Stock unit ({form.unit || "not selected"})</option>
+                          {form.packagings.slice(0, index).map((parent) => (
+                            <option key={parent.id} value={parent.id}>{parent.unit || parent.name || "Unnamed unit"}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {packaging.parentPackagingId === undefined ? (
+                        <label className="space-y-1 text-xs font-medium">Legacy stock conversion
+                          <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                          <span className="block font-normal text-slate-500">Existing saved conversion; retained without change unless edited.</span>
+                        </label>
+                      ) : (
+                        <label className="space-y-1 text-xs font-medium">How many {packaging.unit || packaging.name || "of this unit"} fit in one {parentName}?
+                          <input type="number" min="1" step="1" value={packaging.unitsPerParent ?? 10} onChange={(event) => updatePackaging(index, { unitsPerParent: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                          <span className="block font-normal text-slate-500">Enter a whole pack count, e.g. 10 strips in 1 box.</span>
+                        </label>
+                      )}
+                      <label className="space-y-1 text-xs font-medium">Package barcode (optional)
+                        <input value={packaging.barcode ?? ""} onChange={(event) => updatePackaging(index, { barcode: event.target.value })} placeholder="Scan or enter barcode" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium">Purchase price per package (optional)
+                        <input type="number" min="0" step="any" value={packaging.purchasePrice ?? ""} onChange={(event) => updatePackaging(index, { purchasePrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base cost × ${preview?.conversionFactor || packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium">Selling price per package (optional)
+                        <input type="number" min="0" step="0.01" value={packaging.sellingPrice ?? ""} onChange={(event) => updatePackaging(index, { sellingPrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base price × ${preview?.conversionFactor || packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.purchaseEnabled} onChange={(event) => updatePackaging(index, { purchaseEnabled: event.target.checked })} /> Allow purchasing</label>
+                      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Show as POS selling unit</label>
+                      <div className="flex items-center justify-between gap-2 text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
+                        <span className="font-medium text-emerald-700">
+                          1 {packaging.unit || packaging.name || "unit"} = {Number(preview?.conversionFactor ?? packaging.conversionFactor ?? 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} {form.unit || "stock units"}
+                        </span>
+                        <button type="button" onClick={() => removePackaging(index)} className="font-semibold text-red-600 hover:text-red-700">Remove unit</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
+                <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-xs leading-5 text-emerald-900">
+                  Example setup for a box containing 10 strips, with 10 tablets in each strip: Stock unit = Box; add Strip → contained inside Stock unit → 10; add Tablet → contained inside Strip → 10. After saving, POS can bill boxes, strips and individual tablets from the same batch stock.
+                </p>
               </div>
 
                   {/* Universal ERP extended product fields */}
