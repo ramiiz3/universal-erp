@@ -340,17 +340,29 @@ export default function POS() {
       return false
     }
 
-    const factor = selectedPackage?.conversionFactor ?? 1
+    let effectivePackage = selectedPackage
+    let factor = effectivePackage?.conversionFactor ?? 1
+    if (!effectivePackage) {
+      const baseAvailable = getAvailableUomQuantity(product.id, 1)
+      if (baseAvailable < requestedQuantity) {
+        const fallback = getUnitChoices(product)
+          .filter((choice) => choice.packaging)
+          .sort((left, right) => right.conversionFactor - left.conversionFactor)
+          .find((choice) => getAvailableUomQuantity(product.id, choice.conversionFactor) >= requestedQuantity)
+        if (fallback?.packaging) effectivePackage = fallback.packaging
+        factor = effectivePackage?.conversionFactor ?? 1
+      }
+    }
     if (!Number.isFinite(factor) || factor <= 0) {
       setError("This product has an invalid selling-unit conversion.")
       return false
     }
 
-    const packagePrice = selectedPackage?.sellingPrice ??
+    const packagePrice = effectivePackage?.sellingPrice ??
       product.sellingPrice * factor
     const existing = cart.find((item) =>
       item.productId === product.id &&
-      (item.packageId ?? "") === (selectedPackage?.id ?? ""),
+      (item.packageId ?? "") === (effectivePackage?.id ?? ""),
     )
     const lineId = existing?.lineId ??
       `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -368,8 +380,8 @@ export default function POS() {
             product,
             quantity: requestedQuantity,
             unitPrice: packagePrice,
-            packageId: selectedPackage?.id,
-            sellingUnit: selectedPackage?.unit ?? product.unit,
+            packageId: effectivePackage?.id,
+            sellingUnit: effectivePackage?.unit ?? product.unit,
             conversionFactor: factor,
           },
         ]
