@@ -1,5 +1,7 @@
 export type PackagingConversionInput = {
   id: string
+  name?: string
+  unit?: string
   conversionFactor: number
   /** Empty string means the product's base stock unit. Undefined keeps a legacy direct conversion. */
   parentPackagingId?: string
