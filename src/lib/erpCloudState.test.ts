@@ -3,6 +3,7 @@ import type { StorageLike } from "./erpBackup"
 import {
   areERPCloudStatesEqual,
   createERPCloudState,
+  mergeERPCloudStates,
   restoreERPCloudState,
   validateERPCloudState,
 } from "./erpCloudState"
@@ -105,6 +106,87 @@ describe("pharmacy ERP cloud-state snapshots", () => {
       format: left.format,
     }
     expect(areERPCloudStatesEqual(left, right)).toBe(true)
+  })
+
+  it("merges non-overlapping edits to the same product from two workstations", () => {
+    const base = createERPCloudState(storage)
+    const local = {
+      ...base,
+      entries: base.entries.map((entry, index) => index === 0 ? {
+        ...entry,
+        value: JSON.stringify({ products: [{ id: "p1", name: "New name", category: "General" }] }),
+      } : entry),
+    }
+    const remote = {
+      ...base,
+      entries: base.entries.map((entry, index) => index === 0 ? {
+        ...entry,
+        value: JSON.stringify({ products: [{ id: "p1", name: "Old name", category: "Pain Relief" }] }),
+      } : entry),
+    }
+
+    const result = mergeERPCloudStates(base, local, remote)
+    expect(result.conflicts).toEqual([])
+    expect(result.state).not.toBeNull()
+    const mergedEntry = result.state!.entries[0]!
+    expect(JSON.parse(mergedEntry.value ?? "{}")).toEqual({
+      products: [{ id: "p1", name: "New name", category: "Pain Relief" }],
+    })
+  })
+
+  it("merges independent product additions while preserving both workstation records", () => {
+    const base = createERPCloudState(storage)
+    const snapshot = (products: Array<{ id: string; name: string }>) => ({
+      ...base,
+      entries: base.entries.map((entry, index) => index === 0
+        ? { ...entry, value: JSON.stringify({ products }) }
+        : entry),
+    })
+    const local = snapshot([{ id: "p1", name: "Product One" }])
+    const remote = snapshot([{ id: "p2", name: "Product Two" }])
+
+    const result = mergeERPCloudStates(snapshot([]), local, remote)
+    expect(result.conflicts).toEqual([])
+    expect(JSON.parse(result.state!.entries[0]!.value ?? "{}").products).toEqual([
+      { id: "p1", name: "Product One" },
+      { id: "p2", name: "Product Two" },
+    ])
+  })
+
+  it("reports overlapping edits instead of silently choosing one workstation", () => {
+    const base = createERPCloudState(storage)
+    const snapshot = (name: string) => ({
+      ...base,
+      entries: base.entries.map((entry, index) => index === 0
+        ? { ...entry, value: JSON.stringify({ products: [{ id: "p1", name }] }) }
+        : entry),
+    })
+
+    const result = mergeERPCloudStates(
+      snapshot("Original"),
+      snapshot("Local correction"),
+      snapshot("Remote correction"),
+    )
+    expect(result.state).toBeNull()
+    expect(result.conflicts).toContain("universal-erp-demo-store.products[id=p1].name")
+  })
+
+  it("rejects a delete on one workstation when the other workstation edited that same record", () => {
+    const base = createERPCloudState(storage)
+    const snapshot = (products: Array<{ id: string; name: string }>) => ({
+      ...base,
+      entries: base.entries.map((entry, index) => index === 0
+        ? { ...entry, value: JSON.stringify({ products }) }
+        : entry),
+    })
+
+    const result = mergeERPCloudStates(
+      snapshot([{ id: "p1", name: "Original" }]),
+      snapshot([]),
+      snapshot([{ id: "p1", name: "Updated elsewhere" }]),
+    )
+    expect(result.state).toBeNull()
+    expect(result.conflicts).toContain("universal-erp-demo-store.products[id=p1]")
   })
 
   it("rejects a restore if local writes fail and rolls back already-written keys", () => {
