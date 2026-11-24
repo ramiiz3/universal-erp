@@ -31,7 +31,30 @@ const sample = {
 
 describe("purchase draft persistence", () => {
   beforeEach(() => {
-    sessionStorage.clear()
+    const values = new Map<string, string>()
+    const listeners = new Map<string, Set<EventListener>>()
+    const sessionStore = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, String(value)) },
+      removeItem: (key: string) => { values.delete(key) },
+      clear: () => { values.clear() },
+      key: (index: number) => [...values.keys()][index] ?? null,
+      get length() { return values.size },
+    } as Storage
+    vi.stubGlobal("window", {
+      sessionStorage: sessionStore,
+      dispatchEvent: (event: Event) => {
+        listeners.get(event.type)?.forEach((listener) => listener.call(window, event))
+        return true
+      },
+      addEventListener: (type: string, listener: EventListener) => {
+        if (!listeners.has(type)) listeners.set(type, new Set())
+        listeners.get(type)!.add(listener)
+      },
+      removeEventListener: (type: string, listener: EventListener) => {
+        listeners.get(type)?.delete(listener)
+      },
+    })
   })
 
   it("saves and restores the complete purchase draft", () => {
@@ -59,11 +82,11 @@ describe("purchase draft persistence", () => {
     savePurchaseDraft(sample)
     clearPurchaseDraft()
     expect(loadPurchaseDraft()).toBeNull()
-    expect(sessionStorage.getItem(PURCHASE_DRAFT_STORAGE_KEY)).toBeNull()
+    expect(window.sessionStorage.getItem(PURCHASE_DRAFT_STORAGE_KEY)).toBeNull()
   })
 
   it("ignores invalid session data", () => {
-    sessionStorage.setItem(PURCHASE_DRAFT_STORAGE_KEY, "{bad json")
+    window.sessionStorage.setItem(PURCHASE_DRAFT_STORAGE_KEY, "{bad json")
     expect(loadPurchaseDraft()).toBeNull()
   })
 })
