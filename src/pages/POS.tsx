@@ -257,7 +257,7 @@ export default function POS() {
           quantity: item.quantity * item.conversionFactor,
           saleUnitConversionFactor: item.conversionFactor,
           unitPrice: item.unitPrice / item.conversionFactor,
-          unitPriceOverride: Boolean(item.packageId),
+          unitPriceOverride: true,
         })),
         inventoryLots,
       ),
