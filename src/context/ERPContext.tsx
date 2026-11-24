@@ -4045,7 +4045,13 @@ export function ERPProvider({
 
   if (!cloudReady) {
     const failed = cloudSyncStatus === "error"
-    const hasConflict = cloudSyncError.toLowerCase().includes("conflicting erp changes")
+    const conflictMessage = cloudSyncError.toLowerCase()
+    const hasConflict = [
+      "conflicting erp changes",
+      "edited differently on two workstations",
+      "common base revision is unavailable",
+      "several workstations saved at the same time",
+    ].some((phrase) => conflictMessage.includes(phrase))
 
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 dark:bg-[#0b120e] dark:text-slate-100">
