@@ -38,16 +38,34 @@ const lot: InventoryLot = {
 }
 
 function row(overrides: Partial<Record<string, string | number>> = {}) {
-  const values: (string | number)[] = [
-    "P-1", "L-1", "Sample Medicine", "123456", "SKU-1", "Medicine",
-    "Zaki Labs", "Box", 8, 12, 2, 5, "B-1", "2027-06", 5, 8,
-    12, 40, 60,
-  ]
-  for (const [key, value] of Object.entries(overrides)) {
-    const index = headers.indexOf(key)
-    if (index >= 0 && value !== undefined) values[index] = value
+  const values: Record<string, string | number> = {
+    "Product ID": "P-1",
+    "Inventory Lot ID": "L-1",
+    "Product Name": "Sample Medicine",
+    "Barcode": "123456",
+    "SKU": "SKU-1",
+    "Category": "Medicine",
+    "Manufacturer": "Zaki Labs",
+    "Company": "Zaki Labs",
+    "Unit": "Box",
+    "MRP": 15,
+    "Purchase Quantity": 5,
+    "Bonus Quantity": 0,
+    "Actual Purchase Price (ACT)": 8,
+    "Product Purchase Price": 8,
+    "Selling Price": 12,
+    "Minimum Stock": 2,
+    "VAT Rate": 5,
+    "Batch": "B-1",
+    "Expiry Date": "2027-06",
+    "Stock Quantity (Including Bonus)": 5,
+    "Lot Purchase Price": 8,
+    "Lot Selling Price": 12,
+    "TOTAL (Purchase Value)": 40,
+    "TOTAL (Selling Value)": 60,
   }
-  return values
+  Object.assign(values, overrides)
+  return headers.map((header) => values[header] ?? "")
 }
 
 describe("inventory import and export", () => {
@@ -153,6 +171,52 @@ describe("inventory import and export", () => {
     expect(csv).toContain('"Cold\nCare"')
     expect(rows[0]).toEqual(INVENTORY_EXPORT_HEADERS)
     expect(rows[1]?.[14]).toBe(0)
+  })
+
+  it("imports legacy pharmacy GRN columns with date, supplier, MRP, bonus, ACT and QTY", () => {
+    const legacyHeaders = ["PRODUCT NAME", "DATE", "GRN", "SUPPLIER", "MRP", "BONUS", "ACT", "QTY", "EXP", "TOTAL"]
+    const mapping = detectInventoryColumnMapping(legacyHeaders)
+    const detected = detectInventoryHeaderRow([legacyHeaders])
+    expect(detected?.mapping).toEqual(mapping)
+    const preview = previewInventoryImport([[
+      "LAXSID", "2026-06-06", "580", "AL WAHDA MEDICAL STORES", 20, 2, 12.92, 10, "2027-01", 129.2,
+    ]], mapping)
+    expect(preview.invalidRows).toHaveLength(0)
+    expect(preview.records).toHaveLength(1)
+    const record = preview.records[0]!
+    expect(record.purchaseDate).toBe("2026-06-06")
+    expect(record.grnNumber).toBe("580")
+    expect(record.supplierName).toBe("AL WAHDA MEDICAL STORES")
+    expect(record.mrp).toBe(20)
+    expect(record.purchaseQuantity).toBe(10)
+    expect(record.bonusQuantity).toBe(2)
+    expect(record.quantity).toBe(12)
+    expect(record.lotPurchasePrice).toBe(12.92)
+    expect(record.lotTotalPurchaseValue).toBe(129.2)
+
+    const result = applyInventoryImport([], [], preview.records, "merge")
+    expect(result.inventoryLots[0]).toMatchObject({
+      quantity: 12,
+      purchaseDate: "2026-06-06",
+      grnNumber: "580",
+      supplierName: "AL WAHDA MEDICAL STORES",
+      mrp: 20,
+      purchaseQuantity: 10,
+      bonusQuantity: 2,
+      actualPurchasePrice: 12.92,
+    })
+    const exported = buildInventoryExportRows(result.products, result.inventoryLots)
+    const roundTrip = previewInventoryImport(exported.slice(1), detectInventoryColumnMapping(exported[0] ?? []))
+    expect(roundTrip.records[0]).toMatchObject({
+      quantity: 12,
+      purchaseDate: "2026-06-06",
+      grnNumber: "580",
+      supplierName: "AL WAHDA MEDICAL STORES",
+      mrp: 20,
+      purchaseQuantity: 10,
+      bonusQuantity: 2,
+      lotPurchasePrice: 12.92,
+    })
   })
 
   it("detects the titled Zaki stock summary headings without losing the spacer column", () => {
