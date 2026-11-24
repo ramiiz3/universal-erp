@@ -53,6 +53,32 @@ describe("pharmacy pack hierarchy", () => {
     expect(result[0].conversionFactor).toBe(0.1)
   })
 
+  it("supports a larger Box UOM when inventory stock is counted in Strips", () => {
+    const result = resolvePackagingConversions([
+      {
+        id: "box",
+        name: "Box",
+        unit: "BOX",
+        conversionFactor: 10,
+      },
+    ])
+
+    expect(result[0].conversionFactor).toBe(10)
+  })
+
+  it("supports an individual Tablet UOM when inventory stock is counted in Strips", () => {
+    const result = resolvePackagingConversions([
+      {
+        id: "tablet",
+        name: "Tablet",
+        unit: "TAB",
+        conversionFactor: 0.1,
+      },
+    ])
+
+    expect(result[0].conversionFactor).toBe(0.1)
+  })
+
   it("rejects a parent pack that appears after its child", () => {
     expect(() => resolvePackagingConversions([
       {

@@ -258,13 +258,6 @@ export default function Products() {
   }
 
   function removePackaging(index: number) {
-    const removed = form.packagings[index]
-    if (!removed) return
-    const child = form.packagings.find((item) => item.parentPackagingId === removed.id)
-    if (child) {
-      window.alert(`${child.unit || child.name} is configured inside ${removed.unit || removed.name}. Remove or reassign that smaller unit first.`)
-      return
-    }
     setForm((current) => ({
       ...current,
       packagings: current.packagings.filter((_, itemIndex) => itemIndex !== index),
@@ -439,7 +432,10 @@ export default function Products() {
         name: item.name.trim(),
         unit: item.unit.trim(),
         conversionFactor: Number(item.conversionFactor),
-        unitsPerParent: item.parentPackagingId === undefined ? undefined : Number(item.unitsPerParent),
+        // Persist one explicit conversion to the inventory stock unit. This
+        // supports both larger packs (>1) and smaller units (<1).
+        parentPackagingId: undefined,
+        unitsPerParent: undefined,
       }))
       resolvedPackagings = resolvePackagingConversions(packagingInputs)
     } catch (error) {
@@ -1418,78 +1414,43 @@ export default function Products() {
               <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700 sm:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Pharmacy pack hierarchy & POS units</h4>
-                    <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">Define the smaller units contained inside each pack. Example: stock unit = Box; Strip is contained in Box (10 strips per box); Tablet is contained in Strip (10 tablets per strip). The ERP calculates 1 Strip = 0.1 Box and 1 Tablet = 0.01 Box automatically. POS will then offer Box, Strip and Tablet, so the cashier can bill 1 strip, 2 strips or 5 tablets from the same box stock. Enter the actual printed pack count for each medicine; it is not guessed globally.</p>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">POS selling units & pack conversions</h4>
+                    <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">Keep the inventory stock unit exactly as your stock is currently counted. Add every other unit the cashier may sell or purchase, and enter how many stock units make one of that UOM. This supports larger packs and smaller loose units: when stock is Strip, 1 Box = 10 Strips (enter 10) and 1 Tablet = 0.1 Strip (enter 0.1, only if there are 10 tablets per strip). When stock is Box, 1 Strip = 0.1 Box and 1 Tablet = 0.01 Box. Each conversion and selling price is product-specific; POS shows only the enabled units.</p>
                   </div>
-                  <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add smaller unit</button>
+                  <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add selling unit</button>
                 </div>
 
                 {form.packagings.length === 0 && (
                   <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-950">
-                    No smaller units configured yet. Add Strip and Tablet (or Sachet) below. They will appear automatically in POS after saving this product.
+                    No additional selling units are saved. Add Box, Strip, Tablet, Sachet or any other UOM customers can buy. The current stock unit remains unchanged.
                   </p>
                 )}
 
                 {form.packagings.map((packaging, index) => {
                   const preview = packagingPreview.find((item) => item.id === packaging.id)
-                  const parentName = packaging.parentPackagingId === undefined
-                    ? "Direct stock conversion"
-                    : packaging.parentPackagingId
-                      ? form.packagings.find((item) => item.id === packaging.parentPackagingId)?.unit || form.packagings.find((item) => item.id === packaging.parentPackagingId)?.name || "Parent unit"
-                      : form.unit || "stock unit"
                   return (
                     <div key={packaging.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950 sm:grid-cols-2 lg:grid-cols-4">
                       <label className="space-y-1 text-xs font-medium">Selling unit name
-                        <input value={packaging.name} onChange={(event) => updatePackaging(index, { name: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input value={packaging.name} onChange={(event) => updatePackaging(index, { name: event.target.value })} placeholder="Box / Strip / Tablet / Sachet" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </label>
-                      <label className="space-y-1 text-xs font-medium">UOM label
-                        <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                      <label className="space-y-1 text-xs font-medium">UOM label shown in POS
+                        <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="BOX / STP / TAB" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </label>
-                      <label className="space-y-1 text-xs font-medium">Contained inside
-                        <select
-                          value={packaging.parentPackagingId === undefined ? "legacy" : packaging.parentPackagingId}
-                          onChange={(event) => {
-                            const value = event.target.value
-                            if (value === "legacy") {
-                              updatePackaging(index, { parentPackagingId: undefined, unitsPerParent: undefined })
-                            } else {
-                              updatePackaging(index, {
-                                parentPackagingId: value,
-                                unitsPerParent: packaging.unitsPerParent ?? 10,
-                              })
-                            }
-                          }}
-                          className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
-                        >
-                          {packaging.parentPackagingId === undefined && <option value="legacy">Existing direct conversion</option>}
-                          <option value="">Stock unit ({form.unit || "not selected"})</option>
-                          {form.packagings.slice(0, index).map((parent) => (
-                            <option key={parent.id} value={parent.id}>{parent.unit || parent.name || "Unnamed unit"}</option>
-                          ))}
-                        </select>
+                      <label className="space-y-1 text-xs font-medium">Stock units in 1 {packaging.unit || packaging.name || "selling unit"}
+                        <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value), parentPackagingId: undefined, unitsPerParent: undefined })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <span className="block font-normal text-slate-500">Enter more than 1 for a larger pack, or less than 1 for a smaller loose unit.</span>
                       </label>
-                      {packaging.parentPackagingId === undefined ? (
-                        <label className="space-y-1 text-xs font-medium">Legacy stock conversion
-                          <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                          <span className="block font-normal text-slate-500">Existing saved conversion; retained without change unless edited.</span>
-                        </label>
-                      ) : (
-                        <label className="space-y-1 text-xs font-medium">How many {packaging.unit || packaging.name || "of this unit"} fit in one {parentName}?
-                          <input type="number" min="1" step="1" value={packaging.unitsPerParent ?? 10} onChange={(event) => updatePackaging(index, { unitsPerParent: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
-                          <span className="block font-normal text-slate-500">Enter a whole pack count, e.g. 10 strips in 1 box.</span>
-                        </label>
-                      )}
                       <label className="space-y-1 text-xs font-medium">Package barcode (optional)
                         <input value={packaging.barcode ?? ""} onChange={(event) => updatePackaging(index, { barcode: event.target.value })} placeholder="Scan or enter barcode" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                       <label className="space-y-1 text-xs font-medium">Purchase price per package (optional)
-                        <input type="number" min="0" step="any" value={packaging.purchasePrice ?? ""} onChange={(event) => updatePackaging(index, { purchasePrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base cost × ${preview?.conversionFactor || packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="number" min="0" step="any" value={packaging.purchasePrice ?? ""} onChange={(event) => updatePackaging(index, { purchasePrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder="Purchase price for this UOM" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                       <label className="space-y-1 text-xs font-medium">Selling price per package (optional)
-                        <input type="number" min="0" step="0.01" value={packaging.sellingPrice ?? ""} onChange={(event) => updatePackaging(index, { sellingPrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base price × ${preview?.conversionFactor || packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                        <input type="number" min="0" step="0.01" value={packaging.sellingPrice ?? ""} onChange={(event) => updatePackaging(index, { sellingPrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder="Selling price for this UOM" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                       <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.purchaseEnabled} onChange={(event) => updatePackaging(index, { purchaseEnabled: event.target.checked })} /> Allow purchasing</label>
-                      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Show as POS selling unit</label>
+                      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Show in POS UOM list</label>
                       <div className="flex items-center justify-between gap-2 text-xs text-slate-600 sm:col-span-2 lg:col-span-4">
                         <span className="font-medium text-emerald-700">
                           1 {packaging.unit || packaging.name || "unit"} = {Number(preview?.conversionFactor ?? packaging.conversionFactor ?? 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} {form.unit || "stock units"}
@@ -1499,9 +1460,12 @@ export default function Products() {
                     </div>
                   )
                 })}
-                <p className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-xs leading-5 text-emerald-900">
-                  Example setup for a box containing 10 strips, with 10 tablets in each strip: Stock unit = Box; add Strip → contained inside Stock unit → 10; add Tablet → contained inside Strip → 10. After saving, POS can bill boxes, strips and individual tablets from the same batch stock.
-                </p>
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 p-3 text-xs leading-5 text-emerald-900">
+                  <p className="font-semibold">Example conversions — use only when they match the printed pack:</p>
+                  <p>Stock unit = Strip: Box = 10 stock units; Tablet = 0.1 stock unit (10 tablets per strip).</p>
+                  <p>Stock unit = Box: Strip = 0.1 stock unit (10 strips per box); Tablet = 0.01 stock unit (100 tablets per box).</p>
+                  <p className="mt-1">POS calculates available quantities from each supplier batch using these conversions. Never change the stock unit for existing stock unless you formally convert the physical quantity.</p>
+                </div>
               </div>
 
                   {/* Universal ERP extended product fields */}
