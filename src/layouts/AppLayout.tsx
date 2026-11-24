@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
-import type { FormEvent } from "react"
-import { NavLink, Outlet, useNavigate } from "react-router-dom"
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { FormEvent, ReactNode } from "react"
+import { NavLink, useLocation, useNavigate, useOutlet } from "react-router-dom"
 import {
   AlertTriangle,
   Bell,
@@ -161,8 +161,19 @@ function loadReadNotifications(): string[] {
   }
 }
 
+function getWorkspaceLabel(path: string) {
+  const found = navigationGroups.flatMap((group) => group.items).find((item) => item.path === path)
+  if (found) return found.label
+  if (path.startsWith("/invoices/")) return "Invoice"
+  const segment = path.split("/").filter(Boolean).pop() || "Workspace"
+  return segment.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
 export default function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const activeOutlet = useOutlet()
+  const outletCache = useRef(new Map<string, ReactNode>())
   const { theme, toggleTheme } = useTheme()
   const darkMode = theme === "dark"
 
@@ -177,6 +188,32 @@ export default function AppLayout() {
     resolveCloudSyncConflict,
   } = useERP()
   const { user, signOut } = useAuth()
+
+  const [workspaceTabs, setWorkspaceTabs] = useState<Array<{ path: string; label: string }>>([
+    { path: "/dashboard", label: "Dashboard" },
+  ])
+  const activePath = location.pathname
+  outletCache.current.set(activePath, activeOutlet)
+
+  useEffect(() => {
+    setWorkspaceTabs((current) =>
+      current.some((tab) => tab.path === activePath)
+        ? current
+        : [...current, { path: activePath, label: getWorkspaceLabel(activePath) }],
+    )
+  }, [activePath])
+
+  function closeWorkspaceTab(path: string) {
+    if (path === "/dashboard") return
+    const index = workspaceTabs.findIndex((tab) => tab.path === path)
+    const nextTabs = workspaceTabs.filter((tab) => tab.path !== path)
+    setWorkspaceTabs(nextTabs)
+    outletCache.current.delete(path)
+    if (activePath === path) {
+      const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? { path: "/dashboard" }
+      navigate(fallback.path)
+    }
+  }
 
   const [notificationsOpen, setNotificationsOpen] =
     useState(false)
@@ -756,8 +793,27 @@ export default function AppLayout() {
             </div>
           </header>
 
-          <main className="min-h-0 flex-1">
-            <Outlet />
+          <div className="flex min-h-11 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-3 dark:border-slate-800 dark:bg-slate-950/70">
+            {workspaceTabs.map((tab) => (
+              <div
+                key={tab.path}
+                className={`group flex max-w-[220px] shrink-0 items-center gap-1 rounded-t-lg border border-b-0 px-3 py-2 text-xs font-semibold ${activePath === tab.path ? "border-slate-200 bg-white text-emerald-700 dark:border-slate-700 dark:bg-slate-900 dark:text-emerald-300" : "border-transparent text-slate-500 hover:bg-white/70 dark:text-slate-400 dark:hover:bg-slate-900"}`}
+              >
+                <button type="button" onClick={() => navigate(tab.path)} className="min-w-0 truncate text-left">{tab.label}</button>
+                {tab.path !== "/dashboard" && (
+                  <button type="button" onClick={() => closeWorkspaceTab(tab.path)} aria-label={`Close ${tab.label} tab`} title="Close tab" className="rounded p-0.5 text-slate-400 opacity-60 hover:bg-slate-200 hover:text-slate-800 group-hover:opacity-100 dark:hover:bg-slate-700 dark:hover:text-white">
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <main className="min-h-0 flex-1 overflow-auto">
+            {workspaceTabs.map((tab) => (
+              <div key={tab.path} className={activePath === tab.path ? "min-h-full" : "hidden"}>
+                {tab.path === activePath ? activeOutlet : outletCache.current.get(tab.path)}
+              </div>
+            ))}
           </main>
         </div>
       </div>
