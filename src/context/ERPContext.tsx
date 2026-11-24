@@ -34,7 +34,6 @@ import { linkPurchasesToSuppliers, normalizeSupplierRecords, validateSupplierInp
 import { applySupplierInvoicePayment, buildSupplierInvoice, type CreateSupplierInvoiceInput, type RecordSupplierInvoicePaymentInput, type SupplierInvoice } from "../lib/supplierInvoices"
 export type { Supplier } from "../lib/supplierManagement"
 import { validateStockWriteOff } from "../lib/stockAdjustment"
-import { mergeLotReceiptCost } from "../lib/inventoryCosting"
 import { calculateCashSettlement } from "../lib/cashSettlement"
 import { buildCustomerPayment, getSalePaymentSummary, type CustomerPayment, type RecordCustomerPaymentInput } from "../lib/customerPayments"
 import { buildPaymentReconciliation, type CreatePaymentReconciliationInput, type PaymentReconciliation } from "../lib/paymentReconciliation"
