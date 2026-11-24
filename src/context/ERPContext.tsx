@@ -98,6 +98,8 @@ export type ProductDeletionBlock = {
 export type ProductDeletionOptions = {
   /** Remove stock lots and stock movement rows with the product. Commercial documents are always protected. */
   removeInventory?: boolean
+  /** Mark products blocked by protected records or remaining stock as inactive in the same persisted operation. */
+  archiveBlocked?: boolean
 }
 
 export type ProductDeletionResult = {
@@ -2641,12 +2643,19 @@ export function ERPProvider({
       const linkedTo = linkedCollections.find((collection) =>
         containsProductReference(collection.value, id),
       )
+      const addBlocked = (reason: string) => {
+        blocked.push({ id, name: product.name, reason })
+        if (options.archiveBlocked) {
+          working = {
+            ...working,
+            products: working.products.map((item) =>
+              item.id === id ? { ...item, status: "INACTIVE" } : item,
+            ),
+          }
+        }
+      }
       if (linkedTo) {
-        blocked.push({
-          id,
-          name: product.name,
-          reason: `This product is referenced in ${linkedTo.label}. Its business history is protected; mark the product inactive instead.`,
-        })
+        addBlocked(`This product is referenced in ${linkedTo.label}. Its business history is protected; the product was archived instead.`)
         continue
       }
 
@@ -2668,11 +2677,11 @@ export function ERPProvider({
       const movementExists = working.inventoryMovements.some((movement) => movement.productId === id)
 
       if (!options.removeInventory && stock > 0) {
-        blocked.push({ id, name: product.name, reason: `${stock} units are still in stock. Use Delete Selected + Stock to remove this unlinked product and its lots, or adjust the quantity first.` })
+        addBlocked(`${stock} units are still in stock. The product was archived; use Delete Selected + Stock to permanently remove an unlinked product and its stock records.`)
         continue
       }
       if (!options.removeInventory && movementExists) {
-        blocked.push({ id, name: product.name, reason: "This product has stock movement history. Use Delete Selected + Stock to remove unlinked stock records, or mark the product inactive." })
+        addBlocked("This product has stock movement history. The product was archived to preserve its audit trail.")
         continue
       }
 
@@ -2704,6 +2713,8 @@ export function ERPProvider({
       } catch (error) {
         throw new Error(`No products were deleted because a recoverable backup could not be saved. ${error instanceof Error ? error.message : String(error)}`)
       }
+    }
+    if (deletedIds.length || (options.archiveBlocked && blocked.length)) {
       persistStore(working)
     }
 
