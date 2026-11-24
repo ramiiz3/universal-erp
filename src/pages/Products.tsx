@@ -163,13 +163,16 @@ export default function Products() {
         product.name
           .toLowerCase()
           .includes(query) ||
-        product.sku
-          .toLowerCase()
-          .includes(query) ||
+        product.sku.toLowerCase().includes(query) ||
         product.barcode.toLowerCase().includes(query) ||
-        (product.alternateBarcodes || []).some(
-          (barcode) => barcode.toLowerCase().includes(query),
-        )
+        (product.genericName ?? "").toLowerCase().includes(query) ||
+        (product.companyName ?? "").toLowerCase().includes(query) ||
+        (product.productGroup ?? "").toLowerCase().includes(query) ||
+        (product.brand ?? "").toLowerCase().includes(query) ||
+        (product.packagings ?? []).some((unit) =>
+          [unit.name, unit.unit, unit.barcode ?? ""].some((value) => value.toLowerCase().includes(query)),
+        ) ||
+        (product.alternateBarcodes || []).some((barcode) => barcode.toLowerCase().includes(query))
 
       const matchesCategory =
         category === "All" ||
@@ -949,12 +952,12 @@ export default function Products() {
                   }
                 />
 
-                <Detail
-                  label="Barcode"
-                  value={
-                    selectedProduct.barcode
-                  }
-                />
+                <Detail label="Barcode / GTIN" value={selectedProduct.barcode || "—"} />
+                <Detail label="Generic Name" value={selectedProduct.genericName || "—"} />
+                <Detail label="Company" value={selectedProduct.companyName || "—"} />
+                <Detail label="Group" value={selectedProduct.productGroup || "—"} />
+                <Detail label="Preferred Supplier" value={suppliers.find((supplier) => supplier.id === selectedProduct.preferredSupplierId)?.name || "—"} />
+                <Detail label="MRP" value={money(selectedProduct.mrp ?? selectedProduct.sellingPrice)} />
 
                 <Detail
                   label="Purchase Price"
