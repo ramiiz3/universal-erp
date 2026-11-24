@@ -1,4 +1,5 @@
 import {
+  Archive,
   Barcode as BarcodeIcon,
   Edit3,
   Eye,
@@ -84,7 +85,6 @@ export default function Products() {
     suppliers,
     addProduct,
     updateProduct,
-    deleteProduct,
     deleteProducts,
     archiveProducts,
     getProductStock,
