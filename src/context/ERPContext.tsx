@@ -1182,11 +1182,14 @@ export function ERPProvider({
       throw new Error("The saved ERP data could not be validated. Restore a valid backup in Settings before importing inventory. " + loadResult.error)
     }
 
+    const defaultWarehouse = store.warehouses.find((warehouse) => warehouse.active && warehouse.type === "MAIN")
+      ?? store.warehouses.find((warehouse) => warehouse.active)
     const result = buildImportedInventory(
       store.products,
       store.inventoryLots,
       records,
       mode,
+      defaultWarehouse?.id,
     )
     const nextStore: StoredData = {
       ...store,
@@ -2332,9 +2335,15 @@ export function ERPProvider({
         (item) =>
           item.id === id
             ? {
-                id,
+                ...item,
                 ...product,
+                id,
                 manufacturer: product.manufacturer ?? item.manufacturer,
+                packagings: product.packagings ?? item.packagings,
+                alternateBarcodes: product.alternateBarcodes ?? item.alternateBarcodes,
+                description: product.description ?? item.description,
+                companyName: product.companyName ?? item.companyName,
+                mrp: product.mrp ?? item.mrp,
               }
             : item,
       ),
