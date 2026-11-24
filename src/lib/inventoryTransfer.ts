@@ -302,12 +302,17 @@ export function previewInventoryImport(
         throw new Error("Product Name is required.")
       }
 
-      const purchaseQuantity = parseNumber(mappedValue(row, "quantity"), "Inventory Lot Quantity")
+      const importedQuantity = parseNumber(mappedValue(row, "quantity"), "Stock / Purchase Quantity")
+      const mappedPaidQuantity = parseNumber(mappedValue(row, "purchaseQuantity"), "Purchase Quantity")
+      const purchaseQuantity = mappedPaidQuantity ?? importedQuantity
       if (purchaseQuantity === undefined) {
-        throw new Error("Inventory Lot Quantity is required.")
+        throw new Error("Stock or purchase quantity is required.")
       }
       const bonusQuantity = parseNumber(mappedValue(row, "bonusQuantity"), "Bonus Quantity") ?? 0
-      const quantity = purchaseQuantity + bonusQuantity
+      // Modern exports include the physical Stock Quantity. Legacy GRN sheets expose only QTY (paid) plus BONUS.
+      const quantity = mappedPaidQuantity !== undefined
+        ? (importedQuantity ?? (purchaseQuantity + bonusQuantity))
+        : purchaseQuantity + bonusQuantity
 
       for (const key of ["purchasePrice", "sellingPrice", "minimumStock", "vatRate"] as const) {
         const label = INVENTORY_COLUMNS.find((column) => column.key === key)?.label ?? key
