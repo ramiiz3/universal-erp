@@ -36,6 +36,7 @@ import { useAuth } from "../auth/AuthProvider"
 import GlobalERPSearch from "../components/GlobalERPSearch"
 import { loadPurchaseDraft, PURCHASE_DRAFT_EVENT } from "../lib/purchaseDraft"
 import { useTheme } from "../context/ThemeContext"
+import { isRecoverableERPCloudConflict } from "../lib/erpCloudState"
 import {
   ERP_OWNER_PROFILE_STORAGE_KEY,
   ERP_READ_NOTIFICATIONS_STORAGE_KEY,
@@ -192,13 +193,7 @@ export default function AppLayout() {
   const activePath = location.pathname
 
   function retryCloudSave() {
-    const message = cloudSyncError.toLowerCase()
-    const isConflict = [
-      "conflicting erp changes",
-      "edited differently on two workstations",
-      "common base revision is unavailable",
-      "several workstations saved at the same time",
-    ].some((phrase) => message.includes(phrase))
+    const isConflict = isRecoverableERPCloudConflict(cloudSyncError)
     const action = isConflict ? resolveCloudSyncConflict() : syncCloudNow()
     void action.catch((error) => window.alert(error instanceof Error ? error.message : String(error)))
   }
