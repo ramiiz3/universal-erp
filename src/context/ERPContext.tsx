@@ -110,6 +110,7 @@ export type Product = {
   mrp?: number
   genericName?: string
   companyName?: string
+  productGroup?: string
   preferredSupplierId?: string
   packagings?: ProductPackaging[]
 }
