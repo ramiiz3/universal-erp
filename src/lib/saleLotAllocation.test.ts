@@ -203,6 +203,76 @@ describe("sale lot allocation", () => {
   })
 
 
+  it("allocates complete strips from the earliest-expiring supplier lot without mixing batches", () => {
+    const supplierLots: InventoryLot[] = [
+      {
+        id: "supplier-a",
+        productId: product.id,
+        batch: "A-100",
+        expiry: "2027-03-31",
+        quantity: 15,
+        purchasePrice: 2,
+        supplierId: "supplier-a-id",
+        supplierName: "Supplier A",
+        grnNumber: "GRN-A",
+      },
+      {
+        id: "supplier-b",
+        productId: product.id,
+        batch: "B-200",
+        expiry: "2027-09-30",
+        quantity: 20,
+        purchasePrice: 3,
+        supplierId: "supplier-b-id",
+        supplierName: "Supplier B",
+        grnNumber: "GRN-B",
+      },
+    ]
+
+    const result = allocateSaleLots(
+      [{
+        product,
+        requestId: "strip-line",
+        quantity: 30,
+        saleUnitConversionFactor: 10,
+        unitPrice: 5,
+        unitPriceOverride: true,
+      }],
+      supplierLots,
+    )
+
+    expect(result.unallocated).toEqual([])
+    expect(result.lines.map((line) => ({
+      requestId: line.requestId,
+      lotId: line.lotId,
+      batch: line.batch,
+      supplierName: line.supplierName,
+      quantity: line.quantity,
+    }))).toEqual([
+      { requestId: "strip-line", lotId: "supplier-a", batch: "A-100", supplierName: "Supplier A", quantity: 10 },
+      { requestId: "strip-line", lotId: "supplier-b", batch: "B-200", supplierName: "Supplier B", quantity: 20 },
+    ])
+    expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([5, 0])
+  })
+
+  it("does not combine partial stock from two supplier lots to make one sealed pack", () => {
+    const partialLots: InventoryLot[] = [
+      { ...lots[0], id: "partial-a", quantity: 5, expiry: "2027-01-01" },
+      { ...lots[1], id: "partial-b", quantity: 5, expiry: "2027-02-01" },
+    ]
+
+    const result = allocateSaleLots(
+      [{ product, quantity: 10, saleUnitConversionFactor: 10 }],
+      partialLots,
+    )
+
+    expect(result.lines).toEqual([])
+    expect(result.unallocated).toEqual([
+      { productId: product.id, productName: product.name, quantity: 10 },
+    ])
+    expect(result.updatedLots.map((lot) => lot.quantity)).toEqual([5, 5])
+  })
+
   it("never allocates expired batches and treats month-only expiry as valid through month end", () => {
     const expired = {
       ...lots[0],
