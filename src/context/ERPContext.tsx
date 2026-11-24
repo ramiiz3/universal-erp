@@ -260,7 +260,10 @@ export type PurchaseItem = {
   name: string
   barcode: string
   quantity: number
+  bonusQuantity?: number
+  mrp?: number
   purchasePrice: number
+  actualPurchasePrice?: number
   batch: string
   expiry: string
   total: number
@@ -277,6 +280,7 @@ export type PurchaseItem = {
 export type Purchase = {
   id: string
   purchaseNumber: string
+  grnNumber?: string
   supplierName: string
   supplierId?: string
   supplierInvoice: string
@@ -314,6 +318,7 @@ type CreatePurchaseInput = {
   supplierId?: string
   supplierInvoice: string
   purchaseOrderId?: string
+  grnNumber?: string
   items: {
     productId: string
     quantity: number
@@ -3188,8 +3193,12 @@ export function ERPProvider({
           throw new Error(`Invalid package conversion for ${product.name}.`)
         }
 
-        const baseQuantity = item.quantity * conversionFactor
-        const baseUnitPurchasePrice = item.purchasePrice / conversionFactor
+        const bonusQuantity = item.bonusQuantity ?? 0
+        if (!Number.isFinite(bonusQuantity) || bonusQuantity < 0) {
+          throw new Error("Bonus quantity must be zero or greater.")
+        }
+        const baseQuantity = (item.quantity + bonusQuantity) * conversionFactor
+        const baseUnitPurchasePrice = item.quantity * item.purchasePrice / baseQuantity
 
         if (
           !Number.isFinite(baseQuantity) ||
@@ -3201,6 +3210,8 @@ export function ERPProvider({
         return {
           product,
           quantity: item.quantity,
+          bonusQuantity,
+          mrp: item.mrp ?? selectedPackage?.sellingPrice ?? product.mrp ?? product.sellingPrice,
           purchasePrice: item.purchasePrice,
           packageId: selectedPackage?.id,
           packageName: selectedPackage?.name,
@@ -3232,39 +3243,29 @@ export function ERPProvider({
 
     preparedItems.forEach(
       (item, index) => {
-        const existingLot =
-          updatedLots.find(
-            (lot) =>
-              lot.productId === item.product.id && lot.batch.trim().toUpperCase() === item.batch && lot.expiry === item.expiry && lot.warehouseId === receivingWarehouse.id && (lot.locationId ?? null) === (receivingLocation?.id ?? null),
-          )
-
-        let receiptLot: InventoryLot
-        if (existingLot) {
-          const mergedCost = mergeLotReceiptCost(
-            existingLot.quantity,
-            existingLot.purchasePrice,
-            item.baseQuantity,
-            item.baseUnitPurchasePrice,
-          )
-          existingLot.quantity = mergedCost.quantity
-          existingLot.purchasePrice = mergedCost.unitCost
-          if (existingLot.totalPurchaseValue !== undefined) {
-            existingLot.totalPurchaseValue = mergedCost.totalValue
-          }
-          receiptLot = existingLot
-        } else {
-          receiptLot = {
-            id: `LOT-${Date.now()}-${index}`,
-            productId: item.product.id,
-            batch: item.batch,
-            expiry: item.expiry,
-            quantity: item.baseQuantity,
-            purchasePrice: item.baseUnitPurchasePrice,
-            warehouseId: receivingWarehouse.id,
-            locationId: receivingLocation?.id ?? null,
-          }
-          updatedLots.push(receiptLot)
+        // Keep every goods receipt as its own lot so GRN, supplier, date and actual purchase cost remain traceable.
+        const receiptLot: InventoryLot = {
+          id: `LOT-${Date.now()}-${index}`,
+          productId: item.product.id,
+          batch: item.batch,
+          expiry: item.expiry,
+          quantity: item.baseQuantity,
+          purchasePrice: item.baseUnitPurchasePrice,
+          sellingPrice: item.mrp,
+          totalPurchaseValue: item.quantity * item.purchasePrice,
+          warehouseId: receivingWarehouse.id,
+          locationId: receivingLocation?.id ?? null,
+          purchaseDate: new Date().toISOString().slice(0, 10),
+          grnNumber: input.grnNumber?.trim() || undefined,
+          supplierId: selectedSupplier?.id,
+          supplierName: resolvedSupplierName,
+          mrp: item.mrp,
+          purchaseQuantity: item.quantity,
+          bonusQuantity: item.bonusQuantity,
+          actualPurchasePrice: item.purchasePrice,
+          purchaseUnit: item.purchaseUnit,
         }
+        updatedLots.push(receiptLot)
 
         purchaseItems.push({
           id: `PITEM-${Date.now()}-${index}`,
@@ -3276,7 +3277,10 @@ export function ERPProvider({
           barcode:
             item.product.barcode,
           quantity: item.quantity,
+          bonusQuantity: item.bonusQuantity,
+          mrp: item.mrp,
           purchasePrice: item.purchasePrice,
+          actualPurchasePrice: item.purchasePrice,
           packageId: item.packageId,
           packageName: item.packageName,
           purchaseUnit: item.purchaseUnit,
@@ -3307,6 +3311,7 @@ export function ERPProvider({
         getNextPurchaseNumber(
           store.purchases,
         ),
+      grnNumber: input.grnNumber?.trim() || undefined,
       supplierName: resolvedSupplierName,
       supplierId: selectedSupplier?.id,
       supplierInvoice: input.supplierInvoice.trim(),
@@ -3355,7 +3360,11 @@ export function ERPProvider({
             batch: item.batch,
             expiry: item.expiry,
             purchaseQuantity: item.quantity,
+            bonusQuantity: item.bonusQuantity ?? 0,
             purchaseUnit: item.purchaseUnit ?? item.baseUnit ?? "",
+            mrp: item.mrp ?? null,
+            grnNumber: purchase.grnNumber ?? purchase.purchaseNumber,
+            purchaseDate: purchase.createdAt.slice(0, 10),
             conversionFactor: item.conversionFactor ?? 1,
             baseUnit: item.baseUnit ?? "",
             unitCost: item.baseUnitPurchasePrice ?? item.purchasePrice,
