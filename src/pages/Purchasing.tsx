@@ -63,6 +63,8 @@ export default function Purchasing() {
 
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState("")
+  const [searchFrom, setSearchFrom] = useState("")
+  const [searchTo, setSearchTo] = useState("")
   const [supplierId, setSupplierId] = useState(initialPurchaseDraft?.supplierId ?? "")
   const [supplierInvoice, setSupplierInvoice] = useState(initialPurchaseDraft?.supplierInvoice ?? "")
   const [grnNumber, setGrnNumber] = useState(initialPurchaseDraft?.grnNumber ?? "")
@@ -107,21 +109,22 @@ export default function Purchasing() {
           new Date(a.createdAt).getTime(),
       )
       .filter((purchase) => {
+        const date = purchase.createdAt.slice(0, 10)
+        if (searchFrom && date < searchFrom) return false
+        if (searchTo && date > searchTo) return false
         if (!query) return true
-
         return (
-          purchase.purchaseNumber
-            .toLowerCase()
-            .includes(query) ||
-          purchase.supplierName
-            .toLowerCase()
-            .includes(query) ||
-          purchase.supplierInvoice
-            .toLowerCase()
-            .includes(query)
+          purchase.purchaseNumber.toLowerCase().includes(query) ||
+          (purchase.grnNumber ?? "").toLowerCase().includes(query) ||
+          purchase.supplierName.toLowerCase().includes(query) ||
+          purchase.supplierInvoice.toLowerCase().includes(query) ||
+          purchase.items.some((item) =>
+            item.name.toLowerCase().includes(query) ||
+            item.batch.toLowerCase().includes(query),
+          )
         )
       })
-  }, [purchases, search])
+  }, [purchases, search, searchFrom, searchTo])
 
   const purchaseTotal = lines.reduce(
     (sum, line) =>
@@ -549,17 +552,22 @@ export default function Purchasing() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-            <input
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Search purchase number, supplier or supplier invoice..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-            />
+          <div className="grid gap-3 md:grid-cols-[minmax(240px,1fr)_180px_180px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search purchase no., GRN, supplier, invoice, product or batch..."
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
+            <label className="text-xs font-medium text-slate-500">From date
+              <input type="date" value={searchFrom} onChange={(event) => setSearchFrom(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800" />
+            </label>
+            <label className="text-xs font-medium text-slate-500">To date
+              <input type="date" value={searchTo} onChange={(event) => setSearchTo(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800" />
+            </label>
           </div>
         </div>
 
@@ -608,7 +616,7 @@ export default function Purchasing() {
                       <p className="font-semibold text-slate-900">
                         {purchase.purchaseNumber}
                       </p>
-
+                      {purchase.grnNumber && <p className="mt-1 text-xs font-medium text-emerald-700">GRN: {purchase.grnNumber}</p>}
                       {purchase.supplierInvoice && (
                         <p className="mt-1 text-xs text-slate-500">
                           Supplier invoice:{" "}
@@ -628,10 +636,10 @@ export default function Purchasing() {
                     <td className="px-5 py-4 text-sm text-slate-700">
                       {purchase.items.reduce(
                         (sum: number, item: PurchaseLine) =>
-                          sum + item.quantity,
+                          sum + item.quantity + (item.bonusQuantity ?? 0),
                         0,
                       )}{" "}
-                      units
+                      units incl. bonus
                     </td>
 
                     <td className="px-5 py-4 font-semibold text-slate-900">
@@ -671,7 +679,7 @@ export default function Purchasing() {
                 {filteredPurchases.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-5 py-14 text-center"
                     >
                       <PackagePlus className="mx-auto h-9 w-9 text-slate-300" />
