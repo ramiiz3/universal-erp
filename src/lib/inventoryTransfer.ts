@@ -432,11 +432,13 @@ export function applyInventoryImport(
   existingLots: InventoryLot[],
   records: InventoryImportRecord[],
   mode: InventoryImportMode,
+  defaultWarehouseId?: string,
 ): InventoryImportResult {
   const products = existingProducts.map((product) => ({ ...product }))
   const lots = existingLots.map((lot) => ({
     ...lot,
     quantity: mode === "replace" ? 0 : lot.quantity,
+    ...(!lot.warehouseId && defaultWarehouseId ? { warehouseId: defaultWarehouseId } : {}),
   }))
   const usedProductIds = new Set(products.map((product) => product.id))
   const usedLotIds = new Set(lots.map((lot) => lot.id))
@@ -543,6 +545,7 @@ export function applyInventoryImport(
     ))
 
     if (matchingLot) {
+      if (!matchingLot.warehouseId && defaultWarehouseId) matchingLot.warehouseId = defaultWarehouseId
       matchingLot.quantity = mode === "replace" || record.sourceLotId
         ? record.quantity
         : matchingLot.quantity + record.quantity
@@ -573,6 +576,7 @@ export function applyInventoryImport(
         batch: record.batch,
         expiry: record.expiry,
         quantity: record.quantity,
+        ...(defaultWarehouseId ? { warehouseId: defaultWarehouseId } : {}),
         purchasePrice: record.lotPurchasePrice ?? record.product.purchasePrice ?? product.purchasePrice,
         ...(record.lotSellingPrice === undefined ? {} : { sellingPrice: record.lotSellingPrice }),
         ...(record.lotTotalPurchaseValue === undefined ? {} : { totalPurchaseValue: record.lotTotalPurchaseValue }),
