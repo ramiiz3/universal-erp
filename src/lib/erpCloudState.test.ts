@@ -6,6 +6,7 @@ import {
   mergeERPCloudStates,
   restoreERPCloudState,
   validateERPCloudState,
+  isRecoverableERPCloudConflict,
 } from "./erpCloudState"
 import { ERP_BACKUP_STORAGE_KEYS } from "./erpStorageKeys"
 
@@ -41,6 +42,25 @@ class MemoryStorage implements StorageLike {
     this.values.set(key, value)
   }
 }
+
+describe("recoverable ERP cloud conflicts", () => {
+  it("recognizes the older revision and missing common snapshot message shown on the locked ERP screen", () => {
+    expect(isRecoverableERPCloudConflict(
+      "This workstation is based on an older ERP revision and its last common snapshot is unavailable. The workstation copy has been protected in recovery history; reload the latest saved data before continuing.",
+    )).toBe(true)
+  })
+
+  it("recognizes related stale snapshot and overlapping workstation conflicts", () => {
+    expect(isRecoverableERPCloudConflict("The common base revision is unavailable.")).toBe(true)
+    expect(isRecoverableERPCloudConflict("Some records were edited differently on two workstations.")).toBe(true)
+    expect(isRecoverableERPCloudConflict("Several workstations saved at the same time.")).toBe(true)
+  })
+
+  it("does not classify ordinary connection and permission errors as recoverable revision conflicts", () => {
+    expect(isRecoverableERPCloudConflict("Network request failed.")).toBe(false)
+    expect(isRecoverableERPCloudConflict("Permission denied reading company ERP state.")).toBe(false)
+  })
+})
 
 describe("pharmacy ERP cloud-state snapshots", () => {
   let storage: MemoryStorage

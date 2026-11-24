@@ -15,6 +15,7 @@ import {
   validateERPCloudState,
   restoreERPCloudState,
   ERP_CLOUD_SYNC_EVENT,
+  isRecoverableERPCloudConflict,
 } from "../lib/erpCloudState"
 import {
   applyInventoryImport as buildImportedInventory,
@@ -1200,14 +1201,7 @@ export function ERPProvider({
     if (!companyId || !user?.id || !client) {
       throw new Error("Sign in to the pharmacy owner account before resolving cloud sync.")
     }
-    const conflictMessage = cloudSyncError.toLowerCase()
-    const isConflict = [
-      "conflicting erp changes",
-      "edited differently on two workstations",
-      "common base revision is unavailable",
-      "several workstations saved at the same time",
-    ].some((phrase) => conflictMessage.includes(phrase))
-    if (!isConflict) {
+    if (!isRecoverableERPCloudConflict(cloudSyncError)) {
       throw new Error("There is no confirmed cloud revision conflict to resolve. Retry the cloud save or reload the latest ERP data.")
     }
 
@@ -4056,13 +4050,7 @@ export function ERPProvider({
 
   if (!cloudReady) {
     const failed = cloudSyncStatus === "error"
-    const conflictMessage = cloudSyncError.toLowerCase()
-    const hasConflict = [
-      "conflicting erp changes",
-      "edited differently on two workstations",
-      "common base revision is unavailable",
-      "several workstations saved at the same time",
-    ].some((phrase) => conflictMessage.includes(phrase))
+    const hasConflict = isRecoverableERPCloudConflict(cloudSyncError)
 
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-slate-900 dark:bg-[#0b120e] dark:text-slate-100">
@@ -4077,7 +4065,9 @@ export function ERPProvider({
             {failed ? (cloudSyncError || "The latest company data could not be loaded.") : "Connecting to the pharmacy's saved company records…"}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-            Editing is paused until the saved data is confirmed. This prevents an older workstation copy from overwriting newer product, stock or transaction changes.
+            {hasConflict
+              ? "Your workstation's saved copy has been protected in recovery history. Restore the latest company data to continue. The older copy will remain available in recovery history."
+              : "Editing is paused until the saved data is confirmed. This prevents an older workstation copy from overwriting newer product, stock or transaction changes."}
           </p>
           {failed && (
             <button
@@ -4088,7 +4078,7 @@ export function ERPProvider({
               }}
               className="mt-5 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800"
             >
-              {hasConflict ? "Resolve saved-data conflict" : "Reload and try again"}
+              {hasConflict ? "Restore latest company data" : "Reload and try again"}
             </button>
           )}
         </section>
