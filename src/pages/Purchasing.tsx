@@ -346,7 +346,17 @@ export default function Purchasing() {
       return
     }
 
-    const baseQuantity = qty * conversionFactor
+    const bonus = Number(bonusQuantity || 0)
+    if (!Number.isFinite(bonus) || bonus < 0) {
+      setError("Bonus quantity must be zero or greater.")
+      return
+    }
+    const lineMrp = Number(mrp || product.mrp || product.sellingPrice)
+    if (!Number.isFinite(lineMrp) || lineMrp < 0) {
+      setError("Enter a valid MRP.")
+      return
+    }
+    const baseQuantity = (qty + bonus) * conversionFactor
 
     if (!Number.isFinite(baseQuantity) || baseQuantity <= 0) {
       setError("The converted base-unit quantity is invalid.")
@@ -374,6 +384,8 @@ export default function Purchasing() {
       name: product.name,
       barcode: product.barcode,
       quantity: qty,
+      bonusQuantity: bonus,
+      mrp: lineMrp,
       purchasePrice: price,
       packageId: selectedPackage?.id,
       packageName: selectedPackage?.name,
@@ -391,6 +403,8 @@ export default function Purchasing() {
     ])
 
     setQuantity("")
+    setBonusQuantity("0")
+    setMrp("")
     setBatch("")
     setExpiry("")
     setBarcode("")
@@ -435,11 +449,14 @@ export default function Purchasing() {
         supplierId: selectedSupplier.id,
         supplierName: selectedSupplier.name,
         supplierInvoice,
+        grnNumber,
         warehouseId,
         locationId: locationId || null,
         items: lines.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
+          bonusQuantity: line.bonusQuantity,
+          mrp: line.mrp,
           purchasePrice: line.purchasePrice,
           packageId: line.packageId,
           batch: line.batch,
