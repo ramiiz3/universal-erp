@@ -968,49 +968,44 @@ export function ERPProvider({
         )
       }
 
+      let acceptedState: ReturnType<typeof createERPCloudState>
+      let acceptedRevision: number
+
       if (remoteRow) {
         const remoteRevision = Number(remoteRow.revision)
         if (!Number.isSafeInteger(remoteRevision) || remoteRevision < 1) {
           throw new Error("The saved pharmacy data has an invalid revision number.")
         }
-
+        const remoteState = validateERPCloudState(remoteRow.state)
         const meta = readCloudSyncMeta()
-        const localDiffersFromCloud =
-          !areERPCloudStatesEqual(localSnapshot, remoteRow.state)
+        const base = readCloudSyncBase()
+        const localDiffersFromCloud = !areERPCloudStatesEqual(localSnapshot, remoteState)
 
         if (meta?.companyId === companyId && localDiffersFromCloud) {
-          if (meta.revision !== remoteRevision) {
+          const commonBase =
+            base?.companyId === companyId && base.revision === meta.revision
+              ? base.state
+              : meta.revision === remoteRevision
+                ? remoteState
+                : null
+
+          if (!commonBase) {
             throw new Error(
-              "This workstation and the database have conflicting ERP changes. A recovery copy of this workstation was saved. Reload or reconcile the newer data before continuing; nothing was overwritten.",
+              "This workstation is based on an older ERP revision and its last common snapshot is unavailable. The workstation copy has been protected in recovery history; reload the latest saved data before continuing.",
             )
           }
 
-          // The browser may have closed before its debounced save completed.
-          // Retry those local changes only when the last acknowledged database
-          // revision is unchanged, using the same compare-and-swap protection.
-          const { data: recoveredRevision, error: recoverySaveError } =
-            await client.rpc("save_legacy_erp_state", {
-              p_company_id: companyId,
-              p_expected_revision: remoteRevision,
-              p_state: localSnapshot,
-            })
-
-          if (recoverySaveError) {
-            throw new Error(
-              recoverySaveError.code === "40001"
-                ? "The pharmacy data changed in another tab during recovery. The workstation recovery copy is preserved; reload before continuing."
-                : "The pending workstation changes could not be recovered to the database. " + recoverySaveError.message,
-            )
-          }
-
-          const nextRevision = Number(recoveredRevision)
-          if (!Number.isSafeInteger(nextRevision) || nextRevision <= remoteRevision) {
-            throw new Error("The database did not confirm recovery of the pending workstation changes.")
-          }
-          cloudRevisionRef.current = nextRevision
+          const reconciled = await saveMergedCloudSnapshot(
+            localSnapshot,
+            commonBase,
+            { revision: remoteRevision, state: remoteState },
+            "Before automatic multi-workstation ERP reconciliation",
+          )
+          acceptedState = reconciled.state
+          acceptedRevision = reconciled.revision
         } else {
-          restoreERPCloudState(localStorage, remoteRow.state)
-          cloudRevisionRef.current = remoteRevision
+          acceptedState = remoteState
+          acceptedRevision = remoteRevision
         }
       } else {
         const { data: newRevision, error: seedError } = await client.rpc(
@@ -1034,30 +1029,31 @@ export function ERPProvider({
           if (racedReadError || !racedRow) {
             throw new Error("The initial data migration conflicted and could not be safely reloaded.")
           }
-          restoreERPCloudState(localStorage, racedRow.state)
-          cloudRevisionRef.current = Number(racedRow.revision)
+          acceptedState = validateERPCloudState(racedRow.state)
+          acceptedRevision = Number(racedRow.revision)
         } else {
-          const revision = Number(newRevision)
-          if (!Number.isSafeInteger(revision) || revision < 1) {
+          acceptedRevision = Number(newRevision)
+          if (!Number.isSafeInteger(acceptedRevision) || acceptedRevision < 1) {
             throw new Error("The database did not confirm the initial ERP migration.")
           }
-          cloudRevisionRef.current = revision
+          acceptedState = localSnapshot
         }
       }
 
       if (cancelled) return
 
+      if (!areERPCloudStatesEqual(localSnapshot, acceptedState)) {
+        restoreERPCloudState(localStorage, acceptedState)
+      }
       const reloaded = loadStoredData()
       if (reloaded.error) throw new Error("The saved ERP data could not be loaded after synchronization. " + reloaded.error)
-      setStore(migrateWarehouseData(reloaded.data))
 
-      const revision = cloudRevisionRef.current
-      if (revision !== null) {
-        localStorage.setItem(
-          ERP_CLOUD_META_KEY,
-          JSON.stringify({ companyId, revision } satisfies ERPCloudSyncMeta),
-        )
-      }
+      cloudRevisionRef.current = acceptedRevision
+      cloudCompanyRef.current = companyId
+      cloudDirtyRef.current = false
+      skipNextCloudStoreWriteRef.current = true
+      setStore(migrateWarehouseData(reloaded.data))
+      writeCloudSyncCheckpoint(companyId, acceptedRevision, acceptedState)
       setCloudLastSavedAt(new Date().toISOString())
       setCloudSyncStatus("saved")
       setCloudReady(true)
