@@ -75,6 +75,7 @@ describe("sales returns", () => {
     const boxSale = {
       ...sale,
       subtotal: 12,
+      discount: 0,
       items: [{
         id: "strip-line", productId: "p1", name: "Test tablets", quantity: 2, unitPrice: 6,
         vatRate: 0, total: 12, sellingUnit: "Strip", conversionFactor: 0.1, baseQuantity: 0.2,
@@ -99,6 +100,7 @@ describe("sales returns", () => {
     const boxSale = {
       ...sale,
       subtotal: 1,
+      discount: 0,
       items: [{
         id: "piece-line", productId: "p1", name: "Test tablets", quantity: 2, unitPrice: 0.5,
         vatRate: 0, total: 1, sellingUnit: "Piece", conversionFactor: 0.01, baseQuantity: 0.02,
