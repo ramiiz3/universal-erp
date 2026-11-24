@@ -725,6 +725,17 @@ export default function POS() {
                                 ))}
                             </select>
 
+                            {!(item.product.packagings || []).some((packaging) => packaging.salesEnabled) && (
+                              <p className="mt-1 text-[11px] text-amber-700">
+                                Only the base unit is configured. Add Strip / Piece in Product Master to sell smaller units.
+                              </p>
+                            )}
+                            {item.packageId && (
+                              <p className="mt-1 text-[11px] text-emerald-700">
+                                1 {item.sellingUnit} = {item.conversionFactor} {item.product.unit}
+                              </p>
+                            )}
+
                             <div className="mt-1 space-y-0.5 text-xs text-slate-500">
                               {itemLines.map((line, index) => (
                                 <p key={`${item.productId}-${line.lotId}-${index}`}>
