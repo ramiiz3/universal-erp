@@ -206,6 +206,7 @@ export type SaleItem = {
   unitPrice: number
   vatRate: number
   total: number
+  returnEligible?: boolean
   sellingUnit?: string
   packageId?: string
   packageName?: string
@@ -3541,6 +3542,7 @@ export function ERPProvider({
           unitPrice: request.displayUnitPrice,
           vatRate: request.product.vatApplicable === false ? 0 : request.product.vatRate,
           total: request.displayQuantity * request.displayUnitPrice,
+          returnEligible: request.product.productType !== "SERVICE" && request.product.returnEligible === true,
           sellingUnit: request.sellingUnit,
           packageId: request.packageId,
           packageName: request.packageName,
