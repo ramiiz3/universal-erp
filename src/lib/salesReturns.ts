@@ -60,6 +60,7 @@ type ReturnSaleItem = {
   unitPrice: number
   vatRate: number
   total: number
+  returnEligible?: boolean
   sellingUnit?: string
   conversionFactor?: number
   baseQuantity?: number
@@ -111,6 +112,15 @@ export function isSaleFullyReturned(
   )
 }
 
+export function isSaleItemReturnEligible(
+  saleItem: { returnEligible?: boolean },
+  product: ReturnProduct | undefined,
+): boolean {
+  if (saleItem.returnEligible !== undefined) return saleItem.returnEligible === true
+  // Older invoices predate line-level snapshots; retain their previous Product Master based behavior.
+  return product?.productType !== "SERVICE" && product?.returnEligible === true
+}
+
 export function buildSalesReturn(
   input: CreateSalesReturnInput,
   sale: ReturnSale | undefined,
@@ -150,7 +160,7 @@ export function buildSalesReturn(
     if (!saleItem) throw new Error("The selected item does not belong to the original invoice.")
     const product = products.find((item) => item.id === saleItem.productId)
     if (!product) throw new Error(`Product ${saleItem.name} was not found in the product master.`)
-    if (product.productType === "SERVICE" || product.returnEligible !== true) {
+    if (!isSaleItemReturnEligible(saleItem, product)) {
       throw new Error(`${saleItem.name} is not marked as eligible for returns. Medicines and other restricted products must remain non-returnable.`)
     }
 
