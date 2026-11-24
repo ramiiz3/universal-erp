@@ -17,6 +17,7 @@ export const INVENTORY_COLUMNS = [
   { key: "packagings", label: "Sub-units / Packaging JSON", aliases: ["sub units packaging json", "packagings json", "product units json", "unit conversions json"] },
   { key: "manufacturer", label: "Manufacturer", aliases: ["manufacturer", "brand"] },
   { key: "mrp", label: "MRP", aliases: ["mrp", "maximum retail price", "max retail price", "retail mrp"] },
+  { key: "purchaseQuantity", label: "Purchase Quantity", aliases: ["purchase quantity", "paid quantity", "paid qty", "qty purchased", "purchased quantity"] },
   { key: "bonusQuantity", label: "Bonus Quantity", aliases: ["bonus", "bonus qty", "bonus quantity", "free qty", "free quantity", "scheme qty"] },
   { key: "unit", label: "Unit", aliases: ["unit", "uom", "unit of measure"] },
   { key: "purchasePrice", label: "Product Purchase Price", aliases: ["product purchase price", "purchase price", "cost price"] },
