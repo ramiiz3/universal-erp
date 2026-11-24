@@ -352,6 +352,8 @@ export default function POS() {
       item.productId === product.id &&
       (item.packageId ?? "") === (selectedPackage?.id ?? ""),
     )
+    const lineId = existing?.lineId ??
+      `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const nextCart = existing
       ? cart.map((item) =>
           item.lineId === existing.lineId
@@ -361,7 +363,7 @@ export default function POS() {
       : [
           ...cart,
           {
-            lineId: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            lineId,
             productId: product.id,
             product,
             quantity: requestedQuantity,
@@ -383,7 +385,7 @@ export default function POS() {
     }
 
     setCart(nextCart)
-    setUomPickerLineId(null)
+    setUomPickerLineId(selectedPackage ? null : lineId)
     setError("")
     return true
   }
