@@ -79,6 +79,7 @@ const EMPTY_ROW: unknown[] = []
 
 export default function Inventory() {
   const [search, setSearch] = useState("")
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [showReceive, setShowReceive] =
     useState(false)
 
@@ -533,9 +534,16 @@ export default function Inventory() {
     }
 
     function handleDeleteInventoryProduct(product: Product) {
-      if (!window.confirm(`Delete ${product.name} from the product master? The ERP will retain this product if stock or transaction history is linked to it.`)) return
+      const stock = getProductStock(product.id)
+      const removeInventory = stock > 0 || inventoryLots.some((lot) => lot.productId === product.id)
+      if (!window.confirm(
+        removeInventory
+          ? `Delete ${product.name} and permanently remove its ${stock} on-hand units, batches and stock movement history? A backup is saved first. Products linked to sales, purchases, returns, orders or transfers are protected.`
+          : `Delete ${product.name} from the product master? A backup is saved first.`,
+      )) return
       try {
-        deleteProduct(product.id)
+        deleteProduct(product.id, { removeInventory })
+        setSelectedProductIds((current) => current.filter((id) => id !== product.id))
         if (editingProduct?.id === product.id) {
           setShowEdit(false)
           setEditingProduct(null)
@@ -546,15 +554,23 @@ export default function Inventory() {
       }
     }
 
-    function handleDeleteAllInventoryProducts() {
-      if (!products.length) return
-      if (!window.confirm(`Delete all ${products.length} products that have no stock or linked business history? Products with stock, sales, purchases or stock movements will be kept.`)) return
+    function handleBulkDeleteInventoryProducts(ids: string[], removeInventory = false) {
+      const uniqueIds = [...new Set(ids)].filter((id) => products.some((product) => product.id === id))
+      if (!uniqueIds.length) return
+      const confirmation = removeInventory
+        ? `PERMANENTLY delete ${uniqueIds.length} selected product(s) and their stock lots and movement history? The ERP will first save a recovery backup. Sales, purchases, returns, orders and transfers will never be deleted; products linked to them will be retained.`
+        : `Delete ${uniqueIds.length} selected product(s) only where no stock or stock movement remains?`
+      if (!window.confirm(confirmation)) return
       try {
-        const result = deleteProducts(products.map((product) => product.id))
+        const result = deleteProducts(uniqueIds, { removeInventory })
+        setSelectedProductIds([])
         const blocked = result.blocked.length
-          ? "\n\nProducts retained because stock or history exists:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
+          ? "\n\nProducts retained because they have commercial history:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
           : ""
-        window.alert(`${result.deletedIds.length} product(s) deleted.${blocked}`)
+        const inventorySummary = removeInventory
+          ? `\nInventory lots removed: ${result.removedLots}. Stock movements removed: ${result.removedMovements}.`
+          : ""
+        window.alert(`${result.deletedIds.length} product(s) deleted.${inventorySummary}${blocked}`)
       } catch (error) {
         window.alert(error instanceof Error ? error.message : String(error))
       }
@@ -933,16 +949,39 @@ export default function Inventory() {
           <div className="flex flex-wrap gap-2">
             <button onClick={openReceiveStock} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><ScanLine size={16}/> Receive Stock</button>
             <button onClick={openAddProduct} className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"><Plus size={14}/> Add Product</button>
-            <button onClick={handleDeleteAllInventoryProducts} disabled={products.length === 0} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={15}/> Delete All Products</button>
+            <button onClick={() => handleBulkDeleteInventoryProducts(products.map((product) => product.id), true)} disabled={products.length === 0} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={15}/> Delete All + Stock</button>
           </div>
 
           <div className="text-sm text-slate-500">Showing {filteredProducts.length} products</div>
         </div>
 
+        {selectedProductIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-100 bg-red-50/70 px-4 py-3 dark:border-red-950 dark:bg-red-950/20">
+            <span className="text-sm font-medium">{selectedProductIds.length} product(s) selected</span>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setSelectedProductIds([])} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900">Cancel selection</button>
+              <button type="button" onClick={() => handleBulkDeleteInventoryProducts(selectedProductIds)} className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700">Delete Selected</button>
+              <button type="button" onClick={() => handleBulkDeleteInventoryProducts(selectedProductIds, true)} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete Selected + Stock</button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-[1180px] text-sm">
             <thead className="border-b bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
               <tr className="text-left">
+                <th className="w-12 px-4 py-4">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible inventory products"
+                    checked={filteredProducts.length > 0 && filteredProducts.every((product) => selectedProductIds.includes(product.id))}
+                    onChange={() => {
+                      const visibleIds = filteredProducts.map((product) => product.id)
+                      const allSelected = visibleIds.every((id) => selectedProductIds.includes(id))
+                      setSelectedProductIds((current) => allSelected ? current.filter((id) => !visibleIds.includes(id)) : [...new Set([...current, ...visibleIds])])
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                  />
+                </th>
                 <th className="px-5 py-4 font-medium text-slate-500">Product</th>
                 <th className="px-5 py-4 font-medium text-slate-500">SKU</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Barcode</th>
@@ -950,7 +989,8 @@ export default function Inventory() {
                 <th className="px-5 py-4 font-medium text-slate-500">Actual Cost</th>
                 <th className="px-5 py-4 font-medium text-slate-500">MRP</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Selling Price</th>
-                <th className="px-5 py-4 font-medium text-slate-500">Stock</th>
+                <th className="px-5 py-4 font-medium text-slate-500">On Hand</th>
+                <th className="px-5 py-4 font-medium text-slate-500">Min Stock / Reorder At</th>
                 <th className="px-5 py-4 font-medium text-slate-500">Status</th>
                 <th className="px-5 py-4 text-right font-medium text-slate-500">Actions</th>
               </tr>
@@ -963,6 +1003,15 @@ export default function Inventory() {
 
                 return (
                   <tr key={product.id} className="border-b last:border-b-0 dark:border-slate-800">
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.includes(product.id)}
+                        onChange={() => setSelectedProductIds((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])}
+                        aria-label={`Select ${product.name}`}
+                        className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                      />
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"><Package size={18}/></div>
@@ -979,13 +1028,17 @@ export default function Inventory() {
                     <td className="px-5 py-4">{money(product.purchasePrice)}</td>
                     <td className="px-5 py-4">{money(product.mrp ?? product.sellingPrice)}</td>
                     <td className="px-5 py-4">{money(product.sellingPrice)}</td>
-                    <td className="px-5 py-4 font-semibold">{stock}</td>
+                    <td className="px-5 py-4">
+                      <div className="font-semibold">On hand: {stock}</div>
+                      <div className="text-xs text-slate-500">{product.unit}</div>
+                    </td>
+                    <td className="px-5 py-4">{product.minimumStock}</td>
                     <td className="px-5 py-4">{status}</td>
 
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
                         <button onClick={() => { setScannedProductId(product.id); openReceiveStock() }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Receive Stock">Receive</button>
-                        <button onClick={() => openAdjust(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Adjust Stock">Adjust</button>
+                        <button onClick={() => openAdjust(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Manage Stock">Manage Stock</button>
                         <button onClick={() => openEditProduct(product)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Edit Product">Edit</button>
                         <button onClick={() => setShowProductLots(product.id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="View Lots">Lots</button>
                         <button onClick={() => handleDeleteInventoryProduct(product)} className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" title="Delete Product" aria-label={`Delete ${product.name}`}><Trash2 size={16}/></button>
@@ -997,7 +1050,7 @@ export default function Inventory() {
 
               {filteredProducts.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500">No products found.</td>
+                  <td colSpan={11} className="px-5 py-12 text-center text-slate-500">No products found.</td>
                 </tr>
               )}
             </tbody>
