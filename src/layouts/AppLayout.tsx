@@ -199,7 +199,7 @@ export default function AppLayout() {
     const index = workspaceTabs.findIndex((tab) => tab.path === path)
     const nextTabs = workspaceTabs.filter((tab) => tab.path !== path)
     setWorkspaceTabs(nextTabs)
-remove cached outlet deletion    if (activePath === path) {
+    if (activePath === path) {
       const fallback = nextTabs[Math.max(0, index - 1)] ?? nextTabs[0] ?? { path: "/dashboard" }
       navigate(fallback.path)
     }
