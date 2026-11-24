@@ -13,7 +13,8 @@ import BarcodePreview from "../components/BarcodePreview"
 import { generateCompanyProductBarcode } from "../lib/productBarcode"
 import { getERPSettings } from "../lib/erpSettings"
 import { isBuiltInDemoProduct } from "../lib/demoDataCleanup"
-import { useERP, type Product } from "../context/ERPContext"
+import { useERP, type Product, type ProductPackaging } from "../context/ERPContext"
+import { calculateGrossMarginPercentage, calculateSellingPriceFromGrossMargin } from "../lib/productPricing"
 import {
   getERPUnits,
   ERP_UNITS_EVENT,
@@ -32,6 +33,7 @@ const emptyForm = {
   barcode: "",
   purchasePrice: "",
   sellingPrice: "",
+  marginPercentage: "",
   minimumStock: "",
   vatRate: "5",
   vatApplicable: true,
@@ -44,6 +46,7 @@ const emptyForm = {
   description: "",
   status: "ACTIVE",
   returnEligible: "false",
+  packagings: [] as ProductPackaging[],
 }
 
 type LegacyCompanyBarcodeProfile = {
@@ -201,12 +204,86 @@ export default function Products() {
     setForm(emptyForm)
   }
 
+  function updatePackaging(index: number, updates: Partial<ProductPackaging>) {
+    setForm((current) => ({
+      ...current,
+      packagings: current.packagings.map((packaging, itemIndex) =>
+        itemIndex === index ? { ...packaging, ...updates } : packaging,
+      ),
+    }))
+  }
+
+  function addPackaging() {
+    setForm((current) => ({
+      ...current,
+      packagings: [
+        ...current.packagings,
+        {
+          id: `PACK-${Date.now()}-${current.packagings.length}`,
+          name: "",
+          unit: "",
+          conversionFactor: 1,
+          purchaseEnabled: true,
+          salesEnabled: true,
+        },
+      ],
+    }))
+  }
+
+  function removePackaging(index: number) {
+    setForm((current) => ({
+      ...current,
+      packagings: current.packagings.filter((_, itemIndex) => itemIndex !== index),
+    }))
+  }
+
+  function updatePurchasePrice(value: string) {
+    setForm((current) => {
+      const margin = current.marginPercentage.trim() ? Number(current.marginPercentage) : null
+      const nextSelling = margin !== null && Number.isFinite(margin) && margin < 100
+        ? calculateSellingPriceFromGrossMargin(Number(value) || 0, margin)
+        : current.sellingPrice
+      const calculatedMargin = margin === null
+        ? calculateGrossMarginPercentage(Number(value), Number(current.sellingPrice))
+        : margin
+      return {
+        ...current,
+        purchasePrice: value,
+        sellingPrice: nextSelling === "" ? "" : nextSelling.toFixed(2),
+        marginPercentage: calculatedMargin === null ? current.marginPercentage : String(calculatedMargin),
+      }
+    })
+  }
+
+  function updateSellingPrice(value: string) {
+    setForm((current) => ({
+      ...current,
+      sellingPrice: value,
+      marginPercentage: calculateGrossMarginPercentage(Number(current.purchasePrice), Number(value))?.toFixed(2) ?? "",
+    }))
+  }
+
+  function updateMarginPercentage(value: string) {
+    setForm((current) => {
+      const margin = Number(value)
+      if (!value.trim() || !Number.isFinite(margin) || margin >= 100) {
+        return { ...current, marginPercentage: value }
+      }
+      return {
+        ...current,
+        marginPercentage: value,
+        sellingPrice: calculateSellingPriceFromGrossMargin(Number(current.purchasePrice) || 0, margin).toFixed(2),
+      }
+    })
+  }
+
   function openAdd() {
     const companyProfile = getLegacyCompanyBarcodeProfile()
     setForm({
       ...emptyForm,
       vatRate: companyProfile.vatRate || "5",
       vatApplicable: true,
+      packagings: [],
     })
     setEditingProduct(null)
     setShowForm(true)
@@ -224,6 +301,7 @@ export default function Products() {
       sellingPrice: String(
         product.sellingPrice,
       ),
+      marginPercentage: calculateGrossMarginPercentage(product.purchasePrice, product.sellingPrice)?.toFixed(2) ?? "",
       minimumStock: String(
         product.minimumStock,
       ),
@@ -238,6 +316,7 @@ export default function Products() {
       description: product.description || "",
       status: product.status || "ACTIVE",
       returnEligible: product.returnEligible === true ? "true" : "false",
+      packagings: (product.packagings ?? []).map((packaging) => ({ ...packaging })),
     })
 
     setEditingProduct(product)
@@ -269,6 +348,21 @@ export default function Products() {
       }
     }
 
+    const packagingNames = form.packagings.map((item) => item.name.trim().toLowerCase()).filter(Boolean)
+    const packagingUnits = form.packagings.map((item) => item.unit.trim().toLowerCase()).filter(Boolean)
+    if (packagingNames.length !== form.packagings.length || packagingUnits.length !== form.packagings.length) {
+      window.alert("Enter both a package name and unit for every sub-unit.")
+      return
+    }
+    if (new Set(packagingNames).size !== packagingNames.length) {
+      window.alert("Package names must be unique for this product.")
+      return
+    }
+    if (form.packagings.some((item) => !Number.isFinite(Number(item.conversionFactor)) || Number(item.conversionFactor) <= 0)) {
+      window.alert("Every package conversion must be greater than zero.")
+      return
+    }
+
     const productData: Omit<Product, "id"> =
       {
         name: form.name.trim(),
@@ -298,6 +392,16 @@ export default function Products() {
           .filter(Boolean),
         description: form.description.trim() || undefined,
         returnEligible: form.productType !== "SERVICE" && form.returnEligible === "true",
+        packagings: form.packagings.map((item) => ({
+          ...item,
+          id: item.id || `PACK-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: item.name.trim(),
+          unit: item.unit.trim(),
+          conversionFactor: Number(item.conversionFactor),
+          barcode: item.barcode?.trim() || undefined,
+          purchasePrice: item.purchasePrice === undefined || item.purchasePrice === null ? undefined : Number(item.purchasePrice),
+          sellingPrice: item.sellingPrice === undefined || item.sellingPrice === null ? undefined : Number(item.sellingPrice),
+        })),
         status: (form.status || "ACTIVE") as Product["status"],
       }
 
@@ -981,28 +1085,28 @@ export default function Products() {
               </div>
 
               <Field
-                label="Purchase Price"
+                label="Purchase Price (base unit)"
                 value={form.purchasePrice}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    purchasePrice: value,
-                  })
-                }
+                onChange={updatePurchasePrice}
                 type="number"
               />
 
               <Field
-                label="Selling Price"
+                label="Selling Price (base unit)"
                 value={form.sellingPrice}
-                onChange={(value) =>
-                  setForm({
-                    ...form,
-                    sellingPrice: value,
-                  })
-                }
+                onChange={updateSellingPrice}
                 type="number"
               />
+
+              <div className="space-y-1">
+                <Field
+                  label="Gross Margin (%)"
+                  value={form.marginPercentage}
+                  onChange={updateMarginPercentage}
+                  type="number"
+                />
+                <p className="text-xs text-slate-500">Based on base-unit cost: (selling price − purchase price) ÷ selling price. Entering a margin calculates the selling price.</p>
+              </div>
 
               <Field
                 label="Minimum Stock"
@@ -1063,7 +1167,46 @@ export default function Products() {
                 </div>
               </div>
 
+              <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700 sm:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Sub-units & packaging</h4>
+                    <p className="mt-1 text-xs text-slate-500">Example: base unit Tablet; 1 Strip = 10 Tablets. Purchasing and POS will convert quantities automatically.</p>
+                  </div>
+                  <button type="button" onClick={addPackaging} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Add sub-unit</button>
+                </div>
 
+                {form.packagings.length === 0 && <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-950">No sub-units configured. The base unit will be used for purchasing and sales.</p>}
+
+                {form.packagings.map((packaging, index) => (
+                  <div key={packaging.id} className="grid gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="space-y-1 text-xs font-medium">Package name
+                      <input value={packaging.name} onChange={(event) => updatePackaging(index, { name: event.target.value })} placeholder="Strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">Purchase / sales unit
+                      <input value={packaging.unit} onChange={(event) => updatePackaging(index, { unit: event.target.value })} placeholder="strip" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">Units per package
+                      <input type="number" min="0.000001" step="any" value={packaging.conversionFactor} onChange={(event) => updatePackaging(index, { conversionFactor: Number(event.target.value) })} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">Package barcode (optional)
+                      <input value={packaging.barcode ?? ""} onChange={(event) => updatePackaging(index, { barcode: event.target.value })} placeholder="Scan or enter barcode" className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">Purchase price per package (optional)
+                      <input type="number" min="0" step="any" value={packaging.purchasePrice ?? ""} onChange={(event) => updatePackaging(index, { purchasePrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base cost × ${packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium">Selling price per package (optional)
+                      <input type="number" min="0" step="any" value={packaging.sellingPrice ?? ""} onChange={(event) => updatePackaging(index, { sellingPrice: event.target.value === "" ? undefined : Number(event.target.value) })} placeholder={`Base price × ${packaging.conversionFactor || 1}`} className="h-10 w-full rounded-lg border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.purchaseEnabled} onChange={(event) => updatePackaging(index, { purchaseEnabled: event.target.checked })} /> Allow purchasing</label>
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={packaging.salesEnabled} onChange={(event) => updatePackaging(index, { salesEnabled: event.target.checked })} /> Allow sales / POS</label>
+                    <div className="flex items-center justify-between gap-2 text-xs text-slate-500 sm:col-span-2 lg:col-span-4">
+                      <span>1 {packaging.unit || packaging.name || "package"} = {packaging.conversionFactor || 0} {form.unit || "base units"}</span>
+                      <button type="button" onClick={() => removePackaging(index)} className="font-semibold text-red-600 hover:text-red-700">Remove sub-unit</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
                   {/* Universal ERP extended product fields */}
                   <label className="space-y-2">
