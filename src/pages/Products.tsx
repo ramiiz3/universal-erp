@@ -699,7 +699,10 @@ export default function Products() {
           <select
             aria-label="Filter products by status"
             value={productStatusFilter}
-            onChange={(event) => setProductStatusFilter(event.target.value as typeof productStatusFilter)}
+            onChange={(event) => {
+              setProductStatusFilter(event.target.value as typeof productStatusFilter)
+              setSelectedProductIds([])
+            }}
             className="h-11 rounded-xl border bg-white px-4 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="ACTIVE">Active products</option>
