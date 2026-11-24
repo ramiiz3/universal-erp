@@ -23,6 +23,8 @@ export const ERP_UNITS_EVENT = "universal-erp-units-updated"
 
 const DEFAULT_UNITS: ERPUnitDefinition[] = [
   ["Piece", "pc", "Count", 0],
+  ["Tablet", "tab", "Count", 0],
+  ["Capsule", "cap", "Count", 0],
   ["Unit", "unit", "Count", 0],
   ["Pack", "pack", "Count", 0],
   ["Box", "box", "Count", 0],
