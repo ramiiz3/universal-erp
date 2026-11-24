@@ -1,5 +1,6 @@
 import { toStockMovementDelta, validateStockWriteOff } from "../lib/stockAdjustment"
 import {
+  Archive,
   AlertTriangle,
   Barcode,
   Download,
@@ -79,6 +80,7 @@ const EMPTY_ROW: unknown[] = []
 
 export default function Inventory() {
   const [search, setSearch] = useState("")
+  const [productStatusFilter, setProductStatusFilter] = useState<"ACTIVE" | "INACTIVE" | "DISCONTINUED" | "ALL">("ACTIVE")
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [showReceive, setShowReceive] =
     useState(false)
@@ -132,8 +134,8 @@ export default function Inventory() {
     addProductAndReceive,
     addProduct,
     updateProduct,
-    deleteProduct,
     deleteProducts,
+    archiveProducts,
     adjustStock,
     getProductStock,
     importInventory,
@@ -186,9 +188,12 @@ export default function Inventory() {
     const filteredProducts = useMemo(() => {
       const q = search.trim().toLowerCase()
 
-      if (!q) return products
-
       return products.filter((product) => {
+        const status = product.status || "ACTIVE"
+        const matchesStatus = productStatusFilter === "ALL" || status === productStatusFilter
+        if (!matchesStatus) return false
+        if (!q) return true
+
         const matchesProduct =
           product.name.toLowerCase().includes(q) ||
           product.sku.toLowerCase().includes(q) ||
@@ -209,7 +214,7 @@ export default function Inventory() {
 
         return matchesProduct || matchesLot
       })
-    }, [products, inventoryLots, search])
+    }, [products, inventoryLots, search, productStatusFilter])
 
     const [showAdd, setShowAdd] = useState(false)
     const [showEdit, setShowEdit] = useState(false)
@@ -535,9 +540,15 @@ export default function Inventory() {
 
     function handleDeleteInventoryProduct(product: Product) {
       const stock = getProductStock(product.id)
-      if (!window.confirm(`Delete ${product.name} and permanently remove its ${stock} on-hand units, batches and stock movement history? A backup is saved first. Products linked to sales, purchases, returns, orders or transfers are protected.`)) return
+      if (!window.confirm(`Permanently delete ${product.name} and its ${stock} on-hand units, batches and stock movement history? A backup is saved first. Products referenced by sales or purchasing records cannot be erased.`)) return
       try {
-        deleteProduct(product.id, { removeInventory: true })
+        const result = deleteProducts([product.id], { removeInventory: true })
+        if (result.blocked.length) {
+          const blocked = result.blocked[0]
+          if (window.confirm(`${blocked.name} is linked to transaction history and cannot be permanently erased. Archive it instead? Existing invoices and purchases will remain intact.`)) {
+            archiveProducts([product.id])
+          }
+        }
         setSelectedProductIds((current) => current.filter((id) => id !== product.id))
         if (editingProduct?.id === product.id) {
           setShowEdit(false)
@@ -558,20 +569,36 @@ export default function Inventory() {
       if (!window.confirm(confirmation)) return
       try {
         const result = deleteProducts(uniqueIds, { removeInventory })
+        const archived = result.blocked.length
+          ? archiveProducts(result.blocked.map((item) => item.id))
+          : 0
         setSelectedProductIds([])
         const blocked = result.blocked.length
-          ? "\n\nProducts retained because they have commercial history:\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
+          ? "\n\nProducts with transaction history were archived (not erased):\n" + result.blocked.map((item) => `• ${item.name}: ${item.reason}`).join("\n")
           : ""
         const inventorySummary = removeInventory
           ? `\nInventory lots removed: ${result.removedLots}. Stock movements removed: ${result.removedMovements}.`
           : ""
-        window.alert(`${result.deletedIds.length} product(s) deleted.${inventorySummary}${blocked}`)
+        window.alert(`${result.deletedIds.length} product(s) permanently deleted. ${archived} product(s) archived to preserve transaction history.${inventorySummary}${blocked}`)
       } catch (error) {
         window.alert(error instanceof Error ? error.message : String(error))
       }
     }
 
-    function openAdjust(productId: string) {
+    function handleArchiveInventoryProducts(ids: string[]) {
+    const uniqueIds = [...new Set(ids)].filter((id) => products.some((product) => product.id === id))
+    if (!uniqueIds.length) return
+    if (!window.confirm(`Archive ${uniqueIds.length} selected product(s)? They will be hidden from active product selection, while old invoices, purchases and stock records remain intact.`)) return
+    try {
+      const archived = archiveProducts(uniqueIds)
+      setSelectedProductIds([])
+      window.alert(`${archived} product(s) archived. Historical transactions and stock records were preserved.`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function openAdjust(productId: string) {
       setAdjustProductId(productId)
       setAdjustLotId(null)
       setAdjustWarehouseId(defaultWarehouseId())
@@ -937,6 +964,21 @@ export default function Inventory() {
             className="h-11 w-full rounded-xl border bg-white pl-10 pr-4 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950"
           />
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label htmlFor="inventory-product-status" className="text-xs font-semibold text-slate-500">Product status</label>
+          <select
+            id="inventory-product-status"
+            value={productStatusFilter}
+            onChange={(event) => setProductStatusFilter(event.target.value as typeof productStatusFilter)}
+            className="h-10 rounded-xl border bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="ACTIVE">Active products</option>
+            <option value="INACTIVE">Archived products</option>
+            <option value="DISCONTINUED">Discontinued products</option>
+            <option value="ALL">All statuses</option>
+          </select>
+          <span className="text-xs text-slate-500">Archived products remain available here for review and restoration.</span>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -955,6 +997,7 @@ export default function Inventory() {
             <span className="text-sm font-medium">{selectedProductIds.length} product(s) selected</span>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => setSelectedProductIds([])} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900">Cancel selection</button>
+              <button type="button" onClick={() => handleArchiveInventoryProducts(selectedProductIds)} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800"><Archive size={13}/> Archive Selected</button>
               <button type="button" onClick={() => handleBulkDeleteInventoryProducts(selectedProductIds)} className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700">Delete Selected</button>
               <button type="button" onClick={() => handleBulkDeleteInventoryProducts(selectedProductIds, true)} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete Selected + Stock</button>
             </div>
