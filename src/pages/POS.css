@@ -355,9 +355,9 @@
 .dark .pos-page .pos-invoice-remove:hover { background:#402321; }
 .dark .pos-page .bg-amber-50 { background:#3b3017; }
 .dark .pos-page .bg-emerald-50,
-.dark .pos-page .bg-emerald-50\\/40 { background:#173927; }
-.dark .pos-page .bg-emerald-50\\/50,
-.dark .pos-page .bg-emerald-50\\/70 { background:#173927; }
+.dark .pos-page .bg-emerald-50\/40 { background:#173927; }
+.dark .pos-page .bg-emerald-50\/50,
+.dark .pos-page .bg-emerald-50\/70 { background:#173927; }
 .dark .pos-page .bg-red-50 { background:#402321; }
 .dark .pos-page .text-emerald-800,
 .dark .pos-page .text-emerald-700 { color:#a8e0ba !important; }
