@@ -121,7 +121,7 @@ const STOP_WORDS = new Set([
   "warehouse", "warehouses", "movement", "movements", "return", "returns",
   "reconciliation", "requisitions", "requisition", "orders", "order",
   "count", "counts", "register", "registers", "journal", "journals",
-  "amount", "amounts", "number", "numbers", "with", "from", "us",
+  "amount", "amounts", "number", "numbers", "with", "from", "us", "by", "summarise", "summarize", "breakdown", "grouped",
 ])
 
 function localStartOfDay(date: Date): Date {
