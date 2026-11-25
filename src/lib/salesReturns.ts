@@ -28,6 +28,9 @@ export type SalesReturn = {
   saleId: string
   invoiceNumber: string
   customerName: string
+  customerId?: string | null
+  loyaltyPointsEarnedReversed?: number
+  loyaltyPointsRedeemedRestored?: number
   createdAt: string
   refundMethod: SalesRefundMethod
   reason: string
@@ -72,6 +75,7 @@ type ReturnSale = {
   invoiceNumber: string
   createdAt: string
   customerName: string
+  customerId?: string | null
   paymentMethod: string
   status: string
   subtotal: number
@@ -239,6 +243,7 @@ export function buildSalesReturn(
     saleId: sale.id,
     invoiceNumber: sale.invoiceNumber,
     customerName: sale.customerName,
+    customerId: sale.customerId ?? null,
     createdAt: now.toISOString(),
     refundMethod: input.refundMethod,
     reason,
