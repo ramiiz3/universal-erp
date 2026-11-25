@@ -7,7 +7,6 @@ import {
   RotateCcw,
   ShoppingCart,
   Truck,
-  Users,
 } from "lucide-react"
 import { useERP } from "../context/ERPContext"
 import { isInventoryLotExpired } from "../lib/saleLotAllocation"
@@ -331,8 +330,8 @@ export default function OperationsReports() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="Sales returns" value={money(salesRefunds)} detail={`${salesReturnsInRange.length} records`}/>
               <Stat label="Purchase returns" value={money(supplierCredits)} detail={`${purchaseReturnsInRange.length} records`}/>
-              <Stat label="Sales units returned" value={salesReturnsInRange.reduce((sum, record) => sum + record.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0).toLocaleString()}/>
-              <Stat label="Supplier units returned" value={purchaseReturnsInRange.reduce((sum, record) => sum + record.totalBaseQuantity, 0).toLocaleString()}/>
+              <Stat label="Sales return lines" value={salesReturnsInRange.reduce((sum, record) => sum + record.items.length, 0).toLocaleString()}/>
+              <Stat label="Supplier return lines" value={purchaseReturnsInRange.reduce((sum, record) => sum + record.items.length, 0).toLocaleString()}/>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
               <table className="w-full min-w-[1100px] text-sm">
