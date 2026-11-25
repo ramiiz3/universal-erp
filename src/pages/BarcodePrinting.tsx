@@ -83,6 +83,8 @@ function PrintLabel({
   showName,
   showSku,
   showPrice,
+  pharmacyName,
+  contactNumber,
 }: {
   item: LabelQueueItem
   width: number
@@ -90,6 +92,8 @@ function PrintLabel({
   showName: boolean
   showSku: boolean
   showPrice: boolean
+  pharmacyName: string
+  contactNumber: string
 }) {
   const price = Number(item.product.sellingPrice || 0)
   return (
@@ -97,6 +101,10 @@ function PrintLabel({
       className="barcode-roll-label"
       style={{ width: width + "mm", height: height + "mm" }}
     >
+      <div className="barcode-label-pharmacy">
+        <strong className="barcode-label-pharmacy-name">{pharmacyName}</strong>
+        <span className="barcode-label-contact">{contactNumber}</span>
+      </div>
       {showName && <strong className="barcode-label-name">{item.product.name}</strong>}
       <BarcodeGraphic value={item.barcode} height={Math.max(25, Math.min(48, height * 1.12))} />
       <span className="barcode-label-value">{item.barcode}</span>
@@ -390,6 +398,10 @@ export default function BarcodePrinting() {
                 <div className="barcode-screen-preview">
                   <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-slate-500"><span>Label preview</span><span>{labelWidth} × {labelHeight} mm</span></div>
                   <div className="barcode-screen-label" style={{ width: Math.min(100, labelWidth * 2.2) + "mm", minHeight: Math.max(70, labelHeight * 2) + "px" }}>
+                    <div className="barcode-preview-pharmacy">
+                      <strong>{settings.businessName || "Pharmacy"}</strong>
+                      <span>{settings.phone || "Contact number not set"}</span>
+                    </div>
                     {showName && <strong>{queue[0].product.name}</strong>}
                     <BarcodeGraphic value={queue[0].barcode} />
                     <span>{queue[0].barcode}</span>
@@ -425,6 +437,8 @@ export default function BarcodePrinting() {
             showName={showName}
             showSku={showSku}
             showPrice={showPrice}
+            pharmacyName={settings.businessName || "Pharmacy"}
+            contactNumber={settings.phone || "Contact number not set"}
           />
         ))}
       </div>
