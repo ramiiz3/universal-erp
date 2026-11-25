@@ -245,8 +245,6 @@ export type CardPaymentOption =
   | "Diners Club"
   | "Discover"
   | "Jaywan"
-  | "Mercury"
-  | "nSwitch"
   | "Apple Pay"
   | "Google Pay"
   | "Samsung Pay"
