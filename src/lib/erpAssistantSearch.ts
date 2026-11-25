@@ -207,7 +207,7 @@ function hasAny(query: string, pattern: RegExp): boolean {
 
 function inferGroups(query: string): Exclude<ERPAssistantCategory, "all">[] | null {
   const q = normalized(query)
-  const lowStock = /\blow stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(q)
+  const lowStock = /\blow stock\b|\blow in stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(q)
   const expiry = /\bexpir|\bexpired\b|\bexpiring\b|\bbatch\b/.test(q)
   const sale = hasAny(q, /\bsales?\b|\binvoices?\b|\bsold\b|\bbought\b|\bpurchased\b|\bbilling\b|\brevenue\b/)
   const purchase = hasAny(q, /\bpurchases?\b|\bpurchasing\b|\bgrn\b|\bgoods received\b|\bsupplier invoice\b/)
@@ -366,7 +366,7 @@ export function searchERPAssistant(
 
   const normalizedQuery = normalized(q)
   const groups = category === "all" ? inferGroups(q) : [category]
-  const lowStockQuery = /\blow stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(normalizedQuery)
+  const lowStockQuery = /\blow stock\b|\blow in stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(normalizedQuery)
   const expiryQuery = /\bexpir|\bexpired\b|\bexpiring\b|\bbatch\b/.test(normalizedQuery)
   const range = parseDateRange(q, now)
   const terms = remainingTerms(q).filter((term) => !(range && expiryQuery && /^\d{1,3}$/.test(term)))
