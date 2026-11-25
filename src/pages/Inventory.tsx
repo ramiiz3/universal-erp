@@ -5,6 +5,9 @@ import {
   Barcode,
   Download,
   FileSpreadsheet,
+  Minus,
+  Maximize2,
+  Barcode as BarcodeIcon,
   Package,
   Plus,
   Search,
@@ -13,13 +16,16 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import * as XLSX from "xlsx"
 import {
   useERP,
   type InventoryLot,
   type Product,
 } from "../context/ERPContext"
+import BarcodePreview from "../components/BarcodePreview"
+import { generateCompanyProductBarcode } from "../lib/productBarcode"
+import { getERPSettings } from "../lib/erpSettings"
 import {
   buildInventoryExportRows,
   detectInventoryHeaderRow,
@@ -219,6 +225,8 @@ export default function Inventory() {
     const [showAdd, setShowAdd] = useState(false)
     const [showEdit, setShowEdit] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+    const [minimizedProductForm, setMinimizedProductForm] = useState<"add" | "edit" | null>(null)
+    const [productBarcodeError, setProductBarcodeError] = useState("")
     const [showAdjust, setShowAdjust] = useState(false)
     const [adjustProductId, setAdjustProductId] = useState<string | null>(null)
     const [adjustLotId, setAdjustLotId] = useState<string | null>(null)
@@ -472,7 +480,55 @@ export default function Inventory() {
     }
   }
 
+    function closeProductForm() {
+      setShowAdd(false)
+      setShowEdit(false)
+      setMinimizedProductForm(null)
+    }
+
+    function minimizeProductForm(mode: "add" | "edit") {
+      setShowAdd(false)
+      setShowEdit(false)
+      setMinimizedProductForm(mode)
+    }
+
+    function restoreProductForm() {
+      if (minimizedProductForm === "add") setShowAdd(true)
+      if (minimizedProductForm === "edit") setShowEdit(true)
+      setMinimizedProductForm(null)
+    }
+
+    function generateInventoryProductBarcode() {
+      setProductBarcodeError("")
+      try {
+        const settings = getERPSettings()
+        const barcode = generateCompanyProductBarcode({
+          companyName: settings.businessName.trim() || "Zaki Pharmacy LLC",
+          mobileNumber: settings.phone,
+        })
+        setProductForm((current) => ({ ...current, barcode }))
+      } catch (error) {
+        setProductBarcodeError(error instanceof Error ? error.message : String(error))
+      }
+    }
+
+    useEffect(() => {
+      if (!showAdd && !showEdit) return
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setShowAdd(false)
+          setShowEdit(false)
+          setMinimizedProductForm(null)
+        }
+      }
+      window.addEventListener("keydown", handleKeyDown)
+      return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [showAdd, showEdit])
+
     function openAddProduct() {
+        setMinimizedProductForm(null)
+        setShowEdit(false)
+        setProductBarcodeError("")
         setEditingProduct(null)
         setProductForm({
           name: "",
@@ -496,6 +552,9 @@ export default function Inventory() {
     }
 
     function openEditProduct(product: Product) {
+        setMinimizedProductForm(null)
+        setShowAdd(false)
+        setProductBarcodeError("")
         setEditingProduct(product)
         setProductForm({
           name: product.name,
@@ -523,6 +582,7 @@ export default function Inventory() {
         if (editingProduct) {
           updateProduct(editingProduct.id, form)
           setShowEdit(false)
+          setMinimizedProductForm(null)
           window.alert("Product changes saved successfully.")
           return
         }
@@ -532,6 +592,7 @@ export default function Inventory() {
           addProduct(form)
         }
         setShowAdd(false)
+        setMinimizedProductForm(null)
         window.alert("Product saved successfully.")
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "The product could not be saved.")
