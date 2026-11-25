@@ -83,6 +83,8 @@ function PrintLabel({
   showName,
   showSku,
   showPrice,
+  pharmacyName,
+  contactNumber,
 }: {
   item: LabelQueueItem
   width: number
@@ -90,6 +92,8 @@ function PrintLabel({
   showName: boolean
   showSku: boolean
   showPrice: boolean
+  pharmacyName: string
+  contactNumber: string
 }) {
   const price = Number(item.product.sellingPrice || 0)
   return (
@@ -97,6 +101,10 @@ function PrintLabel({
       className="barcode-roll-label"
       style={{ width: width + "mm", height: height + "mm" }}
     >
+      <div className="barcode-label-pharmacy">
+        <strong className="barcode-label-pharmacy-name">{pharmacyName}</strong>
+        <span className="barcode-label-contact">{contactNumber}</span>
+      </div>
       {showName && <strong className="barcode-label-name">{item.product.name}</strong>}
       <BarcodeGraphic value={item.barcode} height={Math.max(25, Math.min(48, height * 1.12))} />
       <span className="barcode-label-value">{item.barcode}</span>
@@ -168,6 +176,10 @@ export default function BarcodePrinting() {
   }
 
   async function prepareLabels() {
+    if (!settings.businessName.trim() || !settings.phone.trim()) {
+      setError("Enter the pharmacy name and contact number in ERP Settings before printing labels.")
+      return
+    }
     if (!selectedIds.length) {
       setError("Select at least one existing product.")
       return
@@ -357,6 +369,10 @@ export default function BarcodePrinting() {
             )}
             <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Label content</p>
+            <div className="barcode-pharmacy-details">
+              <div><span>Pharmacy name · always printed</span><strong>{settings.businessName.trim() || "Not set in ERP Settings"}</strong></div>
+              <div><span>Contact number · always printed</span><strong>{settings.phone.trim() || "Not set in ERP Settings"}</strong></div>
+            </div>
             <div className="space-y-3">
               <label className="barcode-toggle"><input type="checkbox" checked={showName} onChange={(event) => setShowName(event.target.checked)} /> Product name</label>
               <label className="barcode-toggle"><input type="checkbox" checked={showSku} onChange={(event) => setShowSku(event.target.checked)} /> SKU / product code</label>
@@ -390,6 +406,10 @@ export default function BarcodePrinting() {
                 <div className="barcode-screen-preview">
                   <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-slate-500"><span>Label preview</span><span>{labelWidth} × {labelHeight} mm</span></div>
                   <div className="barcode-screen-label" style={{ width: Math.min(100, labelWidth * 2.2) + "mm", minHeight: Math.max(70, labelHeight * 2) + "px" }}>
+                    <div className="barcode-preview-pharmacy">
+                      <strong>{settings.businessName.trim()}</strong>
+                      <span>{settings.phone.trim()}</span>
+                    </div>
                     {showName && <strong>{queue[0].product.name}</strong>}
                     <BarcodeGraphic value={queue[0].barcode} />
                     <span>{queue[0].barcode}</span>
@@ -425,6 +445,8 @@ export default function BarcodePrinting() {
             showName={showName}
             showSku={showSku}
             showPrice={showPrice}
+            pharmacyName={settings.businessName.trim()}
+            contactNumber={settings.phone.trim()}
           />
         ))}
       </div>
