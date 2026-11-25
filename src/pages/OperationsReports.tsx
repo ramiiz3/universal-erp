@@ -110,6 +110,10 @@ export default function OperationsReports() {
   const salesRefunds = salesReturnsInRange.reduce((sum, record) => sum + record.refundTotal, 0)
   const purchaseValue = purchasesInRange.reduce((sum, purchase) => sum + purchase.total, 0)
   const supplierCredits = purchaseReturnsInRange.reduce((sum, record) => sum + record.totalCreditAmount, 0)
+  const productById = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products],
+  )
 
   const stockRows = useMemo(() => products.map((product) => {
     const lots = inventoryLots.filter((lot) => lot.productId === product.id)
