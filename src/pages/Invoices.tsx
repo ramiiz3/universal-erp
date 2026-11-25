@@ -587,8 +587,8 @@ export default function Invoices() {
   }, [sales, search])
 
   function getCustomerEmail(sale: Sale) {
-    if (!sale.customerId) return ""
-    return customers.find((customer) => customer.id === sale.customerId)?.email || ""
+    return sale.customerEmail ||
+      (sale.customerId ? customers.find((customer) => customer.id === sale.customerId)?.email || "" : "")
   }
 
   function getCustomerWhatsApp(sale: Sale) {
@@ -877,6 +877,8 @@ export default function Invoices() {
                   Customer / العميل
                 </p>
                 <p className="mt-2 text-base font-bold text-[#17221D]">{sale.customerName}</p>
+                {sale.customerPhone && <p className="mt-1 text-xs text-slate-600">Mobile: {sale.customerPhone}</p>}
+                {sale.customerEmail && <p className="mt-1 break-all text-xs text-slate-600">Email: {sale.customerEmail}</p>}
                 <p className="mt-1 text-xs text-slate-500">
                   {sale.customerId ? "Registered Customer / عميل مسجل" : "Walk-in Customer / عميل عابر"}
                 </p>
@@ -957,6 +959,13 @@ export default function Invoices() {
                   {sale.discount > 0 && (
                     <p className="mt-1 text-sm text-slate-600">Discount / الخصم: AED {sale.discount.toFixed(2)}</p>
                   )}
+                  {(sale.loyaltyPointsRedeemed ?? 0) > 0 && (
+                    <p className="mt-1 text-sm text-slate-600">Loyalty points redeemed: {sale.loyaltyPointsRedeemed} · AED {(sale.loyaltyDiscount ?? 0).toFixed(2)}</p>
+                  )}
+                  {(sale.loyaltyPointsEarned ?? 0) > 0 && (
+                    <p className="mt-1 text-sm text-emerald-700">Loyalty points earned: {sale.loyaltyPointsEarned}</p>
+                  )}
+                  {sale.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700"><strong>Comment:</strong> {sale.notes}</p>}
                   <p className="mt-1 text-sm text-slate-600">
                     Cash / النقد: AED {sale.paymentMethod === "Cash" ? (sale.cashTendered ?? sale.total).toFixed(2) : "0.00"}
                   </p>
@@ -1065,6 +1074,8 @@ export default function Invoices() {
                 <span className="thermal-meta-value">{sale.invoiceNumber}</span>
                 <span className="thermal-meta-label">Customer / الزبون</span>
                 <span className="thermal-meta-value">{sale.customerName}</span>
+                {sale.customerPhone && <><span className="thermal-meta-label">Mobile</span><span className="thermal-meta-value">{sale.customerPhone}</span></>}
+                {sale.customerEmail && <><span className="thermal-meta-label">Email</span><span className="thermal-meta-value">{sale.customerEmail}</span></>}
               </div>
 
               <table className="thermal-table">
@@ -1157,6 +1168,9 @@ export default function Invoices() {
                 </div>
               </div>
 
+              {sale.notes && <div className="thermal-note">Comment: {sale.notes}</div>}
+              {(sale.loyaltyPointsEarned ?? 0) > 0 && <div className="thermal-note">Loyalty points earned: {sale.loyaltyPointsEarned}</div>}
+              {(sale.loyaltyPointsRedeemed ?? 0) > 0 && <div className="thermal-note">Loyalty points redeemed: {sale.loyaltyPointsRedeemed}</div>}
               <div className="thermal-note">{REFUND_NOTE}</div>
               <div className="thermal-footer">THANK YOU</div>
               <div className="thermal-barcode">
@@ -1203,6 +1217,8 @@ export default function Invoices() {
               <div className="thermal-meta-row compact-meta">
                 <span>Customer / العميل: {sale.customerName}</span>
               </div>
+              {sale.customerPhone && <div className="thermal-meta-row compact-meta"><span>Mobile: {sale.customerPhone}</span></div>}
+              {sale.customerEmail && <div className="thermal-meta-row compact-meta"><span>Email: {sale.customerEmail}</span></div>}
               <div className="thermal-meta-row compact-meta">
                 <span>Payment / الدفع: {sale.paymentMethod}</span>
               </div>
@@ -1249,6 +1265,9 @@ export default function Invoices() {
                 <span>Change / الباقي</span>
                 <span>AED {sale.paymentMethod === "Cash" ? (sale.changeDue ?? 0).toFixed(2) : "0.00"}</span>
               </div>
+              {sale.notes && <div className="thermal-note">Comment: {sale.notes}</div>}
+              {(sale.loyaltyPointsEarned ?? 0) > 0 && <div className="thermal-note">Points earned: {sale.loyaltyPointsEarned}</div>}
+              {(sale.loyaltyPointsRedeemed ?? 0) > 0 && <div className="thermal-note">Points redeemed: {sale.loyaltyPointsRedeemed}</div>}
               <div className="thermal-note">{REFUND_NOTE}</div>
               <div className="thermal-footer">Thank you / شكراً لك</div>
               <div className="thermal-barcode">
