@@ -166,11 +166,15 @@ export default function Suppliers() {
     const linkedLotIds = new Set(
       supplierPurchases.flatMap((purchase) => purchase.items.map((item) => item.lotId).filter((id): id is string => Boolean(id))),
     )
+    const linkedGrnNumbers = new Set(
+      supplierPurchases.flatMap((purchase) => [purchase.grnNumber, purchase.purchaseNumber].filter((value): value is string => Boolean(value))),
+    )
     const supplierLots = inventoryLots
       .filter((lot) =>
         lot.supplierId === historySupplier.id ||
         lot.supplierName?.trim().toLowerCase() === supplierKey ||
-        linkedLotIds.has(lot.id),
+        linkedLotIds.has(lot.id) ||
+        Boolean(lot.grnNumber && linkedGrnNumbers.has(lot.grnNumber)),
       )
       .sort((a, b) => (a.expiry || "9999").localeCompare(b.expiry || "9999"))
     return {
@@ -179,7 +183,7 @@ export default function Suppliers() {
       lots: supplierLots,
       totalPurchased: supplierPurchases.reduce((sum, purchase) => sum + purchase.total, 0),
       totalCredits: supplierReturns.reduce((sum, record) => sum + record.totalCreditAmount, 0),
-      totalPurchaseReturnUnits: supplierReturns.reduce((sum, record) => sum + record.totalBaseQuantity, 0),
+      totalPurchaseReturnLines: supplierReturns.reduce((sum, record) => sum + record.items.length, 0),
     }
   }, [historySupplier, purchases, purchaseReturns, inventoryLots])
 
@@ -616,7 +620,7 @@ export default function Suppliers() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Purchase documents</p><p className="mt-1 text-xl font-semibold">{supplierHistory.purchases.length}</p></div>
                 <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Total purchased</p><p className="mt-1 text-xl font-semibold">{formatCurrency(supplierHistory.totalPurchased)}</p></div>
-                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Purchase returns</p><p className="mt-1 text-xl font-semibold">{supplierHistory.returns.length} · {supplierHistory.totalPurchaseReturnUnits} units</p></div>
+                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Purchase returns</p><p className="mt-1 text-xl font-semibold">{supplierHistory.returns.length} records</p><p className="mt-1 text-[10px] text-slate-500">{supplierHistory.totalPurchaseReturnLines} returned item lines</p></div>
                 <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Supplier credit recorded</p><p className="mt-1 text-xl font-semibold">{formatCurrency(supplierHistory.totalCredits)}</p></div>
               </div>
 
