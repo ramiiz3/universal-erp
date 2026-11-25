@@ -3364,6 +3364,7 @@ export function ERPProvider({
     const newCustomer: Customer = {
       id: `CUS-${Date.now()}`,
       ...customer,
+      loyaltyPoints: Math.max(0, Math.floor(customer.loyaltyPoints ?? 0)),
     }
 
     persistStore({
@@ -3385,8 +3386,11 @@ export function ERPProvider({
         (item) =>
           item.id === id
             ? {
-                id,
+                ...item,
                 ...customer,
+                id,
+                // Profile edits must never overwrite the transactional loyalty balance.
+                loyaltyPoints: item.loyaltyPoints ?? 0,
               }
             : item,
       ),
