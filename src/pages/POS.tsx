@@ -673,6 +673,8 @@ export default function POS() {
           </div>
         )}
 
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(290px,0.85fr)_minmax(0,1.65fr)]">
+        <div className="space-y-4 xl:sticky xl:top-4">
         <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_minmax(320px,2fr)_auto]">
             <div>
@@ -732,7 +734,7 @@ export default function POS() {
               ).length} product(s)</span>
             </div>
             {filteredProducts.length > 0 ? (
-              <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+              <div className="grid max-h-[calc(100vh-340px)] grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
                 {(search.trim()
                   ? filteredProducts.slice(0, 12)
                   : filteredProducts.filter((product) =>
@@ -750,14 +752,16 @@ export default function POS() {
                       onClick={() => {
                         if (addToCart(product, undefined, 1, true)) setSearch("")
                       }}
-                      className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex min-h-[116px] flex-col justify-between rounded-lg border border-slate-200 bg-white p-2.5 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/60 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
                         <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
                       </span>
-                      <span className="text-right text-xs text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
-                      <span className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white">Add line</span>
+                      <span className="mt-2 flex items-center justify-between gap-1">
+                        <span className="truncate text-[11px] font-medium text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
+                        <span className="rounded-md bg-emerald-700 px-2 py-1 text-[10px] font-semibold text-white">Add</span>
+                      </span>
                     </button>
                   )
                 })}
@@ -776,7 +780,9 @@ export default function POS() {
             )}
           </div>
         </section>
+        </div>
 
+        <div className="min-w-0 space-y-4 xl:sticky xl:top-4">
         <section className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div>
@@ -790,7 +796,7 @@ export default function POS() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] border-collapse text-sm">
+            <table className="w-full min-w-[860px] border-collapse text-xs 2xl:text-sm">
               <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="border-b border-slate-200 px-3 py-3">Code</th>
@@ -1039,14 +1045,17 @@ export default function POS() {
           )}
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+        <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3">
           <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Customer
               <select
                 value={customerId}
-                onChange={(event) => setCustomerId(event.target.value)}
-                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+                onChange={(event) => {
+                  setCustomerId(event.target.value)
+                  setLoyaltyPointsToRedeem("0")
+                }}
+                className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
               >
                 <option value="">Walk-in Customer</option>
                 {customers.filter((customer) => customer.status === "Active").map((customer) => (
@@ -1054,19 +1063,80 @@ export default function POS() {
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Discount (AED)
-              <input
-                type="number"
-                min="0"
-                max={subtotal}
-                step="0.01"
-                value={discount}
-                onChange={(event) => setDiscount(event.target.value)}
-                placeholder="0.00"
-                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
-              />
-            </label>
+            {selectedCustomer ? (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 text-xs md:col-span-2">
+                <p className="font-semibold text-slate-800">{selectedCustomer.name}</p>
+                <p className="mt-1 text-slate-600">{selectedCustomer.phone || "No mobile"} · {selectedCustomer.email || "No email"}</p>
+                <p className="mt-1 text-[10px] text-emerald-700">These registered customer details will be copied onto the invoice.</p>
+              </div>
+            ) : (
+              <div className="grid gap-2 rounded-lg border border-slate-200 p-3 md:col-span-2 sm:grid-cols-3">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Customer name
+                  <input value={walkInName} onChange={(event) => setWalkInName(event.target.value)} placeholder="Optional walk-in name" className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-xs font-normal normal-case text-slate-800"/>
+                </label>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Mobile
+                  <input value={walkInPhone} onChange={(event) => setWalkInPhone(event.target.value)} placeholder="Mobile number" className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-xs font-normal normal-case text-slate-800"/>
+                </label>
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email
+                  <input type="email" value={walkInEmail} onChange={(event) => setWalkInEmail(event.target.value)} placeholder="Email address" className="mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-xs font-normal normal-case text-slate-800"/>
+                </label>
+              </div>
+            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Discount (AED)
+                <input
+                  type="number"
+                  min="0"
+                  max={Math.max(0, subtotal - loyaltyDiscountEstimate)}
+                  step="0.01"
+                  value={discount}
+                  onChange={(event) => setDiscount(event.target.value)}
+                  placeholder="0.00"
+                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Invoice comment
+                <input
+                  value={invoiceNotes}
+                  onChange={(event) => setInvoiceNotes(event.target.value)}
+                  maxLength={500}
+                  placeholder="Optional note for this invoice"
+                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+                />
+              </label>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Loyalty programme</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    {loyaltySettings.enabled
+                      ? selectedCustomer
+                        ? `Balance: ${selectedCustomer.loyaltyPoints ?? 0} points · Estimated earn: ${estimatedLoyaltyPoints} points`
+                        : "Select a registered customer to earn or redeem points."
+                      : "Not enabled. The owner can configure this in Settings."}
+                  </p>
+                </div>
+                <label className="text-xs font-semibold text-slate-600">
+                  Redeem points
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    max={selectedCustomer?.loyaltyPoints ?? 0}
+                    disabled={!loyaltySettings.enabled || !selectedCustomer || paymentMethod === "Credit"}
+                    value={loyaltyPointsToRedeem}
+                    onChange={(event) => setLoyaltyPointsToRedeem(event.target.value)}
+                    className="mt-1 h-9 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm disabled:bg-slate-100"
+                  />
+                </label>
+              </div>
+              {loyaltyDiscountEstimate > 0 && (
+                <p className="mt-2 text-[11px] font-medium text-emerald-700">Loyalty discount: AED {loyaltyDiscountEstimate.toFixed(2)}</p>
+              )}
+            </div>
             <div className="md:col-span-2">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Payment method</p>
               <div className="flex flex-wrap gap-2">
@@ -1101,7 +1171,10 @@ export default function POS() {
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>AED {subtotal.toFixed(2)}</span></div>
-              <div className="flex justify-between text-slate-600"><span>Discount</span><span>- AED {discountAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-slate-600"><span>Discount & loyalty</span><span>- AED {discountAmount.toFixed(2)}</span></div>
+              {effectiveLoyaltyPointsRedeemed > 0 && (
+                <div className="flex justify-between text-xs text-emerald-700"><span>Points redeemed</span><span>{effectiveLoyaltyPointsRedeemed}</span></div>
+              )}
               <div className="flex justify-between text-slate-600"><span>VAT</span><span>AED {vatAmount.toFixed(2)}</span></div>
               <div className="flex justify-between border-t border-slate-200 pt-3 text-lg font-bold text-slate-900"><span>Total</span><span>AED {total.toFixed(2)}</span></div>
             </div>
@@ -1115,6 +1188,8 @@ export default function POS() {
             </button>
           </div>
         </section>
+        </div>
+        </div>
       </div>
 
       {cameraOpen && (
