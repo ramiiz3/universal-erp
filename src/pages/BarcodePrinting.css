@@ -90,7 +90,14 @@
 .barcode-preview-pharmacy{display:grid;width:100%;gap:1px;text-align:center;line-height:1.15}
 .barcode-preview-pharmacy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:800}
 .barcode-preview-pharmacy span{font-size:7px;color:#53665a}
-.barcode-screen-label>strong:not(.barcode-preview-pharmacy strong){width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.barcode-pharmacy-details{
+ display:grid;gap:8px;margin-bottom:14px;padding:10px 11px;
+ border:1px solid #d9e9de;border-radius:10px;background:#f4faf5;
+}
+.barcode-pharmacy-details>div{display:grid;gap:3px}
+.barcode-pharmacy-details span{color:#728578;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.barcode-pharmacy-details strong{color:#183d28;font-size:11px;overflow-wrap:anywhere}
+.barcode-screen-label>strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
 .barcode-screen-label>span{max-width:100%;overflow-wrap:anywhere;font-family:monospace;font-size:8px}
 .barcode-screen-label>div:not(.barcode-preview-pharmacy){display:flex;width:100%;justify-content:space-between;gap:8px;font-size:8px}
 .barcode-graphic{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;background:#fff;overflow:hidden}
@@ -109,6 +116,9 @@
 .dark .barcode-printing-page .barcode-search,
 .dark .barcode-printing-page .barcode-field-label select,
 .dark .barcode-printing-page .barcode-field-label input{background:#0c1911;border-color:#365241;color:#edf5ef}
+.dark .barcode-printing-page .barcode-pharmacy-details{background:#14261b;border-color:#294b35}
+.dark .barcode-printing-page .barcode-pharmacy-details span{color:#9bb4a1}
+.dark .barcode-printing-page .barcode-pharmacy-details strong{color:#e7f4e9}
 .dark .barcode-printing-page .barcode-printer-note{background:#14261b;border-color:#294b35;color:#b9d7c1}
 .dark .barcode-printing-page .barcode-copy-pill,.dark .barcode-printing-page .barcode-count{background:#1c402b;color:#bde8ca}
 .dark .barcode-printing-page .barcode-screen-preview{background:#15251b;border-color:#35513e}
