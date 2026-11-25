@@ -106,7 +106,6 @@ export default function OperationsReports() {
     [salesReturns, dateFrom, dateTo],
   )
 
-  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products])
   const salesValue = salesInRange.reduce((sum, sale) => sum + sale.total, 0)
   const salesRefunds = salesReturnsInRange.reduce((sum, record) => sum + record.refundTotal, 0)
   const purchaseValue = purchasesInRange.reduce((sum, purchase) => sum + purchase.total, 0)
@@ -130,6 +129,17 @@ export default function OperationsReports() {
       low: saleableQuantity <= minimum,
     }
   }).sort((a, b) => a.product.name.localeCompare(b.product.name)), [products, inventoryLots])
+
+  const batchRows = useMemo(() => inventoryLots
+    .filter((lot) => lot.quantity !== 0)
+    .map((lot) => ({
+      lot,
+      productName: products.find((product) => product.id === lot.productId)?.name || lot.productId,
+      stockValue: Math.max(0, lot.quantity) * Math.max(0, lot.purchasePrice),
+      expired: isInventoryLotExpired(lot),
+    }))
+    .sort((a, b) => (a.lot.expiry || "9999").localeCompare(b.lot.expiry || "9999")),
+  [inventoryLots, products])
 
   const supplierRows = useMemo(() => suppliers.map((supplier) => {
     const nameKey = supplier.name.trim().toLowerCase()
@@ -266,6 +276,27 @@ export default function OperationsReports() {
                 </tbody>
               </table>
             </div>
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <div>
+                  <h3 className="font-semibold text-slate-800">Batch and expiry detail</h3>
+                  <p className="mt-1 text-xs text-slate-500">Current remaining quantity by supplier batch, with expiry and purchase cost.</p>
+                </div>
+                <button type="button" onClick={() => downloadCsv("zaki-inventory-batch-report-current.csv",
+                  ["Product", "Supplier", "Batch", "GRN", "Expiry", "Stock", "Stock unit", "Unit cost", "Stock value", "Status"],
+                  batchRows.map((row) => [row.productName, row.lot.supplierName || "Supplier not recorded", row.lot.batch, row.lot.grnNumber || "", row.lot.expiry, row.lot.quantity, productById.get(row.lot.productId)?.unit || "", row.lot.purchasePrice, row.stockValue, row.expired ? "Expired" : "Valid"]))
+                } className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"><Download className="h-3.5 w-3.5"/>Export batch CSV</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1000px] text-sm">
+                  <thead className="bg-white text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Supplier</th><th className="px-4 py-3">Batch / GRN</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3 text-right">Stock</th><th className="px-4 py-3 text-right">Unit cost</th><th className="px-4 py-3 text-right">Value</th><th className="px-4 py-3">Status</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {batchRows.map((row) => <tr key={row.lot.id}><td className="px-4 py-3 font-medium">{row.productName}</td><td className="px-4 py-3">{row.lot.supplierName || "Supplier not recorded"}</td><td className="px-4 py-3"><p>{row.lot.batch || "—"}</p><p className="text-[10px] text-slate-500">{row.lot.grnNumber || "—"}</p></td><td className="px-4 py-3">{row.lot.expiry || "Not recorded"}</td><td className="px-4 py-3 text-right">{row.lot.quantity} {productById.get(row.lot.productId)?.unit || ""}</td><td className="px-4 py-3 text-right">{money(row.lot.purchasePrice)}</td><td className="px-4 py-3 text-right font-semibold">{money(row.stockValue)}</td><td className="px-4 py-3">{row.expired ? <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">Expired</span> : "Valid"}</td></tr>)}
+                    {batchRows.length === 0 && <Empty>No stock batches are currently recorded.</Empty>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             <p className="text-xs text-slate-500">Inventory is a current on-hand snapshot, not a historical as-of-date valuation. Cost value uses the saved purchase cost on each remaining batch.</p>
           </>
         )}
