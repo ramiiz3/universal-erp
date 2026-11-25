@@ -58,10 +58,12 @@ export function updateLoyaltyPointBalance(
   pointsRedeemed: number,
   pointsEarned: number,
 ): number {
-  const balance = Math.max(0, Math.floor(Number(currentBalance) || 0))
+  // A return can reverse points that the customer has already spent. Keep
+  // that liability as a negative balance; future earnings pay it back first.
+  const balance = Number.isFinite(Number(currentBalance)) ? Math.floor(Number(currentBalance)) : 0
   const redeemed = Math.max(0, Math.floor(Number(pointsRedeemed) || 0))
   const earned = Math.max(0, Math.floor(Number(pointsEarned) || 0))
-  if (redeemed > balance) throw new Error("The customer does not have enough loyalty points.")
+  if (redeemed > Math.max(0, balance)) throw new Error("The customer does not have enough loyalty points.")
   return balance - redeemed + earned
 }
 
