@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react"
 import { useERP, type Sale } from "../context/ERPContext"
+import { getSalePaymentDisplayLabel } from "../lib/paymentDisplay"
 
 export default function Sales() {
   const navigate = useNavigate()
@@ -213,7 +214,7 @@ export default function Sales() {
 
                     <td className="px-5 py-4">
                       <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                        {sale.paymentMethod}
+                        {getSalePaymentDisplayLabel(sale)}
                       </span>
                     </td>
 
@@ -335,7 +336,7 @@ export default function Sales() {
                 <div className="rounded-xl bg-slate-50 p-4">
                   <p className="text-xs text-slate-500">Payment</p>
                   <p className="mt-1 font-medium text-slate-900">
-                    {selectedSale.paymentMethod}
+                    {getSalePaymentDisplayLabel(selectedSale)}
                   </p>
                   {selectedSale.paymentMethod === "Cash" && (
                     <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-xs">
