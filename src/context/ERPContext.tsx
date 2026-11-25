@@ -235,6 +235,21 @@ export type PaymentMethod =
   | "Credit"
   | "Bank Transfer"
 
+export type CardPaymentOption =
+  | "Visa"
+  | "Mastercard"
+  | "American Express"
+  | "Maestro"
+  | "UnionPay"
+  | "JCB"
+  | "Diners Club"
+  | "Discover"
+  | "Jaywan"
+  | "Apple Pay"
+  | "Google Pay"
+  | "Samsung Pay"
+  | "Other / Not listed"
+
 export type SaleItemCostAllocation = {
   lotId: string
   batch: string
@@ -295,6 +310,7 @@ export type Sale = {
   loyaltyPointsRedeemed?: number
   loyaltyDiscount?: number
   paymentMethod: PaymentMethod
+  cardPaymentOption?: CardPaymentOption
   cashTendered?: number
   changeDue?: number
   subtotal: number
@@ -367,6 +383,7 @@ type CompleteSaleInput = {
   notes?: string
   loyaltyPointsRedeemed?: number
   paymentMethod: PaymentMethod
+  cardPaymentOption?: CardPaymentOption
   cashTendered?: number
   discount?: number
 
@@ -4063,6 +4080,7 @@ export function ERPProvider({
       loyaltyDiscount,
       paymentMethod:
         input.paymentMethod,
+      cardPaymentOption: input.paymentMethod === "Card" ? input.cardPaymentOption : undefined,
       cashTendered: cashSettlement?.cashTendered,
       changeDue: cashSettlement?.changeDue,
       subtotal: totals.subtotal,

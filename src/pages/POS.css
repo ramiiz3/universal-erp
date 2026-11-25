@@ -397,3 +397,86 @@
   .pos-header-stats > div { flex:1; min-width:0; }
   .pos-billing-title { align-items:flex-start; }
 }
+
+/* UAE card scheme / contactless wallet selector */
+.pos-card-tender-panel{
+  grid-column:1/-1;
+  padding:14px 15px;
+  border:1px solid var(--pos-border);
+  border-radius:14px;
+  background:var(--pos-surface-soft);
+  color:var(--pos-text);
+}
+.pos-card-tender-panel>div:first-child p:first-child{color:var(--pos-text)}
+.pos-card-tender-panel>div:first-child p:nth-child(2){color:var(--pos-muted)}
+.pos-card-tender-required{
+  border:1px solid #e9b5a8;
+  border-radius:999px;
+  padding:4px 8px;
+  background:#fff3ef;
+  color:#9b3d2b;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.pos-card-tender-group-label{
+  color:var(--pos-muted);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.pos-card-tender-options{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+  gap:7px;
+}
+.pos-card-tender-option{
+  display:flex;
+  min-height:39px;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--pos-border-strong);
+  border-radius:10px;
+  padding:7px 9px;
+  background:var(--pos-surface);
+  color:var(--pos-text-soft);
+  font-size:11px;
+  font-weight:700;
+  text-align:center;
+  transition:border-color .15s ease,background .15s ease,color .15s ease,box-shadow .15s ease;
+}
+.pos-card-tender-option:hover{
+  border-color:#65a982;
+  background:var(--pos-surface-muted);
+}
+.pos-card-tender-option.is-selected{
+  border-color:#1e7045;
+  background:#e4f5e9;
+  color:#185b38;
+  box-shadow:0 0 0 2px rgba(50,151,101,.12);
+}
+.pos-card-tender-note{
+  border-top:1px solid var(--pos-border);
+  padding-top:10px;
+  color:var(--pos-muted);
+  font-size:10px;
+  line-height:1.55;
+}
+.dark .pos-card-tender-required{
+  border-color:#75483d;
+  background:#38251f;
+  color:#ffc1ad;
+}
+.dark .pos-card-tender-option{
+  border-color:var(--pos-border-strong);
+  background:var(--pos-input);
+  color:var(--pos-text-soft);
+}
+.dark .pos-card-tender-option:hover{background:var(--pos-surface-muted)}
+.dark .pos-card-tender-option.is-selected{
+  border-color:#4d9b6b;
+  background:#1e4b31;
+  color:#d6f4df;
+}
