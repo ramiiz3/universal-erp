@@ -386,8 +386,17 @@ async function createInvoicePdf(sale: Sale) {
   pdf.text("Customer / العميل", left + 7, y + 8)
   pdf.setTextColor(...text)
   pdf.setFont("helvetica", "bold")
-  pdf.setFontSize(10)
-  pdf.text(sale.customerName || "Walk-in Customer", left + 7, y + 17)
+  pdf.setFontSize(9)
+  pdf.text(sale.customerName || "Walk-in Customer", left + 7, y + 16, { maxWidth: cardWidth - 14 })
+  const customerContact = [sale.customerPhone, sale.customerEmail].filter(Boolean)
+  if (customerContact.length) {
+    pdf.setFont("helvetica", "normal")
+    pdf.setFontSize(6)
+    pdf.setTextColor(...muted)
+    customerContact.slice(0, 2).forEach((value, index) => {
+      pdf.text(String(value), left + 7, y + 21 + index * 4, { maxWidth: cardWidth - 14 })
+    })
+  }
 
   const rightCardX = left + cardWidth + gap
   pdf.setFillColor(...soft)
