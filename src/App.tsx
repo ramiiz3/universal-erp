@@ -26,6 +26,7 @@ import ProcurementWorkflow from "./pages/ProcurementWorkflow"
 import SupplierInvoices from "./pages/SupplierInvoices"
 import Suppliers from "./pages/Suppliers"
 import Reports from "./pages/Reports"
+import OperationsReports from "./pages/OperationsReports"
 import ChartOfAccounts from "./pages/ChartOfAccounts"
 import Settings from "./pages/Settings"
 import AI from "./pages/AI"
@@ -82,6 +83,7 @@ export default function App() {
             <Route path="/suppliers" element={<Suppliers />} />
             <Route path="/chart-of-accounts" element={<ChartOfAccounts />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/operations-reports" element={<OperationsReports />} />
             <Route path="/ai" element={<AI />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -7,6 +7,14 @@ export type PaymentSettings = {
   bankTransfer: boolean
 }
 
+export type LoyaltySettings = {
+  enabled: boolean
+  /** Points awarded for each unit of currency earned after discounts. */
+  pointsPerCurrencyUnit: number
+  /** Currency value of one redeemed point. */
+  currencyPerPoint: number
+}
+
 export type ERPSettings = {
   businessName: string
   tagline: string
@@ -25,6 +33,7 @@ export type ERPSettings = {
   invoiceFooter: string
   vatRegistered: boolean
   payment: PaymentSettings
+  loyalty: LoyaltySettings
 }
 
 export const DEFAULT_ERP_SETTINGS: ERPSettings = {
@@ -50,6 +59,11 @@ export const DEFAULT_ERP_SETTINGS: ERPSettings = {
     card: true,
     credit: true,
     bankTransfer: true,
+  },
+  loyalty: {
+    enabled: false,
+    pointsPerCurrencyUnit: 0.1,
+    currencyPerPoint: 0.1,
   },
 }
 
@@ -80,6 +94,17 @@ export function getERPSettings(): ERPSettings {
       payment: {
         ...DEFAULT_ERP_SETTINGS.payment,
         ...(parsed.payment || {}),
+      },
+      loyalty: {
+        ...DEFAULT_ERP_SETTINGS.loyalty,
+        ...(parsed.loyalty || {}),
+        enabled: Boolean(parsed.loyalty?.enabled),
+        pointsPerCurrencyUnit: Number.isFinite(Number(parsed.loyalty?.pointsPerCurrencyUnit))
+          ? Math.max(0, Number(parsed.loyalty.pointsPerCurrencyUnit))
+          : DEFAULT_ERP_SETTINGS.loyalty.pointsPerCurrencyUnit,
+        currencyPerPoint: Number.isFinite(Number(parsed.loyalty?.currencyPerPoint))
+          ? Math.max(0, Number(parsed.loyalty.currencyPerPoint))
+          : DEFAULT_ERP_SETTINGS.loyalty.currencyPerPoint,
       },
     }
   } catch {

@@ -22,6 +22,11 @@ type PaymentSettings = {
 }
 
 type SettingsData = {
+  loyalty: {
+    enabled: boolean
+    pointsPerCurrencyUnit: number
+    currencyPerPoint: number
+  }
   businessName: string
   tagline: string
   tradeLicenseNumber: string
@@ -42,6 +47,11 @@ type SettingsData = {
 }
 
 const defaultSettings: SettingsData = {
+  loyalty: {
+    enabled: false,
+    pointsPerCurrencyUnit: 0.1,
+    currencyPerPoint: 0.1,
+  },
   businessName: "Zaki Pharmacy LLC",
   tagline: "",
   tradeLicenseNumber: "",
@@ -92,6 +102,17 @@ function loadSettings(): SettingsData {
         ...defaultSettings.payment,
         ...(parsed.payment || {}),
       },
+      loyalty: {
+        ...defaultSettings.loyalty,
+        ...(parsed.loyalty || {}),
+        enabled: Boolean(parsed.loyalty?.enabled),
+        pointsPerCurrencyUnit: Number.isFinite(Number(parsed.loyalty?.pointsPerCurrencyUnit))
+          ? Math.max(0, Number(parsed.loyalty.pointsPerCurrencyUnit))
+          : defaultSettings.loyalty.pointsPerCurrencyUnit,
+        currencyPerPoint: Number.isFinite(Number(parsed.loyalty?.currencyPerPoint))
+          ? Math.max(0, Number(parsed.loyalty.currencyPerPoint))
+          : defaultSettings.loyalty.currencyPerPoint,
+      },
     }
   } catch {
     return defaultSettings
@@ -129,6 +150,20 @@ export default function Settings() {
       },
     }))
 
+    setSaved(false)
+  }
+
+  function updateLoyalty(
+    field: keyof SettingsData["loyalty"],
+    value: boolean | number,
+  ) {
+    setSettings((current) => ({
+      ...current,
+      loyalty: {
+        ...current.loyalty,
+        [field]: value,
+      },
+    }))
     setSaved(false)
   }
 
@@ -634,6 +669,52 @@ export default function Settings() {
                     </label>
                   )
                 })}
+              </div>
+            </div>
+
+            {/* LOYALTY */}
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 p-5">
+                <h2 className="font-semibold text-slate-900">Customer Loyalty Programme</h2>
+                <p className="mt-1 text-xs text-slate-500">Set earning and redemption rules. The programme is disabled until an owner enables it and saves these settings.</p>
+              </div>
+              <div className="grid gap-5 p-5 md:grid-cols-3">
+                <label className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">Enable loyalty</span>
+                    <span className="mt-1 block text-xs text-slate-500">Earn and redeem points for registered customers.</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.loyalty.enabled}
+                    onChange={(event) => updateLoyalty("enabled", event.target.checked)}
+                    className="h-4 w-4 accent-emerald-600"
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  Points earned per AED 1
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.loyalty.pointsPerCurrencyUnit}
+                    onChange={(event) => updateLoyalty("pointsPerCurrencyUnit", Math.max(0, Number(event.target.value)))}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-4 text-sm"
+                  />
+                  <span className="mt-1 block text-xs font-normal text-slate-500">Example: 0.1 awards 1 point per AED 10 spent after discounts.</span>
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  AED value of one point
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.loyalty.currencyPerPoint}
+                    onChange={(event) => updateLoyalty("currencyPerPoint", Math.max(0, Number(event.target.value)))}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 px-4 text-sm"
+                  />
+                  <span className="mt-1 block text-xs font-normal text-slate-500">Example: 0.10 means 100 points redeem AED 10.</span>
+                </label>
               </div>
             </div>
 

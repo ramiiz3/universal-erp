@@ -418,6 +418,9 @@ export default function Customers() {
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Credit
                   </th>
+                  <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Loyalty
+                  </th>
 
                   <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Status
@@ -494,6 +497,9 @@ export default function Customers() {
                           {formatCurrency(stats.pending)}
                         </span>
                       </td>
+                      <td className="px-5 py-4 text-sm font-semibold text-emerald-700">
+                        {(customer.loyaltyPoints ?? 0).toLocaleString()} pts
+                      </td>
 
                       <td className="px-5 py-4">
                         <span
@@ -544,7 +550,7 @@ export default function Customers() {
                 {filteredCustomers.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-5 py-14 text-center"
                     >
                       <UserRound className="mx-auto h-9 w-9 text-slate-300" />
@@ -754,7 +760,7 @@ export default function Customers() {
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-5">
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-5">
                 {[
                   [
                     "Purchases",
@@ -773,6 +779,10 @@ export default function Customers() {
                     formatCurrency(
                       getStats(selectedCustomer).pending,
                     ),
+                  ],
+                  [
+                    "Loyalty Points",
+                    String(selectedCustomer.loyaltyPoints ?? 0),
                   ],
                   [
                     "Status",

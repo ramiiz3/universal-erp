@@ -97,6 +97,7 @@ const navigationGroups = [
     label: "Management & Insights",
     items: [
       { label: "Reports & Analytics", path: "/reports", icon: CircleDollarSign },
+      { label: "Operations Reports", path: "/operations-reports", icon: ClipboardList },
       { label: "AI Assistant", path: "/ai", icon: Bot },
       { label: "Settings", path: "/settings", icon: SettingsIcon },
     ],
