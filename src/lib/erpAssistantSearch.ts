@@ -179,8 +179,8 @@ function parseDateRange(query: string, now: Date): DateRange | null {
     return { start, end: tomorrow, label: "Last " + lastDays[1] + " days", future: false }
   }
 
-  const explicit = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(q)
-    ?? /\b(\d{2})[/-](\d{2})[/-](\d{4})\b/.exec(q)
+  const explicit = /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/.exec(query)
+    ?? /\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b/.exec(query)
   if (explicit) {
     const isIso = explicit[1].length === 4
     const year = Number(isIso ? explicit[1] : explicit[3])
@@ -369,7 +369,7 @@ export function searchERPAssistant(
   const lowStockQuery = /\blow stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(normalizedQuery)
   const expiryQuery = /\bexpir|\bexpired\b|\bexpiring\b|\bbatch\b/.test(normalizedQuery)
   const range = parseDateRange(q, now)
-  const terms = remainingTerms(q).filter((term) => !(range && expiryQuery && /^\\d{1,3}$/.test(term)))
+  const terms = remainingTerms(q).filter((term) => !(range && expiryQuery && /^\d{1,3}$/.test(term)))
 
   const matched = index.filter((record) => {
     if (groups && !groups.includes(record.category)) return false
