@@ -5,6 +5,9 @@ import {
   Barcode,
   Download,
   FileSpreadsheet,
+  Minus,
+  Maximize2,
+  Barcode as BarcodeIcon,
   Package,
   Plus,
   Search,
@@ -13,13 +16,16 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import * as XLSX from "xlsx"
 import {
   useERP,
   type InventoryLot,
   type Product,
 } from "../context/ERPContext"
+import BarcodePreview from "../components/BarcodePreview"
+import { generateCompanyProductBarcode } from "../lib/productBarcode"
+import { getERPSettings } from "../lib/erpSettings"
 import {
   buildInventoryExportRows,
   detectInventoryHeaderRow,
@@ -219,6 +225,8 @@ export default function Inventory() {
     const [showAdd, setShowAdd] = useState(false)
     const [showEdit, setShowEdit] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+    const [minimizedProductForm, setMinimizedProductForm] = useState<"add" | "edit" | null>(null)
+    const [productBarcodeError, setProductBarcodeError] = useState("")
     const [showAdjust, setShowAdjust] = useState(false)
     const [adjustProductId, setAdjustProductId] = useState<string | null>(null)
     const [adjustLotId, setAdjustLotId] = useState<string | null>(null)
@@ -472,7 +480,55 @@ export default function Inventory() {
     }
   }
 
+    function closeProductForm() {
+      setShowAdd(false)
+      setShowEdit(false)
+      setMinimizedProductForm(null)
+    }
+
+    function minimizeProductForm(mode: "add" | "edit") {
+      setShowAdd(false)
+      setShowEdit(false)
+      setMinimizedProductForm(mode)
+    }
+
+    function restoreProductForm() {
+      if (minimizedProductForm === "add") setShowAdd(true)
+      if (minimizedProductForm === "edit") setShowEdit(true)
+      setMinimizedProductForm(null)
+    }
+
+    function generateInventoryProductBarcode() {
+      setProductBarcodeError("")
+      try {
+        const settings = getERPSettings()
+        const barcode = generateCompanyProductBarcode({
+          companyName: settings.businessName.trim() || "Zaki Pharmacy LLC",
+          mobileNumber: settings.phone,
+        })
+        setProductForm((current) => ({ ...current, barcode }))
+      } catch (error) {
+        setProductBarcodeError(error instanceof Error ? error.message : String(error))
+      }
+    }
+
+    useEffect(() => {
+      if (!showAdd && !showEdit) return
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setShowAdd(false)
+          setShowEdit(false)
+          setMinimizedProductForm(null)
+        }
+      }
+      window.addEventListener("keydown", handleKeyDown)
+      return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [showAdd, showEdit])
+
     function openAddProduct() {
+        setMinimizedProductForm(null)
+        setShowEdit(false)
+        setProductBarcodeError("")
         setEditingProduct(null)
         setProductForm({
           name: "",
@@ -496,6 +552,9 @@ export default function Inventory() {
     }
 
     function openEditProduct(product: Product) {
+        setMinimizedProductForm(null)
+        setShowAdd(false)
+        setProductBarcodeError("")
         setEditingProduct(product)
         setProductForm({
           name: product.name,
@@ -523,6 +582,7 @@ export default function Inventory() {
         if (editingProduct) {
           updateProduct(editingProduct.id, form)
           setShowEdit(false)
+          setMinimizedProductForm(null)
           window.alert("Product changes saved successfully.")
           return
         }
@@ -532,6 +592,7 @@ export default function Inventory() {
           addProduct(form)
         }
         setShowAdd(false)
+        setMinimizedProductForm(null)
         window.alert("Product saved successfully.")
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "The product could not be saved.")
@@ -1553,22 +1614,48 @@ export default function Inventory() {
       )}
 
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
-              <div>
-                <h3 className="text-lg font-semibold">Add Product</h3>
-                <p className="mt-1 text-sm text-slate-500">Create a new product. Optionally add opening stock.</p>
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-3 pt-5 backdrop-blur-[2px] sm:p-5 sm:pt-8"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeProductForm()
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inventory-add-product-title"
+            className="flex max-h-[min(92vh,960px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+              <div className="min-w-0">
+                <h3 id="inventory-add-product-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">Add Product</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Create a new product. Optionally add opening stock.</p>
               </div>
-              <button type="button" onClick={() => setShowAdd(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
-            </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" onClick={() => minimizeProductForm("add")} title="Minimize and keep this draft" aria-label="Minimize Add Product form" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+                  <Minus size={18} />
+                </button>
+                <button type="button" onClick={closeProductForm} title="Close form" aria-label="Close Add Product form" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+                  <X size={19} />
+                </button>
+              </div>
+            </header>
 
-            <div className="p-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Product Name" value={productForm.name} onChange={(v) => setProductForm({...productForm, name: v})} />
                 <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
                 <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} placeholder="Auto-generated" />
-                <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <div className="space-y-2">
+                  <Field label="Barcode / GTIN" value={productForm.barcode} onChange={(v) => { setProductForm({...productForm, barcode: v}); setProductBarcodeError("") }} />
+                  <button type="button" onClick={generateInventoryProductBarcode} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950">
+                    <BarcodeIcon size={15} /> Generate Code 128
+                  </button>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Internal barcode based on company name, registered mobile and a unique product code. This is not a GS1/retail GTIN.</p>
+                  {productBarcodeError && <p role="alert" className="text-xs text-red-600 dark:text-red-300">{productBarcodeError}</p>}
+                  <BarcodePreview value={productForm.barcode} />
+                </div>
                 <Field label="Company" value={productForm.companyName} onChange={(v) => setProductForm({...productForm, companyName: v})} />
                 <Field label="Generic Name" value={productForm.genericName} onChange={(v) => setProductForm({...productForm, genericName: v})} />
                 <Field label="MRP" value={productForm.mrp} onChange={(v) => setProductForm({...productForm, mrp: v})} type="number" />
@@ -1579,19 +1666,23 @@ export default function Inventory() {
                 <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
               </div>
 
-              <div className="mt-4 border-t pt-4">
-                <div className="text-sm text-slate-600">Opening Stock (optional)</div>
+              <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Opening Stock <span className="font-normal text-slate-500">(optional)</span></div>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Use this only when creating the product with an opening stock batch.</p>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <Field label="Quantity" value={productForm.openingQuantity} onChange={(v) => setProductForm({...productForm, openingQuantity: v})} type="number" />
                   <Field label="Batch" value={productForm.openingBatch} onChange={(v) => setProductForm({...productForm, openingBatch: v})} />
                   <Field label="Expiry Month/Year" value={normalizeExpiryValue(productForm.openingExpiry)} onChange={(v) => setProductForm({...productForm, openingExpiry: v})} type="month" />
                   <Field label="Purchase Price" value={productForm.openingPurchasePrice} onChange={(v) => setProductForm({...productForm, openingPurchasePrice: v})} type="number" />
                 </div>
-              </div>
+              </section>
+            </div>
 
-              <div className="mt-4 flex justify-end gap-2">
-                <button onClick={() => setShowAdd(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
-                <button onClick={() => {
+            <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-950">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Draft stays available when minimized. Press Esc to close.</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={closeProductForm} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+                <button type="button" onClick={() => {
                   const form = {
                     name: productForm.name.trim(),
                     category: productForm.category.trim(),
@@ -1606,35 +1697,53 @@ export default function Inventory() {
                     vatRate: Number(productForm.vatRate) || 5,
                     unit: productForm.unit || "Pack",
                   }
-
                   const openingQty = Number(productForm.openingQuantity || 0)
                   const opening = openingQty > 0 ? { quantity: openingQty, batch: productForm.openingBatch, expiry: productForm.openingExpiry, purchasePrice: Number(productForm.openingPurchasePrice) || form.purchasePrice } : null
-
                   saveProduct(form, opening)
-                }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Create Product</button>
+                }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">Create Product</button>
               </div>
-            </div>
-          </div>
+            </footer>
+          </section>
         </div>
       )}
 
       {showEdit && editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b p-5 dark:border-slate-800">
-              <div>
-                <h3 className="text-lg font-semibold">Edit Product</h3>
-                <p className="mt-1 text-sm text-slate-500">Update product details.</p>
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/55 p-3 pt-5 backdrop-blur-[2px] sm:p-5 sm:pt-8"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeProductForm()
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inventory-edit-product-title"
+            className="flex max-h-[min(92vh,960px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+              <div className="min-w-0">
+                <h3 id="inventory-edit-product-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">Edit Product</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Update product details.</p>
               </div>
-              <button type="button" onClick={() => setShowEdit(false)} className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18}/></button>
-            </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" onClick={() => minimizeProductForm("edit")} title="Minimize and keep this draft" aria-label="Minimize Edit Product form" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"><Minus size={18} /></button>
+                <button type="button" onClick={closeProductForm} title="Close form" aria-label="Close Edit Product form" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"><X size={19} /></button>
+              </div>
+            </header>
 
-            <div className="p-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Product Name" value={productForm.name} onChange={(v) => setProductForm({...productForm, name: v})} />
                 <Field label="Category" value={productForm.category} onChange={(v) => setProductForm({...productForm, category: v})} />
                 <Field label="SKU" value={productForm.sku} onChange={(v) => setProductForm({...productForm, sku: v})} />
-                <Field label="Barcode" value={productForm.barcode} onChange={(v) => setProductForm({...productForm, barcode: v})} />
+                <div className="space-y-2">
+                  <Field label="Barcode / GTIN" value={productForm.barcode} onChange={(v) => { setProductForm({...productForm, barcode: v}); setProductBarcodeError("") }} />
+                  <button type="button" onClick={generateInventoryProductBarcode} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950"><BarcodeIcon size={15} /> Generate Code 128</button>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Internal Code 128 barcode · not a GS1/retail GTIN.</p>
+                  {productBarcodeError && <p role="alert" className="text-xs text-red-600 dark:text-red-300">{productBarcodeError}</p>}
+                  <BarcodePreview value={productForm.barcode} />
+                </div>
                 <Field label="Company" value={productForm.companyName} onChange={(v) => setProductForm({...productForm, companyName: v})} />
                 <Field label="Generic Name" value={productForm.genericName} onChange={(v) => setProductForm({...productForm, genericName: v})} />
                 <Field label="MRP" value={productForm.mrp} onChange={(v) => setProductForm({...productForm, mrp: v})} type="number" />
@@ -1644,11 +1753,14 @@ export default function Inventory() {
                 <p className="text-xs text-slate-500 sm:col-span-2">Reorder alert threshold only. This does not change On Hand quantity. Use Receive Stock or Manage Stock to change physical stock.</p>
                 <Field label="VAT Rate" value={productForm.vatRate} onChange={(v) => setProductForm({...productForm, vatRate: v})} type="number" />
               </div>
+            </div>
 
-              <div className="mt-4 flex justify-end gap-2">
-                <button onClick={() => setShowEdit(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancel</button>
-                <button onClick={() => handleDeleteInventoryProduct(editingProduct)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={14}/> Delete</button>
-                <button onClick={() => {
+            <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-950">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Draft stays available when minimized. Press Esc to close.</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={closeProductForm} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+                <button type="button" onClick={() => handleDeleteInventoryProduct(editingProduct)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"><Trash2 size={14}/> Delete</button>
+                <button type="button" onClick={() => {
                   const form = {
                     name: productForm.name.trim(),
                     category: productForm.category.trim(),
@@ -1663,12 +1775,20 @@ export default function Inventory() {
                     vatRate: Number(productForm.vatRate) || 5,
                     unit: productForm.unit || "Pack",
                   }
-
                   saveProduct(form, null)
-                }} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white">Save</button>
+                }} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">Save Changes</button>
               </div>
-            </div>
-          </div>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {minimizedProductForm && !showAdd && !showEdit && (
+        <div className="fixed bottom-5 right-5 z-[75] flex items-center gap-2 rounded-2xl border border-emerald-200 bg-white p-2 shadow-xl dark:border-emerald-900 dark:bg-slate-900">
+          <button type="button" onClick={restoreProductForm} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">
+            <Maximize2 size={15} /> Restore {minimizedProductForm === "add" ? "Add Product" : "Edit Product"}
+          </button>
+          <button type="button" onClick={closeProductForm} aria-label="Discard minimized product form" title="Close draft" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"><X size={17} /></button>
         </div>
       )}
 
