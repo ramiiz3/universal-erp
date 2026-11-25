@@ -87,9 +87,12 @@
  margin:0 auto;border:1px solid #e1e7e2;background:#fff;padding:5px 7px;color:#111;
  box-shadow:0 3px 8px rgba(0,0,0,.08);text-align:center;overflow:hidden
 }
-.barcode-screen-label>strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.barcode-preview-pharmacy{display:grid;width:100%;gap:1px;text-align:center;line-height:1.15}
+.barcode-preview-pharmacy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:800}
+.barcode-preview-pharmacy span{font-size:7px;color:#53665a}
+.barcode-screen-label>strong:not(.barcode-preview-pharmacy strong){width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
 .barcode-screen-label>span{max-width:100%;overflow-wrap:anywhere;font-family:monospace;font-size:8px}
-.barcode-screen-label>div{display:flex;width:100%;justify-content:space-between;gap:8px;font-size:8px}
+.barcode-screen-label>div:not(.barcode-preview-pharmacy){display:flex;width:100%;justify-content:space-between;gap:8px;font-size:8px}
 .barcode-graphic{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;background:#fff;overflow:hidden}
 .barcode-graphic svg{display:block;width:100%;max-width:100%;height:auto;max-height:52px}
 .barcode-print-button{width:100%;min-height:45px}
@@ -123,18 +126,30 @@
  }
  .barcode-roll-label{
   display:flex!important;flex-direction:column;align-items:center;justify-content:center;
-  gap:1mm;box-sizing:border-box;overflow:hidden;margin:0!important;padding:1.2mm 1.5mm!important;
+  gap:.55mm;box-sizing:border-box;overflow:hidden;margin:0!important;padding:.7mm 1mm!important;
   border:0!important;background:#fff!important;color:#000!important;
   page-break-after:always;break-after:page;
  }
  .barcode-roll-label:last-child{page-break-after:auto;break-after:auto}
+ .barcode-label-pharmacy{
+  display:grid;width:100%;gap:.2mm;text-align:center;line-height:1.05;
+  font-family:Arial,sans-serif;color:#000!important;
+ }
+ .barcode-label-pharmacy-name{
+  display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#000!important;font-size:5.1pt;font-weight:800;line-height:1.05;
+ }
+ .barcode-label-contact{
+  display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#000!important;font-size:4.5pt;font-weight:600;line-height:1.05;
+ }
  .barcode-label-name{
   display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:#000!important;font-family:Arial,sans-serif;font-size:7pt;font-weight:700;line-height:1.1;text-align:center;
+  color:#000!important;font-family:Arial,sans-serif;font-size:5.8pt;font-weight:700;line-height:1.05;text-align:center;
  }
- .barcode-roll-label .barcode-graphic{width:100%;height:auto;max-height:14mm;background:#fff!important}
- .barcode-roll-label .barcode-graphic svg{width:100%;height:auto;max-height:14mm}
- .barcode-label-value{color:#000!important;font-family:monospace;font-size:6pt;line-height:1}
- .barcode-label-bottom{display:flex;width:100%;justify-content:space-between;gap:1mm;color:#000!important;font-family:Arial,sans-serif;font-size:6pt;line-height:1}
+ .barcode-roll-label .barcode-graphic{width:100%;height:auto;max-height:9mm;background:#fff!important}
+ .barcode-roll-label .barcode-graphic svg{width:100%;height:auto;max-height:9mm}
+ .barcode-label-value{color:#000!important;font-family:monospace;font-size:4.5pt;line-height:1}
+ .barcode-label-bottom{display:flex;width:100%;justify-content:space-between;gap:1mm;color:#000!important;font-family:Arial,sans-serif;font-size:4.5pt;line-height:1}
  .barcode-label-bottom strong{font-weight:800}
 }
