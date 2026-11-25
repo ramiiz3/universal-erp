@@ -18,6 +18,7 @@ import StockLedger from "./pages/StockLedger"
 import StockTransfers from "./pages/StockTransfers"
 import WarehouseManagement from "./pages/WarehouseManagement"
 import Inventory from "./pages/Inventory"
+import BarcodePrinting from "./pages/BarcodePrinting"
 import InventoryAlerts from "./pages/InventoryAlerts"
 import StockCounts from "./pages/StockCounts"
 import StockValuation from "./pages/StockValuation"
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/warehouses" element={<WarehouseManagement />} />
             <Route path="/warehouse" element={<WarehouseManagement />} />
             <Route path="/inventory" element={<Inventory />} />
+            <Route path="/barcode-printing" element={<BarcodePrinting />} />
             <Route path="/inventory-alerts" element={<InventoryAlerts />} />
             <Route path="/stock-counts" element={<StockCounts />} />
             <Route path="/stock-valuation" element={<StockValuation />} />

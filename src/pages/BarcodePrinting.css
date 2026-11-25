@@ -1,0 +1,140 @@
+.barcode-printing-page {
+  --bp-bg:#f3f7f4; --bp-panel:#fff; --bp-border:#dfe9e2;
+  --bp-text:#14291d; --bp-muted:#6c7f72;
+  min-height:100%; background:var(--bp-bg); color:var(--bp-text);
+}
+.barcode-printing-hero{
+  display:flex; align-items:center; justify-content:space-between; gap:22px;
+  padding:24px; border:1px solid #1a4a32; border-radius:20px;
+  background:linear-gradient(115deg,#102e20,#1d5137); color:white;
+  box-shadow:0 12px 30px rgba(19,65,39,.14);
+}
+.barcode-printing-hero-icon{
+  display:flex; width:48px; height:48px; flex:0 0 auto; align-items:center; justify-content:center;
+  border:1px solid rgba(255,255,255,.16); border-radius:15px; background:rgba(255,255,255,.1); color:#b5e8c5;
+}
+.barcode-printing-flow{display:flex; flex-wrap:wrap; gap:8px}
+.barcode-printing-flow span{
+ display:inline-flex; align-items:center; gap:7px; padding:8px 10px;
+ border:1px solid rgba(255,255,255,.16); border-radius:999px;
+ background:rgba(255,255,255,.07); color:#edf9f0; font-size:10px; font-weight:700; white-space:nowrap;
+}
+.barcode-printing-flow b{
+ display:inline-grid; width:18px; height:18px; place-items:center; border-radius:50%;
+ background:#c2efd0; color:#123a26; font-size:10px;
+}
+.barcode-panel{
+ border:1px solid var(--bp-border); border-radius:17px; background:var(--bp-panel);
+ box-shadow:0 8px 22px rgba(19,54,33,.045);
+}
+.barcode-panel-header{
+ display:flex; align-items:center; justify-content:space-between; gap:12px;
+ padding:16px 18px; border-bottom:1px solid var(--bp-border);
+}
+.barcode-panel-header h2{color:var(--bp-text);font-size:14px;font-weight:800}
+.barcode-panel-header p{margin-top:3px;color:var(--bp-muted);font-size:11px}
+.barcode-count,.barcode-copy-pill{
+ padding:5px 9px; border-radius:999px; background:#e8f5ec; color:#22623e; font-size:10px;font-weight:800;white-space:nowrap
+}
+.barcode-search{
+ display:flex; height:44px; align-items:center; gap:10px; padding:0 13px;
+ border:1px solid var(--bp-border); border-radius:11px; background:#fbfdfb; color:#789080;
+}
+.barcode-search:focus-within{border-color:#2d9861;box-shadow:0 0 0 3px rgba(45,152,97,.1)}
+.barcode-search input{width:100%;border:0;outline:0;background:transparent;color:var(--bp-text);font-size:12px}
+.barcode-search input::placeholder{color:#94a49a}
+.barcode-secondary-button,.barcode-text-button{
+ display:inline-flex;align-items:center;gap:7px;color:#35624a;font-size:11px;font-weight:700;
+}
+.barcode-product-list{max-height:590px;overflow-y:auto;border:1px solid var(--bp-border);border-radius:12px}
+.barcode-product-row{
+ display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 13px;
+ border-bottom:1px solid #edf2ee;background:#fff;
+}
+.barcode-product-row:last-child{border-bottom:0}
+.barcode-product-row.is-selected{background:#f2faf4}
+.barcode-product-row input[type=checkbox]{width:16px;height:16px;margin-top:2px;accent-color:#16834d}
+.barcode-product-row strong{color:#1b3324;font-size:12px}
+.barcode-row-controls{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+.barcode-row-controls label{display:grid;gap:3px;color:#87968c;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.barcode-row-controls input{width:58px;height:32px;border:1px solid #dbe7de;border-radius:8px;padding:0 6px;color:#24392b;font-size:12px;font-weight:700;text-align:center}
+.barcode-status-ready,.barcode-status-missing{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;white-space:nowrap}
+.barcode-status-ready{color:#20834b}.barcode-status-missing{color:#a66a19}
+.barcode-primary-button,.barcode-print-button{
+ display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:42px;
+ border-radius:11px;padding:0 15px;background:#078c53;color:white;font-size:12px;font-weight:800;
+ box-shadow:0 5px 12px rgba(7,140,83,.16);
+}
+.barcode-primary-button:disabled{opacity:.45;cursor:not-allowed}
+.barcode-spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:white;border-radius:50%;animation:barcode-spin .8s linear infinite}
+@keyframes barcode-spin{to{transform:rotate(360deg)}}
+.barcode-alert-error,.barcode-alert-success{white-space:pre-line;border-radius:10px;padding:10px 12px;font-size:11px;line-height:1.5}
+.barcode-alert-error{border:1px solid #f2c6c1;background:#fff4f2;color:#9b3328}
+.barcode-alert-success{border:1px solid #b9e1c5;background:#f0faf2;color:#21623b}
+.barcode-field-label{display:grid;gap:7px;color:#697d70;font-size:11px;font-weight:700}
+.barcode-field-label select,.barcode-field-label input{
+ width:100%;height:40px;border:1px solid var(--bp-border);border-radius:9px;padding:0 10px;
+ background:#fbfdfb;color:#1b3324;font-size:12px;outline:0
+}
+.barcode-toggle{display:flex;align-items:center;gap:9px;color:#455b4c;font-size:12px;font-weight:600}
+.barcode-toggle input{width:15px;height:15px;accent-color:#16834d}
+.barcode-printer-note{display:flex;align-items:flex-start;gap:10px;border:1px solid #dcebe0;border-radius:11px;padding:11px;background:#f4faf5;color:#42634c}
+.barcode-printer-note svg{flex:0 0 auto}.barcode-printer-note p{font-size:10px;line-height:1.5}
+.barcode-queue-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid #edf2ee}
+.barcode-screen-preview{border:1px dashed #cbd9cf;border-radius:12px;padding:11px;background:#f8fbf8}
+.barcode-screen-label{
+ display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;max-width:100%;
+ margin:0 auto;border:1px solid #e1e7e2;background:#fff;padding:5px 7px;color:#111;
+ box-shadow:0 3px 8px rgba(0,0,0,.08);text-align:center;overflow:hidden
+}
+.barcode-screen-label>strong{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.barcode-screen-label>span{max-width:100%;overflow-wrap:anywhere;font-family:monospace;font-size:8px}
+.barcode-screen-label>div{display:flex;width:100%;justify-content:space-between;gap:8px;font-size:8px}
+.barcode-graphic{display:flex;align-items:center;justify-content:center;width:100%;min-width:0;background:#fff;overflow:hidden}
+.barcode-graphic svg{display:block;width:100%;max-width:100%;height:auto;max-height:52px}
+.barcode-print-button{width:100%;min-height:45px}
+.barcode-print-root{display:none}
+.dark .barcode-printing-page{
+ --bp-bg:#0b1510;--bp-panel:#111e16;--bp-border:#294334;--bp-text:#edf5ef;--bp-muted:#9aafa0;
+}
+.dark .barcode-printing-page .barcode-panel{background:var(--bp-panel);border-color:var(--bp-border)}
+.dark .barcode-printing-page .barcode-panel-header{border-color:var(--bp-border)}
+.dark .barcode-printing-page .barcode-panel-header h2,
+.dark .barcode-printing-page .barcode-product-row strong{color:var(--bp-text)}
+.dark .barcode-printing-page .barcode-product-row{background:#111e16;border-color:#263d2f}
+.dark .barcode-printing-page .barcode-product-row.is-selected{background:#173323}
+.dark .barcode-printing-page .barcode-search,
+.dark .barcode-printing-page .barcode-field-label select,
+.dark .barcode-printing-page .barcode-field-label input{background:#0c1911;border-color:#365241;color:#edf5ef}
+.dark .barcode-printing-page .barcode-printer-note{background:#14261b;border-color:#294b35;color:#b9d7c1}
+.dark .barcode-printing-page .barcode-copy-pill,.dark .barcode-printing-page .barcode-count{background:#1c402b;color:#bde8ca}
+.dark .barcode-printing-page .barcode-screen-preview{background:#15251b;border-color:#35513e}
+@media(max-width:1020px){.barcode-printing-hero{align-items:flex-start;flex-direction:column}.barcode-printing-flow{width:100%}}
+@media(max-width:640px){.barcode-product-row{align-items:flex-start;flex-direction:column}.barcode-row-controls{width:100%;justify-content:flex-end}.barcode-printing-flow{gap:5px}.barcode-printing-flow span{padding:6px 8px;font-size:9px}}
+@media print{
+ @page{margin:0;size:auto}
+ html,body{margin:0!important;padding:0!important;background:#fff!important}
+ body *{visibility:hidden!important}
+ .barcode-print-root,.barcode-print-root *{visibility:visible!important}
+ .barcode-print-root{
+  display:block!important;position:absolute!important;left:0!important;top:0!important;
+  width:var(--barcode-label-width)!important;margin:0!important;padding:0!important;
+  background:#fff!important;color:#000!important;
+ }
+ .barcode-roll-label{
+  display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+  gap:1mm;box-sizing:border-box;overflow:hidden;margin:0!important;padding:1.2mm 1.5mm!important;
+  border:0!important;background:#fff!important;color:#000!important;
+  page-break-after:always;break-after:page;
+ }
+ .barcode-roll-label:last-child{page-break-after:auto;break-after:auto}
+ .barcode-label-name{
+  display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#000!important;font-family:Arial,sans-serif;font-size:7pt;font-weight:700;line-height:1.1;text-align:center;
+ }
+ .barcode-roll-label .barcode-graphic{width:100%;height:auto;max-height:14mm;background:#fff!important}
+ .barcode-roll-label .barcode-graphic svg{width:100%;height:auto;max-height:14mm}
+ .barcode-label-value{color:#000!important;font-family:monospace;font-size:6pt;line-height:1}
+ .barcode-label-bottom{display:flex;width:100%;justify-content:space-between;gap:1mm;color:#000!important;font-family:Arial,sans-serif;font-size:6pt;line-height:1}
+ .barcode-label-bottom strong{font-weight:800}
+}
