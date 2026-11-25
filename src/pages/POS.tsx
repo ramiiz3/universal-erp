@@ -1098,12 +1098,13 @@ export default function POS() {
               </label>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Invoice comment
-                <input
+                <textarea
                   value={invoiceNotes}
                   onChange={(event) => setInvoiceNotes(event.target.value)}
                   maxLength={500}
+                  rows={2}
                   placeholder="Optional note for this invoice"
-                  className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal normal-case text-slate-800"
+                  className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case text-slate-800"
                 />
               </label>
             </div>
