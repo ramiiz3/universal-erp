@@ -176,6 +176,10 @@ export default function BarcodePrinting() {
   }
 
   async function prepareLabels() {
+    if (!settings.businessName.trim() || !settings.phone.trim()) {
+      setError("Enter the pharmacy name and contact number in ERP Settings before printing labels.")
+      return
+    }
     if (!selectedIds.length) {
       setError("Select at least one existing product.")
       return
@@ -365,6 +369,10 @@ export default function BarcodePrinting() {
             )}
             <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Label content</p>
+            <div className="barcode-pharmacy-details">
+              <div><span>Pharmacy name · always printed</span><strong>{settings.businessName.trim() || "Not set in ERP Settings"}</strong></div>
+              <div><span>Contact number · always printed</span><strong>{settings.phone.trim() || "Not set in ERP Settings"}</strong></div>
+            </div>
             <div className="space-y-3">
               <label className="barcode-toggle"><input type="checkbox" checked={showName} onChange={(event) => setShowName(event.target.checked)} /> Product name</label>
               <label className="barcode-toggle"><input type="checkbox" checked={showSku} onChange={(event) => setShowSku(event.target.checked)} /> SKU / product code</label>
@@ -399,8 +407,8 @@ export default function BarcodePrinting() {
                   <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-slate-500"><span>Label preview</span><span>{labelWidth} × {labelHeight} mm</span></div>
                   <div className="barcode-screen-label" style={{ width: Math.min(100, labelWidth * 2.2) + "mm", minHeight: Math.max(70, labelHeight * 2) + "px" }}>
                     <div className="barcode-preview-pharmacy">
-                      <strong>{settings.businessName || "Pharmacy"}</strong>
-                      <span>{settings.phone || "Contact number not set"}</span>
+                      <strong>{settings.businessName.trim()}</strong>
+                      <span>{settings.phone.trim()}</span>
                     </div>
                     {showName && <strong>{queue[0].product.name}</strong>}
                     <BarcodeGraphic value={queue[0].barcode} />
@@ -437,8 +445,8 @@ export default function BarcodePrinting() {
             showName={showName}
             showSku={showSku}
             showPrice={showPrice}
-            pharmacyName={settings.businessName || "Pharmacy"}
-            contactNumber={settings.phone || "Contact number not set"}
+            pharmacyName={settings.businessName.trim()}
+            contactNumber={settings.phone.trim()}
           />
         ))}
       </div>
