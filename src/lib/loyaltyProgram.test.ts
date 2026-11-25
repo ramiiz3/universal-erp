@@ -129,6 +129,18 @@ describe("pharmacy customer loyalty", () => {
     })).toEqual({ pointsEarnedReversed: 0, pointsRedeemedRestored: 0 })
   })
 
+  it("keeps returned earned points as a negative balance until future purchases offset them", () => {
+    expect(updateLoyaltyPointBalance(-5, 0, 3)).toBe(-2)
+    expect(updateLoyaltyPointBalance(-2, 0, 5)).toBe(3)
+    expect(() => validateLoyaltyRedemption({
+      rules: enabledRules,
+      requestedPoints: 1,
+      availablePoints: -2,
+      isRegisteredCustomer: true,
+      isSettledSale: true,
+    })).toThrow(/enough loyalty points/)
+  })
+
   it("updates the customer balance by subtracting redeemed and adding earned points", () => {
     expect(updateLoyaltyPointBalance(100, 30, 12)).toBe(82)
     expect(() => updateLoyaltyPointBalance(5, 6, 2)).toThrow(/enough loyalty points/)
