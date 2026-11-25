@@ -22,7 +22,7 @@ import {
   X,
   LayoutDashboard,
   LogOut,
-  Bot,
+  Search,
   CheckCircle2,
   Clock3,
   CalendarCheck,
@@ -98,7 +98,7 @@ const navigationGroups = [
     items: [
       { label: "Reports & Analytics", path: "/reports", icon: CircleDollarSign },
       { label: "Operations Reports", path: "/operations-reports", icon: ClipboardList },
-      { label: "AI Assistant", path: "/ai", icon: Bot },
+      { label: "ERP Assistant", path: "/ai", icon: Search },
       { label: "Settings", path: "/settings", icon: SettingsIcon },
     ],
   },
