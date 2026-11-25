@@ -182,7 +182,6 @@ export default function AppLayout() {
     sales,
     cloudSyncStatus,
     cloudSyncError,
-    cloudLastSavedAt,
     syncCloudNow,
     resolveCloudSyncConflict,
   } = useERP()
@@ -488,26 +487,16 @@ export default function AppLayout() {
 
             <GlobalERPSearch />
             <div className="flex items-center gap-2">
-              {cloudSyncStatus === "error" ? (
+              {cloudSyncStatus === "error" && (
                 <button
                   type="button"
                   onClick={retryCloudSave}
-                  title={cloudSyncError || "The latest ERP changes could not be confirmed in the cloud."}
+                  title={cloudSyncError || "The latest ERP changes could not be confirmed."}
                   className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
                 >
                   <AlertTriangle size={14} />
                   Sync issue · Retry
                 </button>
-              ) : (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  title={cloudLastSavedAt ? `Last confirmed save: ${new Date(cloudLastSavedAt).toLocaleString()}` : "Waiting for the first confirmed cloud save"}
-                  className="hidden sm:flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-slate-500 dark:text-slate-400"
-                >
-                  <span className={`h-2 w-2 rounded-full ${cloudSyncStatus === "saving" ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`} />
-                  {cloudSyncStatus === "saving" ? "Saving…" : "Cloud saved"}
-                </div>
               )}
               <div className="relative">
                 <button
