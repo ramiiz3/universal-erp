@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   calculateLoyaltyPointsEarned,
+  calculateLoyaltyReturnAdjustment,
   updateLoyaltyPointBalance,
   validateLoyaltyRedemption,
 } from "./loyaltyProgram"
@@ -92,6 +93,40 @@ describe("pharmacy customer loyalty", () => {
       isRegisteredCustomer: true,
       isSettledSale: true,
     })).toThrow(/positive currency value/)
+  })
+
+
+  it("reverses and restores loyalty points cumulatively across partial returns", () => {
+    const first = calculateLoyaltyReturnAdjustment({
+      saleSubtotal: 100,
+      cumulativeReturnedSubtotal: 40,
+      pointsEarnedOnSale: 10,
+      pointsRedeemedOnSale: 20,
+      pointsEarnedAlreadyReversed: 0,
+      pointsRedeemedAlreadyRestored: 0,
+    })
+    expect(first).toEqual({ pointsEarnedReversed: 4, pointsRedeemedRestored: 8 })
+
+    const second = calculateLoyaltyReturnAdjustment({
+      saleSubtotal: 100,
+      cumulativeReturnedSubtotal: 100,
+      pointsEarnedOnSale: 10,
+      pointsRedeemedOnSale: 20,
+      pointsEarnedAlreadyReversed: first.pointsEarnedReversed,
+      pointsRedeemedAlreadyRestored: first.pointsRedeemedRestored,
+    })
+    expect(second).toEqual({ pointsEarnedReversed: 6, pointsRedeemedRestored: 12 })
+  })
+
+  it("does not restore or reverse points beyond the original sale balance", () => {
+    expect(calculateLoyaltyReturnAdjustment({
+      saleSubtotal: 100,
+      cumulativeReturnedSubtotal: 200,
+      pointsEarnedOnSale: 10,
+      pointsRedeemedOnSale: 20,
+      pointsEarnedAlreadyReversed: 10,
+      pointsRedeemedAlreadyRestored: 20,
+    })).toEqual({ pointsEarnedReversed: 0, pointsRedeemedRestored: 0 })
   })
 
   it("updates the customer balance by subtracting redeemed and adding earned points", () => {
