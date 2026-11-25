@@ -57,7 +57,7 @@
 
 /* Balanced product finder and invoice workspace */
 .pos-layout {
-  grid-template-columns: minmax(330px, 1fr) minmax(0, 1.82fr);
+  grid-template-columns: minmax(350px, 1fr) minmax(0, 1.65fr);
   align-items:start;
   gap:16px;
 }
@@ -354,15 +354,29 @@
 .dark .pos-page .pos-subheader { color:#b6c8bb; }
 .dark .pos-page .pos-invoice-remove:hover { background:#402321; }
 .dark .pos-page .bg-amber-50 { background:#3b3017; }
+.dark .pos-page .bg-emerald-50,
+.dark .pos-page .bg-emerald-50\\/40 { background:#173927; }
+.dark .pos-page .bg-emerald-50\\/50,
+.dark .pos-page .bg-emerald-50\\/70 { background:#173927; }
+.dark .pos-page .bg-red-50 { background:#402321; }
+.dark .pos-page .text-emerald-800,
+.dark .pos-page .text-emerald-700 { color:#a8e0ba !important; }
+.dark .pos-page .text-emerald-900 { color:#c9eed4 !important; }
+.dark .pos-page .text-amber-700,
 .dark .pos-page .text-amber-800,
-.dark .pos-page .text-amber-900 { color:#f4d58a; }
+.dark .pos-page .text-amber-900 { color:#f4d58a !important; }
+.dark .pos-page .text-red-600,
+.dark .pos-page .text-red-700 { color:#ffaaa3 !important; }
+.dark .pos-page .border-emerald-100,
+.dark .pos-page .border-emerald-200,
+.dark .pos-page .border-amber-200 { border-color:var(--pos-border); }
 
 /* Responsive checkout */
 @container pos-sale (max-width:900px) {
   .pos-uom-panels { grid-template-columns:minmax(0,1fr); }
 }
 @media (min-width:1600px) {
-  .pos-layout { grid-template-columns:minmax(360px,1fr) minmax(0,1.82fr); gap:18px; }
+  .pos-layout { grid-template-columns:minmax(400px,1fr) minmax(0,1.7fr); gap:18px; }
 }
 @media (max-width:1279px) {
   .pos-layout { grid-template-columns:minmax(0,1fr); }
