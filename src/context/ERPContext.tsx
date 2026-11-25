@@ -248,9 +248,6 @@ export type CardPaymentOption =
   | "Apple Pay"
   | "Google Pay"
   | "Samsung Pay"
-  | "Emirates NBD Pay"
-  | "Alipay+"
-  | "WeChat Pay"
   | "Other / Not listed"
 
 export type SaleItemCostAllocation = {
