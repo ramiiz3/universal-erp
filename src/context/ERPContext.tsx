@@ -68,6 +68,7 @@ import BackupRestorePanel from "../components/BackupRestorePanel"
 import { getERPSettings } from "../lib/erpSettings"
 import {
   calculateLoyaltyPointsEarned,
+  calculateLoyaltyReturnAdjustment,
   updateLoyaltyPointBalance,
   validateLoyaltyRedemption,
 } from "../lib/loyaltyProgram"
@@ -3008,7 +3009,22 @@ export function ERPProvider({
 
   function createSalesReturn(input: CreateSalesReturnInput): SalesReturn {
     const sale = store.sales.find((item) => item.id === input.saleId)
-    const salesReturn = buildSalesReturn(input, sale, store.products, store.salesReturns ?? [])
+    const existingReturns = store.salesReturns ?? []
+    const salesReturn = buildSalesReturn(input, sale, store.products, existingReturns)
+    const priorReturnsForSale = existingReturns.filter((record) => record.saleId === input.saleId)
+    const cumulativeReturnedSubtotal = priorReturnsForSale.reduce((sum, record) => sum + record.subtotalAmount, 0) + salesReturn.subtotalAmount
+    const pointsAlreadyReversed = priorReturnsForSale.reduce((sum, record) => sum + (record.loyaltyPointsEarnedReversed ?? 0), 0)
+    const pointsAlreadyRestored = priorReturnsForSale.reduce((sum, record) => sum + (record.loyaltyPointsRedeemedRestored ?? 0), 0)
+    const loyaltyAdjustment = calculateLoyaltyReturnAdjustment({
+      saleSubtotal: sale?.subtotal ?? 0,
+      cumulativeReturnedSubtotal,
+      pointsEarnedOnSale: sale?.loyaltyPointsEarned ?? 0,
+      pointsRedeemedOnSale: sale?.loyaltyPointsRedeemed ?? 0,
+      pointsEarnedAlreadyReversed: pointsAlreadyReversed,
+      pointsRedeemedAlreadyRestored: pointsAlreadyRestored,
+    })
+    salesReturn.loyaltyPointsEarnedReversed = loyaltyAdjustment.pointsEarnedReversed
+    salesReturn.loyaltyPointsRedeemedRestored = loyaltyAdjustment.pointsRedeemedRestored
     const updatedLots = store.inventoryLots.map((lot) => ({ ...lot }))
     const movements: InventoryMovement[] = []
 
@@ -3053,8 +3069,25 @@ export function ERPProvider({
       ? { ...item, status: "Refunded" as const }
       : item)
 
+    const returnedCustomer = sale?.customerId
+      ? store.customers.find((customer) => customer.id === sale.customerId)
+      : undefined
+    const nextCustomers = returnedCustomer && (loyaltyAdjustment.pointsEarnedReversed > 0 || loyaltyAdjustment.pointsRedeemedRestored > 0)
+      ? store.customers.map((customer) => customer.id === returnedCustomer.id
+          ? {
+              ...customer,
+              loyaltyPoints: updateLoyaltyPointBalance(
+                customer.loyaltyPoints ?? 0,
+                loyaltyAdjustment.pointsEarnedReversed,
+                loyaltyAdjustment.pointsRedeemedRestored,
+              ),
+            }
+          : customer)
+      : store.customers
+
     persistStore({
       ...store,
+      customers: nextCustomers,
       sales: nextSales,
       salesReturns: nextReturns,
       inventoryLots: updatedLots,
