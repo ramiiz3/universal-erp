@@ -118,6 +118,11 @@ export default function POS() {
       warehouses.find((item) => item.active)?.id ?? "",
   )
   const [customerId, setCustomerId] = useState("")
+  const [walkInName, setWalkInName] = useState("")
+  const [walkInPhone, setWalkInPhone] = useState("")
+  const [walkInEmail, setWalkInEmail] = useState("")
+  const [invoiceNotes, setInvoiceNotes] = useState("")
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState("0")
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>(() => {
       const settings = getERPSettings()
@@ -223,12 +228,26 @@ export default function POS() {
   )
   const lotPricedLines = saleAllocationPreview.lines
 
+  const selectedCustomer = customers.find((customer) => customer.id === customerId)
+  const loyaltySettings = erpSettings.loyalty
+  const requestedLoyaltyPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
+  const effectiveLoyaltyPointsRedeemed = loyaltySettings.enabled && paymentMethod !== "Credit" && selectedCustomer
+    ? Math.min(requestedLoyaltyPoints, selectedCustomer.loyaltyPoints ?? 0)
+    : 0
+  const loyaltyDiscountEstimate = Number((effectiveLoyaltyPointsRedeemed * loyaltySettings.currencyPerPoint).toFixed(2))
+
   const saleTotals = useMemo(
-    () => calculateLotSaleTotals(lotPricedLines, Number(discount) || 0),
-    [discount, lotPricedLines],
+    () => calculateLotSaleTotals(
+      lotPricedLines,
+      (Number(discount) || 0) + loyaltyDiscountEstimate,
+    ),
+    [discount, lotPricedLines, loyaltyDiscountEstimate],
   )
   const { subtotal, discount: discountAmount, vat: vatAmount } = saleTotals
   const total = Math.max(0, Number(saleTotals.total.toFixed(2)))
+  const estimatedLoyaltyPoints = loyaltySettings.enabled && selectedCustomer && paymentMethod !== "Credit"
+    ? Math.max(0, Math.floor(Math.max(0, subtotal - discountAmount) * loyaltySettings.pointsPerCurrencyUnit))
+    : 0
 
   function handleBarcode(code: string) {
     const cleanCode = code.trim()
@@ -496,6 +515,11 @@ export default function POS() {
     setCart([])
     setUomPickerLineId(null)
     setCustomerId("")
+    setWalkInName("")
+    setWalkInPhone("")
+    setWalkInEmail("")
+    setInvoiceNotes("")
+    setLoyaltyPointsToRedeem("0")
     setPaymentMethod("Cash")
     setDiscount("")
     setCashTendered("")
@@ -528,6 +552,26 @@ export default function POS() {
       setError("Select a customer before completing a credit sale.")
       return
     }
+    if (requestedLoyaltyPoints > 0 && !loyaltySettings.enabled) {
+      setError("The loyalty programme is not enabled. Ask the owner to enable it in Settings.")
+      return
+    }
+    if (requestedLoyaltyPoints > 0 && !selectedCustomer) {
+      setError("Select a registered customer before redeeming loyalty points.")
+      return
+    }
+    if (requestedLoyaltyPoints > 0 && paymentMethod === "Credit") {
+      setError("Loyalty points can only be redeemed on a settled sale.")
+      return
+    }
+    if (requestedLoyaltyPoints > (selectedCustomer?.loyaltyPoints ?? 0)) {
+      setError("The selected customer does not have enough loyalty points.")
+      return
+    }
+    if ((Number(discount) || 0) + loyaltyDiscountEstimate > subtotal + 0.001) {
+      setError("Discount and loyalty redemption cannot exceed the sale subtotal.")
+      return
+    }
 
     let cashTenderedAmount: number | undefined
     if (paymentMethod === "Cash") {
@@ -556,9 +600,14 @@ export default function POS() {
           packageId: item.packageId,
         })),
         customerId: customerId || null,
+        customerName: selectedCustomer?.name || walkInName.trim() || "Walk-in Customer",
+        customerPhone: selectedCustomer?.phone || walkInPhone.trim(),
+        customerEmail: selectedCustomer?.email || walkInEmail.trim(),
+        notes: invoiceNotes.trim(),
+        loyaltyPointsRedeemed: effectiveLoyaltyPointsRedeemed,
         paymentMethod,
         cashTendered: cashTenderedAmount,
-        discount: discountAmount,
+        discount: Number(discount) || 0,
       })
 
       setSuccessInvoice(sale.invoiceNumber)
