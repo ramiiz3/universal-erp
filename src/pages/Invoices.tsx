@@ -15,6 +15,7 @@ import {
 import { useERP, type Sale } from "../context/ERPContext"
 import { takePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
 import { getERPSettings } from "../lib/erpSettings"
+import { getSalePaymentDisplayLabel } from "../lib/paymentDisplay"
 
 function getInvoiceBusinessProfile() {
   const settings = getERPSettings()
@@ -408,7 +409,7 @@ async function createInvoicePdf(sale: Sale) {
   pdf.setTextColor(...text)
   pdf.setFont("helvetica", "bold")
   pdf.setFontSize(10)
-  pdf.text(sale.paymentMethod, rightCardX + 7, y + 17)
+  pdf.text(getSalePaymentDisplayLabel(sale), rightCardX + 7, y + 17)
 
   y += cardHeight + 10
 
@@ -614,7 +615,7 @@ export default function Invoices() {
 
     const subject = encodeURIComponent(`Invoice ${sale.invoiceNumber} - ${invoiceProfile.businessName}`)
     const body = encodeURIComponent(
-      `Dear ${sale.customerName},\n\nPlease find your invoice details below.\n\nInvoice: ${sale.invoiceNumber}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}\n\nRegards,\n${invoiceProfile.businessName}`,
+      `Dear ${sale.customerName},\n\nPlease find your invoice details below.\n\nInvoice: ${sale.invoiceNumber}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${getSalePaymentDisplayLabel(sale)}\n\nRegards,\n${invoiceProfile.businessName}`,
     )
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`
@@ -628,7 +629,7 @@ export default function Invoices() {
     }
 
     const message = encodeURIComponent(
-      `Invoice ${sale.invoiceNumber} from ${invoiceProfile.businessName}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${sale.paymentMethod}`,
+      `Invoice ${sale.invoiceNumber} from ${invoiceProfile.businessName}\nAmount: AED ${sale.total.toFixed(2)}\nPayment: ${getSalePaymentDisplayLabel(sale)}`,
     )
 
     const number = whatsapp.replace(/[^\d]/g, "")
@@ -727,7 +728,7 @@ export default function Invoices() {
                       <td className="px-5 py-4 text-sm text-slate-600">{formatDate(sale.createdAt)}</td>
                       <td className="px-5 py-4">
                         <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                          {sale.paymentMethod}
+                          {getSalePaymentDisplayLabel(sale)}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -909,7 +910,7 @@ export default function Invoices() {
                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#2F9E63]">
                       Payment / الدفع
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-[#17221D]">{sale.paymentMethod}</p>
+                    <p className="mt-2 text-sm font-semibold text-[#17221D]">{getSalePaymentDisplayLabel(sale)}</p>
                   </div>
                 </div>
               </div>
@@ -963,7 +964,7 @@ export default function Invoices() {
                     Payment Summary / ملخص الدفع
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
-                    Payment Method / طريقة الدفع: {sale.paymentMethod}
+                    Payment Method / طريقة الدفع: {getSalePaymentDisplayLabel(sale)}
                   </p>
                   {sale.discount > 0 && (
                     <p className="mt-1 text-sm text-slate-600">Discount / الخصم: AED {sale.discount.toFixed(2)}</p>
@@ -1169,7 +1170,7 @@ export default function Invoices() {
                 </div>
                 <div className="thermal-payment-row">
                   <span>Payment Mode</span>
-                  <span>{sale.paymentMethod}</span>
+                  <span>{getSalePaymentDisplayLabel(sale)}</span>
                 </div>
                 <div className="thermal-payment-row">
                   <span>Associate</span>
@@ -1229,7 +1230,7 @@ export default function Invoices() {
               {sale.customerPhone && <div className="thermal-meta-row compact-meta"><span>Mobile: {sale.customerPhone}</span></div>}
               {sale.customerEmail && <div className="thermal-meta-row compact-meta"><span>Email: {sale.customerEmail}</span></div>}
               <div className="thermal-meta-row compact-meta">
-                <span>Payment / الدفع: {sale.paymentMethod}</span>
+                <span>Payment / الدفع: {getSalePaymentDisplayLabel(sale)}</span>
               </div>
 
               {sale.items.map((item) => (
