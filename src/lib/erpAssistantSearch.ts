@@ -121,6 +121,7 @@ const STOP_WORDS = new Set([
   "warehouse", "warehouses", "movement", "movements", "return", "returns",
   "reconciliation", "requisitions", "requisition", "orders", "order",
   "count", "counts", "register", "registers", "journal", "journals",
+  "amount", "amounts", "number", "numbers", "with", "from", "us",
 ])
 
 function localStartOfDay(date: Date): Date {
@@ -368,7 +369,7 @@ export function searchERPAssistant(
   const lowStockQuery = /\blow stock\b|\bout of stock\b|\bbelow reorder\b|\breorder\b/.test(normalizedQuery)
   const expiryQuery = /\bexpir|\bexpired\b|\bexpiring\b|\bbatch\b/.test(normalizedQuery)
   const range = parseDateRange(q, now)
-  const terms = remainingTerms(q)
+  const terms = remainingTerms(q).filter((term) => !(range && expiryQuery && /^\\d{1,3}$/.test(term)))
 
   const matched = index.filter((record) => {
     if (groups && !groups.includes(record.category)) return false
@@ -390,9 +391,12 @@ export function searchERPAssistant(
   })
 
   const onlySales = Boolean(groups?.length) && groups?.every((item) => item === "sales")
+  const onlyPurchases = Boolean(groups?.length) && groups?.every((item) => item === "purchases")
   const totalAmount = onlySales && matched.some((record) => record.type === "Sale / invoice")
     ? matched.filter((record) => record.type === "Sale / invoice").reduce((sum, record) => sum + (record.amount ?? 0), 0)
-    : null
+    : onlyPurchases && matched.some((record) => record.type === "Purchase")
+      ? matched.filter((record) => record.type === "Purchase").reduce((sum, record) => sum + (record.amount ?? 0), 0)
+      : null
 
   return {
     results: matched.slice(0, 100),
