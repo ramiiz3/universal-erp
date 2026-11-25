@@ -25,6 +25,7 @@ import {
   isInventoryLotExpired,
   sortInventoryLotsByFEFO,
 } from "../lib/saleLotAllocation"
+import "./POS.css"
 
 type CartItem = {
   lineId: string
@@ -629,9 +630,9 @@ export default function POS() {
   }
 
   return (
-    <section className="min-h-full bg-slate-50 p-3 md:p-5">
-      <div className="mx-auto max-w-[1800px] space-y-4">
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <section className="pos-page min-h-full p-3 md:p-5">
+      <div className="pos-shell mx-auto max-w-[1900px] space-y-4">
+        <header className="pos-header flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 md:px-5 md:py-4">
           <div className="flex items-center gap-3">
             <ShoppingCart className="h-6 w-6 text-slate-700" />
             <div>
@@ -639,7 +640,11 @@ export default function POS() {
               <p className="text-xs text-slate-500">Scan or search a medicine, then select its UOM directly in the invoice row.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="pos-header-stats" aria-live="polite">
+            <div><span>Items in sale</span><strong>{cart.reduce((sum, item) => sum + item.quantity, 0)}</strong></div>
+            <div><span>Sale total</span><strong>AED {total.toFixed(2)}</strong></div>
+          </div>
+          <div className="pos-header-actions flex flex-wrap items-center gap-2">
             <label className="text-xs font-semibold text-slate-600" htmlFor="pos-warehouse">Warehouse</label>
             <select
               id="pos-warehouse"
@@ -674,10 +679,10 @@ export default function POS() {
           </div>
         )}
 
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(290px,0.85fr)_minmax(0,1.65fr)]">
-        <div className="space-y-4 xl:sticky xl:top-4">
-        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_minmax(320px,2fr)_auto]">
+        <div className="pos-layout grid items-start gap-4">
+        <div className="pos-products-column min-w-0 space-y-4">
+        <section className="pos-card rounded-xl border bg-white p-3 shadow-sm md:p-4">
+          <div className="pos-search-tools grid gap-3">
             <div>
               <label htmlFor="pos-barcode" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Barcode</label>
               <div className="relative">
@@ -718,7 +723,7 @@ export default function POS() {
                   setError("")
                   setCameraOpen(true)
                 }}
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 lg:w-auto"
+                className="pos-camera-button inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold"
               >
                 <Camera className="h-4 w-4" />
                 Camera Scan
@@ -726,8 +731,8 @@ export default function POS() {
             </div>
           </div>
 
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-            <div className="flex items-center justify-between bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="pos-product-browser mt-4 overflow-hidden rounded-xl border">
+            <div className="pos-subheader flex items-center justify-between px-3 py-3 text-xs font-semibold uppercase tracking-wide">
               <span>{search.trim() ? "Search results" : "Quick Add Products"}</span>
               <span>{search.trim() ? filteredProducts.length : filteredProducts.filter((product) =>
                 getSaleableInventoryLots(inventoryLots, product.id, warehouseId)
@@ -735,7 +740,7 @@ export default function POS() {
               ).length} product(s)</span>
             </div>
             {filteredProducts.length > 0 ? (
-              <div className="grid max-h-[calc(100vh-340px)] grid-cols-2 gap-2 overflow-y-auto p-2 sm:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
+              <div className="pos-products-grid grid max-h-[min(58vh,680px)] min-h-[260px] grid-cols-2 gap-2 overflow-y-auto p-3">
                 {(search.trim()
                   ? filteredProducts.slice(0, 12)
                   : filteredProducts.filter((product) =>
@@ -753,7 +758,7 @@ export default function POS() {
                       onClick={() => {
                         if (addToCart(product, undefined, 1, true)) setSearch("")
                       }}
-                      className="flex min-h-[116px] flex-col justify-between rounded-lg border border-slate-200 bg-white p-2.5 text-left shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50/60 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
+                      className="pos-product-card flex min-h-[132px] flex-col justify-between rounded-xl border bg-white p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
@@ -762,7 +767,7 @@ export default function POS() {
                       </span>
                       <span className="mt-2 flex items-center justify-between gap-1">
                         <span className="truncate text-[11px] font-medium text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
-                        <span className="rounded-md bg-emerald-700 px-2 py-1 text-[10px] font-semibold text-white">Add</span>
+                        <span className="pos-add-tag rounded-lg px-2.5 py-1.5 text-[10px] font-bold">Add</span>
                       </span>
                     </button>
                   )
@@ -784,9 +789,9 @@ export default function POS() {
         </section>
         </div>
 
-        <div className="min-w-0 space-y-4 xl:sticky xl:top-4">
-        <section className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div className="pos-sale-column min-w-0 space-y-4">
+        <section className="pos-card pos-sale-card overflow-visible rounded-xl border bg-white shadow-sm">
+          <div className="pos-sale-heading flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 md:px-5">
             <div>
               <h2 className="text-base font-semibold text-slate-900">Current Sale</h2>
               <p className="text-xs text-slate-500">{cart.length} line(s) · Select a product above or scan a barcode, then choose its UOM in the row.</p>
@@ -797,27 +802,23 @@ export default function POS() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-xs 2xl:text-sm">
-              <thead className="bg-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+          <div className="pos-cart-scroll overflow-x-auto">
+            <table className="pos-cart-table w-full min-w-[800px] border-collapse text-xs">
+              <thead className="pos-cart-head text-left text-[10px] font-bold uppercase tracking-wide">
                 <tr>
-                  <th className="border-b border-slate-200 px-3 py-3">Code</th>
-                  <th className="border-b border-slate-200 px-3 py-3">Product</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">Qty</th>
-                  <th className="border-b border-slate-200 px-3 py-3">UOM</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">Price</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">P_Qty</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">Amount</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">VAT%</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">VAT</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-right">Line Total</th>
-                  <th className="border-b border-slate-200 px-3 py-3 text-center">Action</th>
+                  <th className="px-3 py-3">Product details</th>
+                  <th className="px-2 py-3 text-right">Qty</th>
+                  <th className="px-2 py-3">Unit</th>
+                  <th className="px-3 py-3 text-right">Price / amount</th>
+                  <th className="px-2 py-3 text-right">After sale</th>
+                  <th className="px-2 py-3 text-right">VAT</th>
+                  <th className="px-3 py-3 text-right">Line total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-16 text-center">
+                    <td colSpan={7} className="px-4 py-16 text-center">
                       <ShoppingCart className="mx-auto h-9 w-9 text-slate-300" />
                       <p className="mt-3 font-semibold text-slate-700">Ready to start billing</p>
                       <p className="mt-1 text-xs text-slate-500">Choose a medicine from Quick Add Products above, type its name in search, or scan its barcode. It will appear here for quantity and UOM selection.</p>
@@ -861,23 +862,27 @@ export default function POS() {
                     return (
                       <Fragment key={item.lineId}>
                         <tr className="align-middle hover:bg-slate-50/70">
-                          <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600">{item.product.sku || item.product.barcode || "—"}</td>
-                          <td className="min-w-[210px] px-3 py-3">
-                            <p className="font-semibold text-slate-900">{item.product.name}</p>
-                            <p className="mt-0.5 text-[11px] text-slate-500">{item.product.genericName || item.product.category}</p>
-                            {itemLines.length > 0 ? (
-                              <div className="mt-1 space-y-0.5 text-[10px] text-slate-500">
-                                {itemLines.map((line, index) => (
-                                  <p key={`${item.lineId}-${line.lotId}-${index}`}>
-                                    FEFO: {line.supplierName || "Supplier not recorded"} · {line.batch || "No batch"} · Exp {line.expiry || "not recorded"} · {formatQuantity(line.quantity / item.conversionFactor)} {item.sellingUnit}
-                                  </p>
-                                ))}
+                          <td className="pos-invoice-product px-3 py-3">
+                            <div className="flex min-w-0 flex-col gap-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="min-w-0 truncate text-sm font-bold text-slate-900">{item.product.name}</p>
+                                <span className="pos-invoice-code rounded-md px-2 py-0.5 text-[9px] font-semibold">{item.product.sku || item.product.barcode || "No code"}</span>
                               </div>
-                            ) : (
-                              <p className="mt-1 text-[10px] text-amber-700">Stock batch allocation pending</p>
-                            )}
+                              <p className="text-[10px] text-slate-500">{item.product.genericName || item.product.category}</p>
+                              {itemLines.length > 0 ? (
+                                <div className="pos-invoice-fefo space-y-0.5">
+                                  {itemLines.map((line, index) => (
+                                    <p key={`${item.lineId}-${line.lotId}-${index}`}>
+                                      FEFO · {line.supplierName || "Supplier not recorded"} · {line.batch || "No batch"} · Exp {line.expiry || "not recorded"} · {formatQuantity(line.quantity / item.conversionFactor)} {item.sellingUnit}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] font-medium text-amber-700">Stock batch allocation pending</p>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-3 py-3 text-right">
+                          <td className="px-2 py-3 text-right">
                             <input
                               aria-label={`Quantity of ${item.product.name}`}
                               type="number"
@@ -888,44 +893,50 @@ export default function POS() {
                                 const raw = event.target.value
                                 if (/^\d+$/.test(raw)) updateQuantity(item.lineId, Number(raw))
                               }}
-                              className="h-9 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500"
+                              className="pos-invoice-qty h-10 w-full max-w-[68px] rounded-lg border bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:border-emerald-500"
                             />
                           </td>
-                          <td className="relative px-3 py-3">
+                          <td className="relative px-2 py-3">
                             <button
                               type="button"
                               aria-expanded={uomPickerLineId === item.lineId}
                               onClick={() => setUomPickerLineId((current) => current === item.lineId ? null : item.lineId)}
-                              className={`inline-flex min-w-[104px] items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs font-bold ${uomPickerLineId === item.lineId ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-white text-slate-800 hover:border-emerald-500"}`}
+                              className={`pos-invoice-uom inline-flex w-full min-w-0 items-center justify-between gap-1 rounded-lg border px-2 py-2.5 text-xs font-bold ${uomPickerLineId === item.lineId ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-800 hover:border-emerald-500"}`}
                             >
-                              {item.sellingUnit}
-                              <ChevronDown className="h-3.5 w-3.5" />
+                              <span className="truncate">{item.sellingUnit}</span>
+                              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                             </button>
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-800">AED {item.unitPrice.toFixed(2)}</td>
                           <td className="px-3 py-3 text-right">
-                            <span className={pQty > 0 ? "font-semibold text-emerald-700" : "font-medium text-slate-400"}>{formatQuantity(pQty)}</span>
-                            <span className="ml-1 text-[10px] text-slate-400">{item.sellingUnit}</span>
+                            <p className="whitespace-nowrap text-sm font-semibold text-slate-800">AED {item.unitPrice.toFixed(2)}</p>
+                            <p className="mt-1 whitespace-nowrap text-[10px] text-slate-500">Amount · AED {effectiveAmount.toFixed(2)}</p>
                           </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right text-slate-700">AED {effectiveAmount.toFixed(2)}</td>
-                          <td className="px-3 py-3 text-right text-slate-600">{vatRate.toFixed(2)}%</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right text-slate-600">AED {lineVat.toFixed(2)}</td>
-                          <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-slate-900">AED {lineTotal.toFixed(2)}</td>
-                          <td className="px-3 py-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => removeItem(item.lineId)}
-                              aria-label={`Remove ${item.product.name}`}
-                              className="rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                          <td className="px-2 py-3 text-right">
+                            <span className={pQty > 0 ? "inline-flex rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700" : "inline-flex rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-400"}>{formatQuantity(pQty)}</span>
+                            <span className="mt-1 block text-[10px] text-slate-400">{item.sellingUnit}</span>
+                          </td>
+                          <td className="px-2 py-3 text-right">
+                            <p className="whitespace-nowrap text-xs font-semibold text-slate-700">{vatRate.toFixed(2)}%</p>
+                            <p className="mt-1 whitespace-nowrap text-[10px] text-slate-500">AED {lineVat.toFixed(2)}</p>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <p className="whitespace-nowrap text-sm font-extrabold text-emerald-800">AED {lineTotal.toFixed(2)}</p>
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.lineId)}
+                                aria-label={`Remove ${item.product.name}`}
+                                className="pos-invoice-remove rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
 
                         {uomPickerLineId === item.lineId && (
                           <tr className="bg-emerald-50/40">
-                            <td colSpan={11} className="px-3 py-3">
+                            <td colSpan={7} className="px-3 py-3">
                               <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
                                 <section className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
                                   <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
@@ -1029,12 +1040,18 @@ export default function POS() {
               {cart.length > 0 && (
                 <tfoot className="bg-slate-50">
                   <tr className="font-semibold text-slate-800">
-                    <td colSpan={6} className="px-3 py-3 text-right">Subtotal</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right">AED {subtotal.toFixed(2)}</td>
-                    <td></td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right">AED {vatAmount.toFixed(2)}</td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-slate-900">AED {saleTotals.total.toFixed(2)}</td>
-                    <td></td>
+                    <td colSpan={5} className="px-3 py-4 text-right">
+                      <span className="mr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Subtotal</span>
+                      <span className="text-sm font-bold text-slate-800">AED {subtotal.toFixed(2)}</span>
+                    </td>
+                    <td className="px-2 py-4 text-right">
+                      <span className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500">VAT</span>
+                      <span className="whitespace-nowrap text-xs font-bold text-slate-700">AED {vatAmount.toFixed(2)}</span>
+                    </td>
+                    <td className="px-3 py-4 text-right">
+                      <span className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500">Total</span>
+                      <span className="whitespace-nowrap text-sm font-extrabold text-emerald-800">AED {saleTotals.total.toFixed(2)}</span>
+                    </td>
                   </tr>
                 </tfoot>
               )}
@@ -1047,8 +1064,8 @@ export default function POS() {
           )}
         </section>
 
-        <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3">
-          <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+        <section className="pos-checkout grid gap-3 rounded-xl border bg-white p-3 md:p-4">
+          <div className="pos-checkout-fields grid gap-3 rounded-xl border p-4 md:grid-cols-2">
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Customer
               <select
@@ -1173,7 +1190,7 @@ export default function POS() {
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="pos-total-card rounded-xl border p-4 md:p-5">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>AED {subtotal.toFixed(2)}</span></div>
               <div className="flex justify-between text-slate-600"><span>Discount & loyalty</span><span>- AED {discountAmount.toFixed(2)}</span></div>
@@ -1187,7 +1204,7 @@ export default function POS() {
               type="button"
               onClick={handleCompleteSale}
               disabled={cart.length === 0 || saleAllocationPreview.unallocated.length > 0 || enabledPaymentOptions.length === 0}
-              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className="pos-complete-sale mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
             >
               <CheckCircle2 className="h-5 w-5" /> Complete Sale & Generate Invoice
             </button>
