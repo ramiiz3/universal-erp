@@ -65,6 +65,7 @@ import {
 import { buildSalesReturn, isSaleFullyReturned, type CreateSalesReturnInput, type SalesReturn } from "../lib/salesReturns"
 import { buildPurchaseReturn, type CreatePurchaseReturnInput, type PurchaseReturn } from "../lib/purchaseReturns"
 import BackupRestorePanel from "../components/BackupRestorePanel"
+import { getERPSettings } from "../lib/erpSettings"
 
 import { DEFAULT_CHART_OF_ACCOUNTS, buildChartOfAccount, validateChartOfAccountInput, validateChartAccountStatus, type ChartOfAccount, type ChartOfAccountInput, type ChartAccountStatus } from "../lib/chartOfAccounts"
 import { buildJournalEntry, postJournalEntry as postJournalEntryRecord, type JournalEntry, type JournalEntryInput } from "../lib/journalEntries"
@@ -219,6 +220,7 @@ export type Customer = {
   email: string
   whatsapp: string
   status: "Active" | "Inactive"
+  loyaltyPoints?: number
 }
 
 export type PaymentMethod =
@@ -280,6 +282,12 @@ export type Sale = {
   createdAt: string
   customerId: string | null
   customerName: string
+  customerPhone?: string
+  customerEmail?: string
+  notes?: string
+  loyaltyPointsEarned?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscount?: number
   paymentMethod: PaymentMethod
   cashTendered?: number
   changeDue?: number
@@ -347,6 +355,11 @@ type CompleteSaleInput = {
     requestId?: string
   }[]
   customerId?: string | null
+  customerName?: string
+  customerPhone?: string
+  customerEmail?: string
+  notes?: string
+  loyaltyPointsRedeemed?: number
   paymentMethod: PaymentMethod
   cashTendered?: number
   discount?: number
@@ -3887,7 +3900,41 @@ export function ERPProvider({
       )
     }
 
-    const totals = calculateLotSaleTotals(allocation.lines, discount)
+    const customer =
+      input.customerId
+        ? store.customers.find((item) => item.id === input.customerId)
+        : undefined
+    if (input.customerId && !customer) {
+      throw new Error("The selected customer could not be found.")
+    }
+
+    const loyaltySettings = getERPSettings().loyalty
+    const loyaltyPointsRedeemed = Math.max(0, Math.floor(input.loyaltyPointsRedeemed ?? 0))
+    if (loyaltyPointsRedeemed > 0) {
+      if (!loyaltySettings.enabled) {
+        throw new Error("The loyalty programme is not enabled in Settings.")
+      }
+      if (!customer) {
+        throw new Error("Select a registered customer to redeem loyalty points.")
+      }
+      if (input.paymentMethod === "Credit") {
+        throw new Error("Loyalty points can only be redeemed on a settled sale.")
+      }
+      if (loyaltyPointsRedeemed > (customer.loyaltyPoints ?? 0)) {
+        throw new Error("The customer does not have enough loyalty points.")
+      }
+    }
+
+    const loyaltyDiscount = loyaltySettings.enabled
+      ? Number((loyaltyPointsRedeemed * Math.max(0, loyaltySettings.currencyPerPoint)).toFixed(2))
+      : 0
+    const totals = calculateLotSaleTotals(allocation.lines, discount + loyaltyDiscount)
+    if (totals.discount > totals.subtotal + 0.001) {
+      throw new Error("The combined discount and loyalty redemption cannot exceed the sale subtotal.")
+    }
+    const loyaltyPointsEarned = loyaltySettings.enabled && customer && input.paymentMethod !== "Credit"
+      ? Math.max(0, Math.floor(Math.max(0, totals.subtotal - totals.discount) * Math.max(0, loyaltySettings.pointsPerCurrencyUnit)))
+      : 0
     const cashSettlement = input.paymentMethod === "Cash"
       ? calculateCashSettlement(totals.total, input.cashTendered ?? totals.total)
       : null
@@ -3959,15 +4006,6 @@ export function ERPProvider({
       },
     )
 
-    const customer =
-      input.customerId
-        ? store.customers.find(
-            (item) =>
-              item.id ===
-              input.customerId,
-          )
-        : undefined
-
     const sale: Sale = {
       warehouseId: sellingWarehouse.id,
       warehouseName: sellingWarehouse.name,
@@ -3980,9 +4018,13 @@ export function ERPProvider({
         new Date().toISOString(),
       customerId:
         customer?.id ?? null,
-      customerName:
-        customer?.name ??
-        "Walk-in Customer",
+      customerName: input.customerName?.trim() || customer?.name || "Walk-in Customer",
+      customerPhone: input.customerPhone?.trim() || customer?.phone || "",
+      customerEmail: input.customerEmail?.trim() || customer?.email || "",
+      notes: input.notes?.trim() || "",
+      loyaltyPointsEarned,
+      loyaltyPointsRedeemed,
+      loyaltyDiscount,
       paymentMethod:
         input.paymentMethod,
       cashTendered: cashSettlement?.cashTendered,
@@ -4034,6 +4076,11 @@ export function ERPProvider({
         ...saleMovements,
         ...store.inventoryMovements,
       ],
+      customers: customer && loyaltySettings.enabled
+        ? store.customers.map((item) => item.id === customer.id
+            ? { ...item, loyaltyPoints: Math.max(0, (item.loyaltyPoints ?? 0) - loyaltyPointsRedeemed + loyaltyPointsEarned) }
+            : item)
+        : store.customers,
       sales: [
         sale,
         ...store.sales,
