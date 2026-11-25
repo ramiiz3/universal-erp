@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { CSSProperties } from "react"
 import {
   Barcode,
   Check,
@@ -415,7 +416,7 @@ export default function BarcodePrinting() {
       <div
         className="barcode-print-root"
         aria-hidden="true"
-        style={{ "--barcode-label-width": labelWidth + "mm", "--barcode-label-height": labelHeight + "mm" } as React.CSSProperties}
+        style={{ "--barcode-label-width": labelWidth + "mm", "--barcode-label-height": labelHeight + "mm" } as CSSProperties}
       >
         {printableLabels.map(({ item, copyIndex }) => (
           <PrintLabel
