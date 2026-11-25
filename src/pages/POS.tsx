@@ -803,7 +803,7 @@ export default function POS() {
           </div>
 
           <div className="pos-cart-scroll overflow-x-auto">
-            <table className="pos-cart-table w-full min-w-[800px] border-collapse text-xs">
+            <table className="pos-cart-table w-full min-w-[740px] border-collapse text-xs">
               <thead className="pos-cart-head text-left text-[10px] font-bold uppercase tracking-wide">
                 <tr>
                   <th className="px-3 py-3">Product details</th>
@@ -937,7 +937,7 @@ export default function POS() {
                         {uomPickerLineId === item.lineId && (
                           <tr className="bg-emerald-50/40">
                             <td colSpan={7} className="px-3 py-3">
-                              <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
+                              <div className="pos-uom-panels grid gap-4">
                                 <section className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
                                   <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
                                     <div>
@@ -1065,8 +1065,16 @@ export default function POS() {
         </section>
 
         <section className="pos-checkout grid gap-3 rounded-xl border bg-white p-3 md:p-4">
-          <div className="pos-checkout-fields grid gap-3 rounded-xl border p-4 md:grid-cols-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="pos-checkout-fields grid gap-3 rounded-xl border p-4 md:p-5 md:grid-cols-2">
+            <div className="pos-billing-title md:col-span-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">Checkout</p>
+                <h3 className="mt-1 text-base font-bold text-slate-900">Customer & payment</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Complete customer details and choose how this invoice will be settled.</p>
+              </div>
+              <span>STEP 02</span>
+            </div>
+            <label className="pos-customer-field md:col-span-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Customer
               <select
                 value={customerId}
@@ -1101,7 +1109,7 @@ export default function POS() {
                 </label>
               </div>
             )}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="pos-discount-notes md:col-span-2 grid gap-3">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Discount (AED)
                 <input
@@ -1127,7 +1135,7 @@ export default function POS() {
                 />
               </label>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+            <div className="pos-loyalty-panel rounded-xl border border-slate-200 bg-slate-50 p-3 md:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold text-slate-800">Loyalty programme</p>
@@ -1167,7 +1175,7 @@ export default function POS() {
                     key={method}
                     type="button"
                     onClick={() => setPaymentMethod(method)}
-                    className={`inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold ${paymentMethod === method ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                    className={`pos-payment-option inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold ${paymentMethod === method ? "is-selected border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
                     <Icon className="h-4 w-4" />{label}
                   </button>
@@ -1175,7 +1183,7 @@ export default function POS() {
               </div>
             </div>
             {paymentMethod === "Cash" && (
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <label className="pos-cash-field text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Cash received
                 <input
                   type="number"
