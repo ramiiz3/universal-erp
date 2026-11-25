@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import {
   Building2,
   Edit3,
+  History,
   Mail,
   Phone,
   Plus,
@@ -31,6 +32,9 @@ export default function Suppliers() {
   const {
     suppliers,
     purchases,
+    purchaseReturns,
+    inventoryLots,
+    products,
     createSupplier,
     updateSupplier,
     deleteSupplier,
@@ -39,6 +43,7 @@ export default function Suppliers() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [showForm, setShowForm] = useState(false)
+  const [historySupplier, setHistorySupplier] = useState<Supplier | null>(null)
   const [editingSupplier, setEditingSupplier] =
     useState<Supplier | null>(null)
   const [form, setForm] = useState<SupplierForm>(
@@ -142,6 +147,41 @@ export default function Suppliers() {
       }
     )
   }
+
+  const supplierHistory = useMemo(() => {
+    if (!historySupplier) return null
+    const supplierKey = historySupplier.name.trim().toLowerCase()
+    const supplierPurchases = purchases
+      .filter((purchase) =>
+        purchase.supplierId === historySupplier.id ||
+        (!purchase.supplierId && purchase.supplierName.trim().toLowerCase() === supplierKey),
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    const supplierReturns = purchaseReturns
+      .filter((record) =>
+        record.supplierId === historySupplier.id ||
+        record.supplierName.trim().toLowerCase() === supplierKey,
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    const linkedLotIds = new Set(
+      supplierPurchases.flatMap((purchase) => purchase.items.map((item) => item.lotId).filter((id): id is string => Boolean(id))),
+    )
+    const supplierLots = inventoryLots
+      .filter((lot) =>
+        lot.supplierId === historySupplier.id ||
+        lot.supplierName?.trim().toLowerCase() === supplierKey ||
+        linkedLotIds.has(lot.id),
+      )
+      .sort((a, b) => (a.expiry || "9999").localeCompare(b.expiry || "9999"))
+    return {
+      purchases: supplierPurchases,
+      returns: supplierReturns,
+      lots: supplierLots,
+      totalPurchased: supplierPurchases.reduce((sum, purchase) => sum + purchase.total, 0),
+      totalCredits: supplierReturns.reduce((sum, record) => sum + record.totalCreditAmount, 0),
+      totalPurchaseReturnUnits: supplierReturns.reduce((sum, record) => sum + record.totalBaseQuantity, 0),
+    }
+  }, [historySupplier, purchases, purchaseReturns, inventoryLots])
 
   function openAdd() {
     setEditingSupplier(null)
@@ -496,6 +536,16 @@ export default function Suppliers() {
 
                             <button
                               type="button"
+                              onClick={() => setHistorySupplier(supplier)}
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-100"
+                              title="Supplier purchase, return and batch history"
+                              aria-label={`View history for ${supplier.name}`}
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() =>
                                 openEdit(
                                   supplier,
@@ -550,6 +600,101 @@ export default function Suppliers() {
           </div>
         </div>
       </div>
+
+      {historySupplier && supplierHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="supplier-history-title" className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Supplier statement & history</p>
+                <h2 id="supplier-history-title" className="mt-1 text-xl font-semibold text-slate-900">{historySupplier.name}</h2>
+                <p className="mt-1 text-xs text-slate-500">{historySupplier.contactPerson || "No contact person"} · {historySupplier.phone || "No phone"} · {historySupplier.email || "No email"}</p>
+              </div>
+              <button type="button" onClick={() => setHistorySupplier(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close supplier history"><X className="h-5 w-5"/></button>
+            </header>
+            <div className="max-h-[calc(92vh-78px)] space-y-5 overflow-y-auto p-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Purchase documents</p><p className="mt-1 text-xl font-semibold">{supplierHistory.purchases.length}</p></div>
+                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Total purchased</p><p className="mt-1 text-xl font-semibold">{formatCurrency(supplierHistory.totalPurchased)}</p></div>
+                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Purchase returns</p><p className="mt-1 text-xl font-semibold">{supplierHistory.returns.length} · {supplierHistory.totalPurchaseReturnUnits} units</p></div>
+                <div className="rounded-xl border border-slate-200 p-4"><p className="text-xs text-slate-500">Supplier credit recorded</p><p className="mt-1 text-xl font-semibold">{formatCurrency(supplierHistory.totalCredits)}</p></div>
+              </div>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <h3 className="font-semibold text-slate-800">Purchase history</h3>
+                  <p className="mt-1 text-xs text-slate-500">Original purchase documents and received batches.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="bg-white text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Purchase / GRN</th><th className="px-4 py-3">Supplier invoice</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Products / lines</th><th className="px-4 py-3 text-right">Value</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {supplierHistory.purchases.map((purchase) => (
+                        <tr key={purchase.id}>
+                          <td className="px-4 py-3"><p className="font-semibold text-slate-800">{purchase.purchaseNumber}</p><p className="text-[10px] text-slate-500">GRN: {purchase.grnNumber || "—"}</p></td>
+                          <td className="px-4 py-3">{purchase.supplierInvoice || "—"}</td>
+                          <td className="px-4 py-3">{formatDate(purchase.createdAt)}</td>
+                          <td className="px-4 py-3">{purchase.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</td>
+                          <td className="px-4 py-3 text-right font-semibold">{formatCurrency(purchase.total)}</td>
+                        </tr>
+                      ))}
+                      {supplierHistory.purchases.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No purchase records linked to this supplier.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <h3 className="font-semibold text-slate-800">Purchase return history</h3>
+                  <p className="mt-1 text-xs text-slate-500">Supplier return and credit-note records.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-sm">
+                    <thead className="bg-white text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Return</th><th className="px-4 py-3">Original purchase</th><th className="px-4 py-3">Credit note</th><th className="px-4 py-3">Date / reason</th><th className="px-4 py-3 text-right">Credit value</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {supplierHistory.returns.map((record) => (
+                        <tr key={record.id}>
+                          <td className="px-4 py-3 font-semibold">{record.returnNumber}</td>
+                          <td className="px-4 py-3">{record.purchaseNumber}</td>
+                          <td className="px-4 py-3">{record.creditNoteReference || "—"}</td>
+                          <td className="px-4 py-3"><p>{formatDate(record.createdAt)}</p><p className="text-[10px] text-slate-500">{record.reason}</p></td>
+                          <td className="px-4 py-3 text-right font-semibold">{formatCurrency(record.totalCreditAmount)}</td>
+                        </tr>
+                      ))}
+                      {supplierHistory.returns.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No purchase returns recorded for this supplier.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <h3 className="font-semibold text-slate-800">Supplier batch and expiry history</h3>
+                  <p className="mt-1 text-xs text-slate-500">Lots linked by supplier reference or by the original purchase receipt.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-sm">
+                    <thead className="bg-white text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Batch</th><th className="px-4 py-3">Expiry</th><th className="px-4 py-3">GRN</th><th className="px-4 py-3 text-right">Current stock</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {supplierHistory.lots.map((lot) => (
+                        <tr key={lot.id}>
+                          <td className="px-4 py-3">{products.find((product) => product.id === lot.productId)?.name || lot.productId}</td>
+                          <td className="px-4 py-3 font-medium">{lot.batch || "—"}</td>
+                          <td className="px-4 py-3">{lot.expiry || "Not recorded"}</td>
+                          <td className="px-4 py-3">{lot.grnNumber || "—"}</td>
+                          <td className="px-4 py-3 text-right font-semibold">{lot.quantity}</td>
+                        </tr>
+                      ))}
+                      {supplierHistory.lots.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No batch records are linked to this supplier. Legacy batches without supplier or purchase links cannot be attributed automatically.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
