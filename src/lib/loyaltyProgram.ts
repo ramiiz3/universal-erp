@@ -64,3 +64,36 @@ export function updateLoyaltyPointBalance(
   if (redeemed > balance) throw new Error("The customer does not have enough loyalty points.")
   return balance - redeemed + earned
 }
+
+export type LoyaltyReturnAdjustment = {
+  pointsEarnedReversed: number
+  pointsRedeemedRestored: number
+}
+
+/**
+ * Calculate the incremental loyalty adjustment for a partial return.
+ * The cumulative target is rounded once, then prior posted adjustments are
+ * subtracted so multiple partial returns cannot reverse/restore points twice.
+ */
+export function calculateLoyaltyReturnAdjustment(input: {
+  saleSubtotal: number
+  cumulativeReturnedSubtotal: number
+  pointsEarnedOnSale: number
+  pointsRedeemedOnSale: number
+  pointsEarnedAlreadyReversed: number
+  pointsRedeemedAlreadyRestored: number
+}): LoyaltyReturnAdjustment {
+  const subtotal = Math.max(0, Number(input.saleSubtotal) || 0)
+  if (subtotal <= 0) return { pointsEarnedReversed: 0, pointsRedeemedRestored: 0 }
+  const fraction = Math.min(1, Math.max(0, Number(input.cumulativeReturnedSubtotal) / subtotal))
+  const earned = Math.max(0, Math.floor(Number(input.pointsEarnedOnSale || 0)))
+  const redeemed = Math.max(0, Math.floor(Number(input.pointsRedeemedOnSale || 0)))
+  const earnedAlready = Math.max(0, Math.floor(Number(input.pointsEarnedAlreadyReversed || 0)))
+  const redeemedAlready = Math.max(0, Math.floor(Number(input.pointsRedeemedAlreadyRestored || 0)))
+  const earnedTarget = Math.min(earned, Math.floor(earned * fraction + 1e-9))
+  const redeemedTarget = Math.min(redeemed, Math.floor(redeemed * fraction + 1e-9))
+  return {
+    pointsEarnedReversed: Math.max(0, earnedTarget - earnedAlready),
+    pointsRedeemedRestored: Math.max(0, redeemedTarget - redeemedAlready),
+  }
+}
