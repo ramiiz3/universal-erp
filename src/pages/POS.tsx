@@ -231,8 +231,9 @@ export default function POS() {
   const selectedCustomer = customers.find((customer) => customer.id === customerId)
   const loyaltySettings = erpSettings.loyalty
   const requestedLoyaltyPoints = Math.max(0, Math.floor(Number(loyaltyPointsToRedeem) || 0))
+  const redeemableCustomerPoints = Math.max(0, selectedCustomer?.loyaltyPoints ?? 0)
   const effectiveLoyaltyPointsRedeemed = loyaltySettings.enabled && paymentMethod !== "Credit" && selectedCustomer
-    ? Math.min(requestedLoyaltyPoints, selectedCustomer.loyaltyPoints ?? 0)
+    ? Math.min(requestedLoyaltyPoints, redeemableCustomerPoints)
     : 0
   const loyaltyDiscountEstimate = Number((effectiveLoyaltyPointsRedeemed * loyaltySettings.currencyPerPoint).toFixed(2))
 
@@ -564,7 +565,7 @@ export default function POS() {
       setError("Loyalty points can only be redeemed on a settled sale.")
       return
     }
-    if (requestedLoyaltyPoints > (selectedCustomer?.loyaltyPoints ?? 0)) {
+    if (requestedLoyaltyPoints > Math.max(0, selectedCustomer?.loyaltyPoints ?? 0)) {
       setError("The selected customer does not have enough loyalty points.")
       return
     }
@@ -1116,7 +1117,9 @@ export default function POS() {
                   <p className="mt-0.5 text-[11px] text-slate-500">
                     {loyaltySettings.enabled
                       ? selectedCustomer
-                        ? `Balance: ${selectedCustomer.loyaltyPoints ?? 0} points · Estimated earn: ${estimatedLoyaltyPoints} points`
+                        ? (selectedCustomer.loyaltyPoints ?? 0) < 0
+                          ? `Point balance adjustment: ${Math.abs(selectedCustomer.loyaltyPoints ?? 0)} points to be offset by future earnings · Estimated earn: ${estimatedLoyaltyPoints} points`
+                          : `Balance: ${selectedCustomer.loyaltyPoints ?? 0} points · Estimated earn: ${estimatedLoyaltyPoints} points`
                         : "Select a registered customer to earn or redeem points."
                       : "Not enabled. The owner can configure this in Settings."}
                   </p>
