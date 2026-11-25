@@ -757,6 +757,7 @@ export default function POS() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-slate-800">{product.name}</span>
                         <span className="block truncate text-xs text-slate-500">{product.genericName || product.category} · {product.sku || product.barcode}</span>
+                        <span className="mt-1 block text-xs font-semibold text-slate-800">AED {product.sellingPrice.toFixed(2)} / {product.unit}</span>
                       </span>
                       <span className="mt-2 flex items-center justify-between gap-1">
                         <span className="truncate text-[11px] font-medium text-slate-600">{formatQuantity(stock)} {product.unit || "unit"}</span>
