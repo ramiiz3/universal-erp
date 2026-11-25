@@ -189,9 +189,9 @@ export default function OperationsReports() {
         supplierRows.map((row) => [row.supplier.name, row.purchased, row.purchaseCount, row.credits, row.returnCount, row.net, row.lastPurchase]))
     } else {
       downloadCsv(`zaki-returns-report-${suffix}.csv`,
-        ["Type", "Return number", "Original reference", "Supplier / customer", "Date", "Items", "Reason", "Refund / credit"],
+        ["Type", "Return number", "Original reference", "Supplier / customer", "Date", "Items", "Reason", "Refund / credit", "Loyalty points reversed", "Loyalty points restored"],
         [
-          ...salesReturnsInRange.map((record) => ["Sales return", record.returnNumber, record.invoiceNumber, record.customerName, record.createdAt, record.items.map((item) => `${item.productName} × ${item.quantity}`).join("; "), record.reason, record.refundTotal]),
+          ...salesReturnsInRange.map((record) => ["Sales return", record.returnNumber, record.invoiceNumber, record.customerName, record.createdAt, record.items.map((item) => `${item.productName} × ${item.quantity}`).join("; "), record.reason, record.refundTotal, record.loyaltyPointsEarnedReversed ?? 0, record.loyaltyPointsRedeemedRestored ?? 0]),
           ...purchaseReturnsInRange.map((record) => ["Purchase return", record.returnNumber, record.purchaseNumber, record.supplierName, record.createdAt, record.items.map((item) => `${item.productName} × ${item.quantity}`).join("; "), record.reason, record.totalCreditAmount]),
         ])
     }
@@ -335,12 +335,12 @@ export default function OperationsReports() {
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
               <table className="w-full min-w-[1100px] text-sm">
-                <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Type</th><th className="px-4 py-3">Return number</th><th className="px-4 py-3">Original reference</th><th className="px-4 py-3">Customer / supplier</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Reason</th><th className="px-4 py-3 text-right">Refund / credit</th></tr></thead>
+                <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Type</th><th className="px-4 py-3">Return number</th><th className="px-4 py-3">Original reference</th><th className="px-4 py-3">Customer / supplier</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Reason</th><th className="px-4 py-3">Loyalty adjustment</th><th className="px-4 py-3 text-right">Refund / credit</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {[
-                    ...salesReturnsInRange.map((record) => ({ key: record.id, type: "Sales return", number: record.returnNumber, reference: record.invoiceNumber, party: record.customerName, createdAt: record.createdAt, reason: record.reason, amount: record.refundTotal })),
-                    ...purchaseReturnsInRange.map((record) => ({ key: record.id, type: "Purchase return", number: record.returnNumber, reference: record.purchaseNumber, party: record.supplierName, createdAt: record.createdAt, reason: record.reason, amount: record.totalCreditAmount })),
-                  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((record) => <tr key={record.key}><td className="px-4 py-3">{record.type}</td><td className="px-4 py-3 font-semibold">{record.number}</td><td className="px-4 py-3">{record.reference}</td><td className="px-4 py-3">{record.party}</td><td className="px-4 py-3">{new Date(record.createdAt).toLocaleDateString("en-GB")}</td><td className="px-4 py-3">{record.reason}</td><td className="px-4 py-3 text-right font-semibold">{money(record.amount)}</td></tr>)}
+                    ...salesReturnsInRange.map((record) => ({ key: record.id, type: "Sales return", number: record.returnNumber, reference: record.invoiceNumber, party: record.customerName, createdAt: record.createdAt, reason: record.reason, amount: record.refundTotal, loyalty: [(record.loyaltyPointsEarnedReversed ?? 0) > 0 ? `−${record.loyaltyPointsEarnedReversed} reversed` : "", (record.loyaltyPointsRedeemedRestored ?? 0) > 0 ? `+${record.loyaltyPointsRedeemedRestored} restored` : ""].filter(Boolean).join(" · ") || "—" })),
+                    ...purchaseReturnsInRange.map((record) => ({ key: record.id, type: "Purchase return", number: record.returnNumber, reference: record.purchaseNumber, party: record.supplierName, createdAt: record.createdAt, reason: record.reason, amount: record.totalCreditAmount, loyalty: "—" })),
+                  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((record) => <tr key={record.key}><td className="px-4 py-3">{record.type}</td><td className="px-4 py-3 font-semibold">{record.number}</td><td className="px-4 py-3">{record.reference}</td><td className="px-4 py-3">{record.party}</td><td className="px-4 py-3">{new Date(record.createdAt).toLocaleDateString("en-GB")}</td><td className="px-4 py-3">{record.reason}</td><td className="px-4 py-3 text-xs">{record.loyalty}</td><td className="px-4 py-3 text-right font-semibold">{money(record.amount)}</td></tr>)}
                   {salesReturnsInRange.length + purchaseReturnsInRange.length === 0 && <Empty>No returns were recorded in this date range.</Empty>}
                 </tbody>
               </table>
