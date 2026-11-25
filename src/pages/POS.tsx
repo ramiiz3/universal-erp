@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react"
 import { BrowserMultiFormatReader } from "@zxing/browser"
-import { useERP, type PaymentMethod, type Product } from "../context/ERPContext"
+import { useERP, type CardPaymentOption, type PaymentMethod, type Product } from "../context/ERPContext"
 import { reservePendingThermalPrintWindow, closePendingThermalPrintWindow } from "../lib/pendingThermalPrintWindow"
 import { getERPSettings } from "../lib/erpSettings"
 import {
@@ -49,6 +49,25 @@ type UnitChoice = {
   sellingPrice: number
   packaging?: SelectedProductPackaging
 }
+
+const CARD_NETWORK_OPTIONS: CardPaymentOption[] = [
+  "Visa",
+  "Mastercard",
+  "American Express",
+  "Maestro",
+  "UnionPay",
+  "JCB",
+  "Diners Club",
+  "Discover",
+  "Jaywan",
+  "Other / Not listed",
+]
+
+const CONTACTLESS_WALLET_OPTIONS: CardPaymentOption[] = [
+  "Apple Pay",
+  "Google Pay",
+  "Samsung Pay",
+]
 
 function formatQuantity(value: number) {
   return Number(value.toFixed(3)).toLocaleString(undefined, {
@@ -133,6 +152,7 @@ export default function POS() {
       if (settings.payment.credit) return "Credit"
       return "Bank Transfer"
     })
+  const [cardPaymentOption, setCardPaymentOption] = useState<CardPaymentOption | "">("")
   const [discount, setDiscount] = useState("")
   const [cashTendered, setCashTendered] = useState("")
   const [error, setError] = useState("")
@@ -523,6 +543,7 @@ export default function POS() {
     setInvoiceNotes("")
     setLoyaltyPointsToRedeem("0")
     setPaymentMethod("Cash")
+    setCardPaymentOption("")
     setDiscount("")
     setCashTendered("")
     setError("")
@@ -547,6 +568,11 @@ export default function POS() {
       setError(
         "The selected payment method is disabled in Settings.",
       )
+      return
+    }
+
+    if (paymentMethod === "Card" && !cardPaymentOption) {
+      setError("Select the card network or contactless wallet used for this payment.")
       return
     }
 
@@ -608,6 +634,7 @@ export default function POS() {
         notes: invoiceNotes.trim(),
         loyaltyPointsRedeemed: effectiveLoyaltyPointsRedeemed,
         paymentMethod,
+        cardPaymentOption: paymentMethod === "Card" ? cardPaymentOption || undefined : undefined,
         cashTendered: cashTenderedAmount,
         discount: Number(discount) || 0,
       })
@@ -1174,7 +1201,10 @@ export default function POS() {
                   <button
                     key={method}
                     type="button"
-                    onClick={() => setPaymentMethod(method)}
+                    onClick={() => {
+                      setPaymentMethod(method)
+                      if (method !== "Card") setCardPaymentOption("")
+                    }}
                     className={`pos-payment-option inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold ${paymentMethod === method ? "is-selected border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
                     <Icon className="h-4 w-4" />{label}
@@ -1182,6 +1212,52 @@ export default function POS() {
                 ))}
               </div>
             </div>
+            {paymentMethod === "Card" && (
+              <section className="pos-card-tender-panel md:col-span-2" aria-label="Card network or contactless wallet">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide">Card network / scheme</p>
+                    <p className="mt-1 text-[11px]">Select the logo or wallet shown by the customer’s card or used on your terminal.</p>
+                  </div>
+                  <span className="pos-card-tender-required">Required</span>
+                </div>
+                <div className="mt-3">
+                  <p className="pos-card-tender-group-label">Card networks</p>
+                  <div className="pos-card-tender-options mt-2">
+                    {CARD_NETWORK_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={cardPaymentOption === option}
+                        onClick={() => setCardPaymentOption(option)}
+                        className={`pos-card-tender-option ${cardPaymentOption === option ? "is-selected" : ""}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="pos-card-tender-group-label">Contactless wallets</p>
+                  <div className="pos-card-tender-options mt-2">
+                    {CONTACTLESS_WALLET_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={cardPaymentOption === option}
+                        onClick={() => setCardPaymentOption(option)}
+                        className={`pos-card-tender-option ${cardPaymentOption === option ? "is-selected" : ""}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="pos-card-tender-note mt-3">
+                  This records the payment type only. Authorise and collect payment on your bank or payment-provider terminal. Card and wallet acceptance depends on your merchant agreement and terminal.
+                </p>
+              </section>
+            )}
             {paymentMethod === "Cash" && (
               <label className="pos-cash-field text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Cash received
